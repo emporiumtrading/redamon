@@ -62,7 +62,16 @@ services:
     environment:
       GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
       GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
-    secrets: [app_dsn, owner_dsn]
+      GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring
+    secrets: [app_dsn, owner_dsn, provider_keyring]
+  provider-secrets:
+    <<: *identity
+    profiles: [vault]
+    entrypoint: [python, -m, gabriel.identity.vault_cli]
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring
+    secrets: [app_dsn, provider_keyring]
 
 networks:
   identity:
@@ -78,3 +87,5 @@ secrets:
     file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/owner_dsn
   role_init:
     file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/role_init.sql
+  provider_keyring:
+    file: ${GABRIEL_PROVIDER_KEY_DIR:-/nonexistent-gabriel-provider-keys}/keyring.json
