@@ -18,6 +18,7 @@ ROLES = frozenset({'owner', 'admin', 'analyst', 'viewer'})
 HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 DUMMY_HASH = HASHER.hash(secrets.token_urlsafe(32))
 AUDIENCE = 'gabriel-identity-v1'
+MIGRATION_FILES = ((1, 'schema.sql'), (2, 'schema_v2.sql'))
 
 
 class IdentityError(Exception):
@@ -122,21 +123,25 @@ def _audit(conn, event, principal=None, target=None):
 
 
 def migrate(owner_dsn):
-    script = Path(__file__).with_name('schema.sql').read_text()
-    checksum = sha256(script.encode()).hexdigest()
     with connection(owner_dsn, runtime=False) as conn:
         conn.execute('SELECT pg_advisory_xact_lock(73582301)')
         conn.execute('CREATE SCHEMA IF NOT EXISTS gabriel_identity')
         conn.execute('REVOKE ALL ON SCHEMA gabriel_identity FROM PUBLIC')
         conn.execute('''CREATE TABLE IF NOT EXISTS gabriel_identity.migrations
             (version integer PRIMARY KEY, checksum text NOT NULL)''')
-        existing = conn.execute('SELECT checksum FROM gabriel_identity.migrations WHERE version=1').fetchone()
-        if existing:
-            if existing['checksum'] != checksum:
-                raise IdentityConfigurationError('migration_checksum_mismatch')
-        else:
-            conn.execute(script)
-            conn.execute('INSERT INTO gabriel_identity.migrations VALUES (1,%s)', (checksum,))
+        versions = conn.execute('SELECT version,checksum FROM gabriel_identity.migrations ORDER BY version').fetchall()
+        if [row['version'] for row in versions] != [v for v, _ in MIGRATION_FILES[:len(versions)]]:
+            raise IdentityConfigurationError('unsupported_migration_history')
+        for version, filename in MIGRATION_FILES:
+            script = Path(__file__).with_name(filename).read_text()
+            checksum = sha256(script.encode()).hexdigest()
+            existing = next((row for row in versions if row['version'] == version), None)
+            if existing:
+                if existing['checksum'] != checksum:
+                    raise IdentityConfigurationError('migration_checksum_mismatch')
+            else:
+                conn.execute(script)
+                conn.execute('INSERT INTO gabriel_identity.migrations VALUES (%s,%s)', (version, checksum))
 
 
 def provision_organization(owner_dsn, name, login, secret):
@@ -301,6 +306,8 @@ class IdentityService:
                          (role, active, principal.organization_id, target['id']))
             conn.execute('UPDATE gabriel_identity.sessions SET revoked_at=clock_timestamp() WHERE organization_id=%s AND user_id=%s',
                          (principal.organization_id, target['id']))
+            conn.execute('UPDATE gabriel_identity.service_grants SET revoked_at=clock_timestamp() WHERE organization_id=%s AND issued_by=%s',
+                         (principal.organization_id, target['id']))
 
     def reset_password(self, token, user_id, secret):
         hashed = HASHER.hash(password(secret, creating=True))
@@ -311,6 +318,8 @@ class IdentityService:
             conn.execute('UPDATE gabriel_identity.users SET password_hash=%s WHERE organization_id=%s AND id=%s',
                          (hashed, principal.organization_id, target['id']))
             conn.execute('UPDATE gabriel_identity.sessions SET revoked_at=clock_timestamp() WHERE organization_id=%s AND user_id=%s',
+                         (principal.organization_id, target['id']))
+            conn.execute('UPDATE gabriel_identity.service_grants SET revoked_at=clock_timestamp() WHERE organization_id=%s AND issued_by=%s',
                          (principal.organization_id, target['id']))
             conn.execute('UPDATE gabriel_identity.login_attempts SET attempts=0,window_started=clock_timestamp() WHERE identity_digest=%s',
                          (_attempt_key(principal.organization_id, target['username']),))

@@ -1,7 +1,7 @@
 name: Gabriel database identity
 on:
   push:
-    branches: ['feature/gabriel-identity']
+    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity']
     paths:
       - 'gabriel/identity/**'
       - 'testing/gabriel_identity/**'
