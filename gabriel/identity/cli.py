@@ -60,15 +60,20 @@ def main():
     login.add_argument('--username', required=True)
     login.add_argument('--password-file')
     for command in ('whoami', 'logout', 'members', 'execute', 'create-member', 'set-membership', 'reset-password',
-                    'issue-service', 'services', 'revoke-service', 'service-execute'):
+                    'issue-service', 'services', 'revoke-service', 'service-execute',
+                    'task-create', 'tasks', 'task-get', 'task-cancel', 'task-complete'):
         sub = commands.add_parser(command)
         sub.add_argument('--token-file')
-        if command in {'issue-service', 'service-execute'}:
+        if command in {'issue-service', 'service-execute','task-get','task-cancel','task-complete'}:
             sub.add_argument('--task-id', required=True)
-        if command == 'issue-service':
+        if command == 'service-execute':
+            sub.add_argument('--request-id',required=True)
+        if command in {'issue-service','task-create'}:
             sub.add_argument('--name', required=True)
             sub.add_argument('--operation', action='append', required=True, choices=('capabilities.list', 'evidence.hash'))
             sub.add_argument('--ttl-seconds', type=int, default=900)
+        if command == 'task-create':
+            sub.add_argument('--max-steps',type=int,default=20)
         if command == 'revoke-service':
             sub.add_argument('--grant-id', required=True)
         if command == 'create-member':
@@ -88,7 +93,7 @@ def main():
             owner_dsn = read_secret(os.environ.get('GABRIEL_MIGRATION_DSN_FILE'))
             if args.command == 'migrate':
                 migrate(owner_dsn)
-                result = {'migration': 3}
+                result = {'migration': 4}
             else:
                 org, user = provision_organization(owner_dsn, args.organization_name,
                     args.username, _password(args, confirm=True))
@@ -107,12 +112,20 @@ def main():
                 elif args.command == 'logout':
                     service.logout(token)
                     result = {'revoked': True}
+                elif args.command == 'task-create':
+                    result = service.create_task(token,args.name,args.operation,args.ttl_seconds,args.max_steps)
+                elif args.command == 'tasks':
+                    result = service.list_tasks(token)
+                elif args.command == 'task-get':
+                    result = service.get_task(token,args.task_id)
+                elif args.command in {'task-cancel','task-complete'}:
+                    result = service.end_task(token,args.task_id,'cancelled' if args.command=='task-cancel' else 'completed')
                 elif args.command in {'execute', 'service-execute'}:
                     raw = sys.stdin.buffer.read(256 * 1024 + 1)
                     if len(raw) > 256 * 1024:
                         raise InvalidIdentityInput('request_limit_exceeded')
                     request = json.loads(raw, object_pairs_hook=_unique)
-                    result = (service.execute_service(token, args.task_id, request)
+                    result = (service.execute_service(token, args.task_id, request,args.request_id)
                               if args.command == 'service-execute' else service.execute(token, request))
                 elif args.command == 'issue-service':
                     grant = service.issue_service(token, args.name, args.task_id, args.operation, args.ttl_seconds)

@@ -1,7 +1,7 @@
 name: Gabriel database identity
 on:
   push:
-    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity', 'feature/gabriel-provider-secrets']
+    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity', 'feature/gabriel-provider-secrets', 'feature/gabriel-durable-tasks']
     paths:
       - 'gabriel/capabilities.py'
       - 'gabriel/identity/**'

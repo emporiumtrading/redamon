@@ -18,7 +18,7 @@ ROLES = frozenset({'owner', 'admin', 'analyst', 'viewer'})
 HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 DUMMY_HASH = HASHER.hash(secrets.token_urlsafe(32))
 AUDIENCE = 'gabriel-identity-v1'
-MIGRATION_FILES = ((1, 'schema.sql'), (2, 'schema_v2.sql'), (3, 'schema_v3.sql'))
+MIGRATION_FILES = ((1, 'schema.sql'), (2, 'schema_v2.sql'), (3, 'schema_v3.sql'), (4, 'schema_v4.sql'))
 
 
 class IdentityError(Exception):

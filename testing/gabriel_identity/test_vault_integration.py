@@ -18,6 +18,7 @@ from gabriel.identity.service import (AccessDenied, AuthenticationDenied, Identi
 from gabriel.identity.machine import ServiceIdentityService
 from gabriel.identity.vault import ProviderKeyRing, ProviderVault, SecretUnavailable
 from testing.gabriel_identity.test_identity_integration import database, tenant, owner_connection
+from testing.gabriel_identity.db_history import remove_v4
 
 pytestmark = pytest.mark.integration
 
@@ -90,7 +91,9 @@ def test_tenant_separation_including_same_provider_name(tenant,vault):
 def test_unprivileged_credentials_cannot_access_vault(tenant,vault,role):
     service,_,_ = vault
     if role=='service':
-        token = ServiceIdentityService(tenant.db.app).issue_service(tenant.token,'vault denial',uuid4(),['evidence.hash']).token
+        worker = ServiceIdentityService(tenant.db.app)
+        task = worker.create_task(tenant.token,'vault denial',['evidence.hash'])['id']
+        token = worker.issue_service(tenant.token,'vault denial',task,['evidence.hash']).token
         error = AuthenticationDenied
     else:
         secret = secrets.token_urlsafe(24)
@@ -357,18 +360,23 @@ def test_cli_put_metadata_rotate_and_revoke_never_print_secret(tenant,tmp_path):
     assert code==1 and result['status']=='denied'
 
 
-def test_v2_upgrade_preserves_identity_and_service_grant(tenant):
+def test_v2_upgrade_preserves_identity_and_revokes_unbound_service_grant(tenant):
     identity = ServiceIdentityService(tenant.db.app)
-    task = uuid4()
+    task = identity.create_task(tenant.token,'upgrade fixture',['evidence.hash'])['id']
     grant = identity.issue_service(tenant.token,'upgrade fixture',task,['evidence.hash'])
     with owner_connection(tenant.db) as conn:
+        remove_v4(conn)
         conn.execute('''DROP TABLE gabriel_identity.provider_secrets,gabriel_identity.provider_key_state,
             gabriel_identity.provider_key_registry''')
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=3')
     migrate(tenant.db.owner)
     migrate(tenant.db.owner)
     assert identity.whoami(tenant.token).user_id==tenant.owner
-    assert identity.execute_service(grant.token,task,{'schema_version':1,'operation':'evidence.hash','arguments':{'content':'upgrade fixture'}})['service_id']==str(grant.id)
+    with pytest.raises(AuthenticationDenied):
+        identity.execute_service(grant.token,task,{'schema_version':1,'operation':'evidence.hash','arguments':{'content':'upgrade fixture'}},uuid4())
+    new_task = identity.create_task(tenant.token,'post upgrade',['evidence.hash'])['id']
+    new_grant = identity.issue_service(tenant.token,'post upgrade',new_task,['evidence.hash'])
+    assert identity.execute_service(new_grant.token,new_task,{'schema_version':1,'operation':'evidence.hash','arguments':{'content':'upgrade fixture'}},uuid4())['service_id']==str(new_grant.id)
     vault = ProviderVault(tenant.db.app,fresh_ring())
     vault.put(tenant.token,'model_alpha','upgrade-fixture')
     assert vault.resolve_for_backend(tenant.token,'model_alpha').reveal()=='upgrade-fixture'
