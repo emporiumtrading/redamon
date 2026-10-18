@@ -47,6 +47,8 @@ The strict matching-image test suite uses real disposable PostgreSQL. It covers 
 
 The recovery checkpoint retains both a pending approved closure and a completed closure receipt. Real database restart and fresh dump/object restore must preserve exact authority, execute the pending local operation, replay the original receipt and enforce later revocations. These are component regression/recovery checks, not human product UAT.
 
+Source `3c9d16704e833e9fa18d67fac2b0af095c5cdc2b` passed [hosted VM verification](https://github.com/emporiumtrading/redamon/actions/runs/39134498090): 316 cases (246 identity/evidence/approval, 49 runtime/inventory, 21 foundation), zero failures/errors/skips, including real restart/restore and the approver-session expiry regression. See the implementation ledger for source, artifact digest and review/repair record.
+
 Rollback: disable action/case closure entry points, retain schema 6 and all cases/evidence/keys. Do not downgrade the migrator, drop tables or delete volumes. Restore only a coherent reviewed quiesced database/object snapshot with retained keys into fresh locations, reconcile counts/relationships and verify integrity before resuming. Do not restore old approval authority into a live external system; this component has no such executor.
 
 Remaining caveats are tracked in [the caveat register](GABRIEL_CAVEAT_REGISTER.md). Independent review, full C00–C04 acceptance, retention/legal holds/deletion, external tamper anchoring, browser/source authenticity and human pre/post-release UAT remain open. Test success cannot accept these gates or establish perfect security confidence.
