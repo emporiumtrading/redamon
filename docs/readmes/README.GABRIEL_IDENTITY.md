@@ -1,5 +1,7 @@
 # Gabriel identity foundation — increment 3
 
+The [case/evidence operator guide](README.GABRIEL_CASE_EVIDENCE.md) describes migration 5, encrypted artifact storage, custody, exports and recovery limits.
+
 ## Delivered scope
 
 The `gabriel.identity` package provides PostgreSQL-backed organization accounts, memberships, password verification, opaque sessions, administrative role/password changes and a session-authenticated wrapper around the two existing local capabilities. It has an operator CLI and no listening HTTP/browser endpoint. This is part of C03 and GAB-003/GAB-004/GAB-005/P-T01; it does not complete every C03 or product release gate.
