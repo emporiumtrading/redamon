@@ -47,3 +47,17 @@ The PR job's built image ID was `sha256:c4c856d53a8f12381194271d319215d157169ccc
 Next complete C00's inherited-capability disposition inventory and real full-stack test baseline, close C01's pilot/browser decisions, and implement C02's separate defensive runtime. C03/C04 and the browser product are not implemented by this increment. No staging UAT, production shipment or post-shipment UAT/regression is claimed.
 
 Release readiness remains **BLOCKED**. This engineering increment must not be described as a usable or deployed Gabriel defender.
+
+## Runtime increment 2 — local defensive boundary and conversion inventory
+
+Source baseline: `0dc15e313a3b765f826356150661d92dc8f2afb9`. PRD links: GAB-001, GAB-002, T01/T02 and D-T01. Status: **Local runtime/image boundary verified in isolated CI; complete conversion and customer-product acceptance remain open.**
+
+The new `gabriel/` package and `compose.gabriel.yml` provide a separate local inspection runtime with two real operations: capability inspection and hashing supplied evidence text. The image excludes the inherited agent/MCP/scanner trees. A fixed dispatcher rejects all unadmitted names and arguments; malformed/oversized input has bounded handling. The runtime profile has no network, host mounts, published ports or response authority.
+
+The inventory utility enumerates every tracked entry at an explicit Git commit and discovers static tool/registry/route/deployment anchors without importing source or reading dirty/untracked content. All proposed dispositions require review. Dynamic registration, parse failures, symlinks/gitlinks and lexical deployment discovery remain explicit gaps; this is not acceptance of the complete conversion register.
+
+The new VM workflow renders the separate Compose configuration, builds production/test targets, runs the strict runtime/inventory tests, checks discovered legacy names against the actual production dispatcher, checks excluded image contents and runs the prior foundation regression. Full inherited-stack tests and C01 pilot decisions remain outstanding. The local runtime profile is intentionally limited while C03 identity and C04 durable state are absent. See [runtime instructions and boundaries](README.GABRIEL_RUNTIME.md).
+
+Verified source `5b20560d443cf2fc57aeac2cd94d8f4931e2b728` passed both [push VM checks](https://github.com/emporiumtrading/redamon/actions/runs/39107692417) and [PR VM checks](https://github.com/emporiumtrading/redamon/actions/runs/39107697225). The PR job executed **49 runtime/inventory cases and 21 prior foundation cases**, all passing with zero failures/errors/skips. The actual packaged runtime rejected all **80 discovered registry/tool/server names** submitted through its JSON interface. Rendered Compose boundary checks and shipped-image exclusions also passed. These static discoveries include anchors requiring review; they are not a count of supported production integrations.
+
+The shipped runtime image tested in the PR job was `sha256:29fadd5dde24f84dc896a588163ec4997330a256018cfc720671c1b737369f90`. The [retained evidence artifact](https://github.com/emporiumtrading/redamon/actions/runs/39107697225/artifacts/12128079778) includes inventory, rendered deployment, source/image IDs, request/denial results and JSON test counts. Baseline inventory at `0dc15e313a3b765f826356150661d92dc8f2afb9` contains 3,627 tracked entries, 643 static anchors and 69 explicit review gaps. Full conversion review, authenticated/shared workflows, product UAT and release gates remain outstanding.

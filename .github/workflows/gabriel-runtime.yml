@@ -1,0 +1,51 @@
+name: Gabriel defensive runtime
+on:
+  push:
+    branches: ['feature/gabriel-defensive-runtime']
+    paths:
+      - 'gabriel/**'
+      - 'gabriel.sh'
+      - 'compose.gabriel.yml'
+      - 'tooling/scripts/gabriel_inventory.py'
+      - 'tooling/scripts/gabriel_runtime_check.sh'
+      - 'testing/gabriel_runtime/**'
+      - '.github/workflows/gabriel-runtime.yml'
+  pull_request:
+    paths:
+      - 'gabriel/**'
+      - 'gabriel.sh'
+      - 'compose.gabriel.yml'
+      - 'tooling/scripts/gabriel_inventory.py'
+      - 'tooling/scripts/gabriel_runtime_check.sh'
+      - 'testing/gabriel_runtime/**'
+      - '.github/workflows/gabriel-runtime.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gabriel-runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Runtime, inventory and shipped-image checks
+        run: |
+          bash -n gabriel.sh tooling/scripts/gabriel_runtime_check.sh
+          bash tooling/scripts/gabriel_runtime_check.sh "$RUNNER_TEMP/gabriel-runtime-evidence"
+      - name: Existing foundation regression
+        run: bash tooling/scripts/gabriel_foundation_check.sh "$RUNNER_TEMP/gabriel-foundation-evidence"
+      - name: Retain runtime and regression evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-runtime-evidence
+          path: |
+            ${{ runner.temp }}/gabriel-runtime-evidence
+            ${{ runner.temp }}/gabriel-foundation-evidence
+          if-no-files-found: warn
+          retention-days: 14
