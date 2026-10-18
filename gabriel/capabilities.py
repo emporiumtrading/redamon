@@ -23,7 +23,7 @@ def _describe(arguments):
         "product": "Gabriel — The Defender", "version": __version__,
         "profile": "local-inspection", "policy_version": POLICY_VERSION,
         "capabilities": [dict(name=name, **metadata) for name, metadata in _METADATA.items()],
-        "external_access": False, "response_execution": False,
+        "external_access": False, "external_authentication": False, "response_execution": False,
         "authentication": "local_process_only", "production_ready": False,
     }
 

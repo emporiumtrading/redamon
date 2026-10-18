@@ -2,7 +2,7 @@
 ## Detailed Conversion and Test Plan
 
 Prepared for Prof. Iyobosa Ero / Aegis Cybersecurity  
-Version 1.4 · 17 October 2026  
+Version 1.5 · 18 October 2026
 Status: Proposed engineering baseline; implementation and release acceptance remain pending.
 
 ## 1. Outcome and verified starting point
@@ -42,6 +42,7 @@ Security effectiveness and compliance coverage remain separate views. A framewor
 6. Use authorized browser consoles as the primary pilot investigation surface. No Splunk, CrowdStrike, Palo Alto, Wazuh or other vendor API key/access is required for this workflow. Optional API connectors may be added later by customer choice; read connectors never inherit response credentials. The extension still communicates with Gabriel through its authenticated backend interface.
 7. Treat external text, telemetry, retrieved knowledge, MCP descriptions, and AI outputs as untrusted data. A deterministic policy service authorizes actions after checking authenticated scope; model recommendations cannot grant permissions.
 8. Retain RedAmon separately for future controlled defensive validation. It must not share production response credentials, execution workers, or unrestricted network access with Gabriel.
+9. Keep shared browser/evidence/task contracts vendor neutral. Splunk, CrowdStrike and Palo Alto are examples, not mandatory integrations or a fixed shortlist. Engineers authenticate to external systems themselves. Gabriel never performs console login/SSO/MFA/CAPTCHA or extracts/replays external session material; internal Gabriel identity/worker tokens confer no external login authority. See section 21 for development and test obligations.
 
 ## 3. Repository conversion map
 
@@ -548,7 +549,7 @@ Every observation/action records organization/user, task, extension/browser/adap
 
 | Stage | Deliverable | Dependencies and completion gate |
 | --- | --- | --- |
-| B0 | Threat model, privacy/data-flow review, permission manifest, connection protocol, pilot workflows for Splunk, CrowdStrike and the selected Palo Alto console | C01; validate Chrome/Brave API support and package/distribution route; estimate remaining work |
+| B0 | Threat model, privacy/data-flow review, permission manifest, connection protocol, discovery-selected vendor-agnostic pilot workflows and human-only external sign-in boundary | C01; validate Chrome/Brave API support and package/distribution route; estimate remaining work |
 | B1 | Pairing, selected-page observation, local minimization, panel, Stop/Disconnect, evidence/case linkage | C03–C04, C06–C07; read-only browser acceptance in both browsers before the expanded R1 ships |
 | B2 | Allowlisted multi-page investigation, existing searches/filters, reviewed site adapters, Environment and Control Profile, bounded delegation | C07 and B1; target/account/navigation, lifecycle, query safety and prompt-injection tests pass before C08 |
 | B3 | Optional reviewed browser changes with approval binding and verified postconditions | C10 plus adapter-specific lab tests; same response gate as API actions |
@@ -580,7 +581,7 @@ All new cases start **NOT_RUN**. Run automated checks and real packaged-extensio
 | B-T14 | Store-packaged build, upgrades, Brave Shields and chosen OS/browser matrix | Supported flows pass or incompatibility visibly blocks the affected function |
 | B-T15 | Backend sends remote code or an unknown browser operation | Rejected; only packaged typed operations can run |
 | B-T16 | Page observation disagrees with API/telemetry; console shows stale success | Discrepancy remains visible; control not falsely marked effective/incident contained |
-| B-T17 | End-to-end analyst investigation across authorized Splunk, CrowdStrike and selected Palo Alto lab consoles | Scoped observations → control profile → correlated case → recommendations with evidence and uncertainty |
+| B-T17 | End-to-end analyst investigation across discovery-selected, engineer-authenticated approved lab consoles; no required brand | Scoped observations → control profile → correlated case → recommendations with evidence and uncertainty; exact compatibility recorded |
 | B-T18 | Browser-only approved lab change, partial success and compensating recovery | Correct target affected; independent check where available; unknown/failed states remain explicit |
 | B-T19 | Extension upgrade changes permissions/schema or loses backend compatibility | Explicit permission/compatibility handling; no silent authority increase or corrupted evidence |
 | B-T20 | External model prohibited; raw page/screenshot retention disabled | Processing follows tenant policy; forbidden upload/retention is blocked and testable |
@@ -607,7 +608,7 @@ Readiness conclusion: this expanded plan now explicitly covers the change from a
 
 The primary analyst experience must work through authorized open security-console pages without requiring vendor API access, vendor API credentials or a backend integration for each security product. Gabriel's own authenticated extension/backend communication remains necessary. Optional vendor connectors are enhancements, not an admission requirement for this browser-first release.
 
-Pilot workflows cover selected Splunk, CrowdStrike and Palo Alto console pages, subject to the exact products, UI versions, account permissions and approved investigation paths established at B0. Unsupported controls or pages produce a visible limitation and handoff; API absence must not produce an artificial blocker when the supported UI can perform the task. Installation alone does not imply universal console automation.
+Pilot workflows cover discovery-selected console pages regardless of vendor, subject to the exact products, UI versions, account permissions and approved investigation paths established at B0. Splunk, CrowdStrike and Palo Alto are illustrative examples only, not release dependencies. Unsupported controls or pages produce a visible limitation and handoff; API absence must not produce an artificial blocker when the supported UI can perform the task. Installation alone does not imply universal console automation. External sign-in remains exclusively human-operated.
 
 The browser pilot's source inventory, evidence intake, case record and investigation workflow run within Gabriel. External SIEM/indexer ingestion and external case synchronization remain optional. Therefore C08 now depends on B1/B2 investigation acceptance, not Wazuh or IRIS API connectivity. C05 implements browser observation intake; C06 implements Gabriel cases. This explicitly supersedes earlier connector-first pilot sequencing.
 
@@ -662,7 +663,7 @@ These cases start **NOT_RUN** and are required for the browser-first C08 gate:
 
 The five-events/second ingestion profile in section 11 applies to optional connector load testing, not a browser collection promise. B0 defines browser-specific limits for page/query counts, time ranges, result sizes, concurrency, UI latency and model cost. Measure browser readiness against these limits with real approved console workflows; do not convert page refresh speed into an unsupported real-time detection guarantee.
 
-Version 1.3 delivery estimate remains pending B0. API-free browser support, three selected console workflows and safe query execution change the pilot's critical path. Prior connector-first time ranges must not be treated as a commitment for this revised scope.
+Version 1.3 delivery estimate remains pending B0. API-free browser support, discovery-selected console workflows and safe query execution change the pilot's critical path. No fixed vendor trio is required. Prior connector-first time ranges must not be treated as a commitment for this revised scope.
 
 ## 20. Expert baseline, continuous learning and small-team operations (version 1.4)
 
@@ -732,3 +733,30 @@ All cases below start **NOT_RUN**. L-T01 through L-T06 and L-T08 are R1/C08 requ
 | L-T08 | One-engineer shift, two-person handoff, browser disconnect and overload | Prioritized queue and resumable history; urgent escalation, explicit gaps and bounded work |
 
 The existing no-fabricated-certainty requirement remains unchanged. Learning may reduce uncertainty through better evidence and tested methods; it cannot justify an unconditional 1.0 certainty claim.
+
+## 21. Vendor neutrality and human-only console authentication (version 1.5)
+
+This section implements the product-owner clarification of 18 October 2026 and supersedes any earlier wording that fixes a vendor shortlist. Shared browser commands, scope, evidence/provenance, tasks, cases and reasoning contracts must be vendor neutral. Reviewed packaged adapters handle actual UI differences; acceptance declares supported workflows/versions and never equates vendor neutrality with universal compatibility. No vendor name or API credential may be required to start a supported browser investigation.
+
+The engineer signs into external systems manually, then grants the extension visibility and bounded navigation within an approved browser session and selected tabs/accounts/pages. Associated tabs are not blanket access: popups, child/new tabs, redirects, origin/path changes and account switches require explicit scope validation/admission. Only already authenticated, supported, approved contexts can be operated. Gabriel's own user sessions, extension pairing and internal worker grants authenticate to Gabriel only; they are never external-system credentials.
+
+External-system authentication is not an agent capability, even with a model recommendation or an action approval. Do not implement browser commands/adapters that enter credentials, invoke login/SSO/identity-provider flows, approve MFA, solve CAPTCHA, extract/replay cookies/tokens, use password managers, or restore an external session outside the visible approved browser. Do not give backend workers external console usernames/passwords or use vendor APIs as a silent fallback. Optional independently provisioned connectors remain separate future opt-ins, not a way around this boundary.
+
+On logout, sign-in redirect, authentication challenge, ambiguous account, browser permission loss or session expiry, stop the affected console's collection and dispatch, invalidate stale leases and show an access/coverage gap. Never auto-retry authentication. Hand off to the engineer. After manual restoration, revalidate current document/account/task/permissions and obtain renewed approval for changed scope before resuming. Unknown page semantics or ambiguous authentication state block automation, not the engineer's manual browser use.
+
+### Development obligations
+
+- C03 internal identity/service tokens must remain distinct from external authentication. Their allowlists must refuse login/SSO/MFA/session replay and may not silently widen as future operations are added.
+- C12/B0 must threat-model login walls, SSO popups, stale tabs, account changes and page instructions asking the agent to authenticate. Adapter review rejects authentication controls; packaged execution and server policy both enforce denial.
+- B1/B2 scope binds browser instance, installation, tab, document/frame, origin/path, account, task and expiry. New/associated tabs need admission. No raw vendor credentials or session material reach Gabriel, models, logs or artifacts.
+- Known read-only workflows get actual lab compatibility tests. Generic fixture tests exercise contracts and failure modes only; they are never reported as real vendor/browser acceptance.
+- UAT/regression before and after shipment includes manual sign-in handoff, Stop/revocation and vendor-neutral operation. Keep B-T27/B-T28 NOT_RUN until actual packaged Chrome and Brave evidence exists.
+
+### Additional acceptance obligations
+
+| ID | Test | Expected result |
+| --- | --- | --- |
+| B-T27 | No named example products installed; at least two discovery-selected distinct console implementations, with vendor APIs disabled | Supported approved-session observation/navigation/search/case workflow uses the same core contracts without required brands; adapter/version limits visible; unknown site cannot acquire arbitrary automation |
+| B-T28 | Login wall, SSO redirect/popup, MFA/CAPTCHA, expiry, page asking agent to sign in, token replay request, new/associated tab and restored manual session | Zero credential entry/auth-flow invocation/session extraction or replay; affected work pauses with coverage gap; unapproved tabs untouched; resume only after engineer restoration and scope/account/document checks, with renewed approval where context changed |
+
+The companion now specifies 74 acceptance scenarios (34 core, 28 browser, 4 conversion, 8 learning); PRD v1.1 adds six for 80 total. They are obligations, not executed test counts. Local runtime/service dispatch-denial regressions demonstrate only those implemented boundaries, not a working browser extension or vendor compatibility.

@@ -108,7 +108,7 @@ def test_revocation_and_expiry_are_checked_on_each_execution(tenant, machine):
     expired = service.issue_service(tenant.token, 'expired fixture', task, ['evidence.hash'])
     with owner_connection(tenant.db) as conn:
         conn.execute('''UPDATE gabriel_identity.service_grants SET created_at=clock_timestamp()-interval '2 hours',
-            expires_at=clock_timestamp()-interval '1 hour' WHERE id=%s''', (expired.id,))
+            expires_at=clock_timestamp()-interval '90 minutes' WHERE id=%s''', (expired.id,))
     with pytest.raises(AuthenticationDenied):
         service.execute_service(expired.token, task, REQUEST)
 
@@ -284,3 +284,32 @@ def test_scope_boundaries_active_grant_quota_and_safe_listing(tenant):
 def test_name_and_task_bounds_rejected(tenant, name, task):
     with pytest.raises(InvalidIdentityInput):
         ServiceIdentityService(tenant.db.app).issue_service(tenant.token,name,task,['evidence.hash'])
+
+
+@pytest.mark.parametrize('operation', ['login', 'auth.login', 'browser.login', 'browser.sso',
+    'browser.mfa', 'browser.captcha', 'browser.cookies.read', 'browser.session.replay'])
+def test_external_authentication_cannot_be_admitted_or_dispatched(tenant, machine, operation):
+    from gabriel.capabilities import CapabilityDenied, execute
+    service, task, grant = machine
+    request = {'schema_version':1,'operation':operation,'arguments':{}}
+    with pytest.raises(InvalidIdentityInput):
+        service.issue_service(tenant.token,'not external login',task,[operation])
+    with pytest.raises(AccessDenied):
+        service.execute_service(grant.token,task,request)
+    with pytest.raises(CapabilityDenied):
+        service.execute(tenant.token,request)
+    with pytest.raises(CapabilityDenied):
+        execute(request)
+
+
+def test_capability_contract_has_no_external_auth_or_vendor_prerequisite(tenant):
+    from gabriel.capabilities import execute
+    request = {'schema_version':1,'operation':'capabilities.list','arguments':{}}
+    result = execute(request)
+    assert result['external_authentication'] is False and result['external_access'] is False
+    assert {cap['name'] for cap in result['capabilities']} == {'capabilities.list','evidence.hash'}
+    # Supplied text labels do not select a vendor-specific dispatch or credential path.
+    for label in ('console-alpha', 'console-beta', 'unsupported-console'):
+        content = f'Explicitly supplied fixture: {label}'
+        hashed = execute({'schema_version':1,'operation':'evidence.hash','arguments':{'content':content}})
+        assert hashed['digest'] == sha256(content.encode()).hexdigest()

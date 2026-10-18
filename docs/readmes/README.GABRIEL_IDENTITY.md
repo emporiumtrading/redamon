@@ -54,6 +54,8 @@ The VM workflow also repeats the runtime/inventory and foundation regressions. A
 
 ## Service identity — increment 4
 
+These are **internal Gabriel worker credentials only**. They do not log into security consoles or external systems. Engineers authenticate to those systems manually; the future extension uses only approved authenticated browser tabs, pauses at authentication walls and never extracts/replays vendor sessions. Named security vendors are examples, not dependencies. Gabriel user sign-in/pairing/internal authorization must not be confused with external-system login.
+
 Schema version 2 adds service grants without rewriting version 1. Run `identity-migrate` before using the upgraded runtime. Migration verifies every applied checksum, rejects unknown/gapped histories and applies outstanding versions in one transaction. The tests exercise actual v1-to-v2 upgrade and failed-migration rollback; this is not a backup/restore procedure or a rolling-upgrade compatibility guarantee.
 
 An owner/admin can issue a service credential for one task UUID and an explicit subset of `capabilities.list` and `evidence.hash`. Its issuer, audience and resource are server constants: `gabriel-identity-service-v1`, `gabriel-local-worker-v1`, and `local-inspection-v1`. `gbs1_` tokens are 32 random bytes with only SHA-256 digests stored; they cannot serve as human sessions or create other grants. Lifetime defaults to 900 seconds, bounded to 60–3600 seconds. There are at most 100 active grants per tenant. Service listing returns the latest 100 rows without raw credentials or digests.

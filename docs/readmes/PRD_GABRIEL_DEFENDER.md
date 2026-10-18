@@ -2,18 +2,18 @@
 
 ## Product Requirements Document
 
-Version **1.0** · 17 October 2026  
+Version **1.1** · 18 October 2026
 Product owner: **Prof. Iyobosa Ero**  
 Source repository: **emporiumtrading/redamon**  
 Status: **Engineering specification for review; product implementation and acceptance are pending.**
 
-This PRD converts the Gabriel conversion and testing plan v1.4 into a product contract. It defines outcomes, scope, requirements, acceptance evidence, delivery dependencies and bounded engineering loops. The accompanying [conversion and test plan](GABRIEL_CONVERSION_AND_TEST_PLAN.md) retains the detailed repository map and test catalog. This PRD governs product scope and release decisions; the companion supplies implementation and test detail. Any conflict must be resolved explicitly before implementing the affected requirement.
+This PRD converts the Gabriel conversion and testing plan v1.5 into a product contract. It defines outcomes, scope, requirements, acceptance evidence, delivery dependencies and bounded engineering loops. The accompanying [conversion and test plan](GABRIEL_CONVERSION_AND_TEST_PLAN.md) retains the detailed repository map and test catalog. This PRD governs product scope and release decisions; the companion supplies implementation and test detail. Any conflict must be resolved explicitly before implementing the affected requirement.
 
 ## 1. Product decision and problem
 
 Gabriel is a defensive security and incident-response assistant for a team of one or two security engineers. It understands the authorized environment, actively investigates signs of an attacker, correlates evidence across existing security consoles, maintains its own cases, and prepares decisions for the engineer. It improves through verified environment memory, analyst corrections and reviewed knowledge updates.
 
-The first release works through a Chrome or Brave extension on user-authorized security-console pages. Vendor API access is not required. Initial investigation workflows target selected Splunk, CrowdStrike and Palo Alto consoles; the exact products, versions, roles and paths must be established in discovery. Broad brand support is not a promise of support for every product or screen.
+The first release works through a Chrome or Brave extension on user-authorized security-console pages. Vendor API access is not required. Gabriel is vendor agnostic: Splunk, CrowdStrike and Palo Alto are examples, not required products or a fixed pilot shortlist. Discovery selects actual console workflows by defensive need, with exact products, versions, roles and paths recorded. Shared browser/evidence/task contracts must not depend on a named vendor; reviewed adapters provide workflow-specific compatibility. Vendor agnostic does not mean universal screen compatibility.
 
 Small teams currently have to move between consoles, reconstruct timelines, distinguish genuine incidents from benign changes, document evidence and decide what to do. Gabriel should reduce that coordination burden while preserving the engineer's control and making visibility gaps explicit. It may uncover correlations the analyst missed, but that benefit must be measured rather than assumed.
 
@@ -21,6 +21,7 @@ Small teams currently have to move between consoles, reconstruct timelines, dist
 
 - Defensive purpose must be enforced in the deployment, policy and tool boundary; changing RedAmon's name or prompts is insufficient.
 - Independence means vendor-independent investigation and case management. It does not mean detecting activity without accessible evidence.
+- External-system sign-in is human-only. Gabriel must never authenticate to consoles, complete SSO/MFA/CAPTCHA, enter or retrieve credentials, extract session material, or silently restore an external session. Gabriel's own user authentication and internal worker credentials are separate trust boundaries, not authority to log into external systems.
 - Gabriel can independently perform delegated read-only investigation. Consequential response remains governed by explicit engineer consent and policy.
 - Evidence quality, incident urgency, confidence and authorization are distinct. None substitutes for another.
 - Security effectiveness and compliance coverage are assessed separately. Neither proves the other.
@@ -58,13 +59,15 @@ Every requirement below is mandatory for the release stated in its row. Optional
 | R3: controlled response | One approved response workflow with reconciliation and recovery | No blanket autonomous containment |
 | R4: managed operations | Multi-customer operations, quotas, distribution and support | Demonstrated tenant isolation and declared operating capacity |
 
-R1 explicitly excludes exploitation, credential guessing, reverse shells, arbitrary shell/code execution, stealth, unrestricted browsing, automatic new query-program authoring, third-party draft entry, automatic rule changes and autonomous containment. It also excludes universal console compatibility, automatic model retraining, mobile extensions and claims of uninterrupted browser-only monitoring.
+R1 explicitly excludes exploitation, credential guessing, external-system authentication, reverse shells, arbitrary shell/code execution, stealth, unrestricted browsing, automatic new query-program authoring, third-party draft entry, automatic rule changes and autonomous containment. It also excludes universal console compatibility, automatic model retraining, mobile extensions and claims of uninterrupted browser-only monitoring. Human-only external authentication remains an invariant in later releases, including approved response workflows.
 
 ## 4. End-to-end product journeys
 
 ### 4.1 Onboard and understand
 
 The engineer authenticates to Gabriel, selects the organization, pairs the extension and sees the processing policy. They sign into security consoles themselves, including MFA, and authorize selected tabs/pages/accounts and a bounded task. Gabriel records visible systems, assets, owners, security controls, available telemetry, maintenance context and gaps. It presents an Environment and Control Profile for correction.
+
+The extension observes and navigates only that approved browser session and explicitly approved associated tabs. A popup, child tab, new account, redirect or newly opened console gains no authority by association: validate/grant it before access. On logout, sign-in redirect, authentication challenge, lost permission or ambiguous account state, stop that console's collection/dispatch, show the visibility gap and ask the engineer to restore access manually. Never click sign-in/SSO/identity-provider controls or replay external cookies/tokens. Resume only after the engineer restores access and scope/account/document checks pass; require renewed approval for changed context.
 
 Each control has an explicit evidence state: reported; observed in UI; configuration observed; operating with recent telemetry; effectiveness validated in an approved test; or unknown/stale. These are evidence distinctions, not an automatic maturity ladder. Configuration alone must never be described as effective protection.
 
@@ -104,15 +107,15 @@ Requirement identifiers are stable. A work item must cite at least one requireme
 | ID | Required behavior | Release / owner | Acceptance references |
 | --- | --- | --- | --- |
 | GAB-009 | Ship a reviewed packaged extension for desktop Chrome and Brave, with visible organization, sharing state, task, scope, Pause, Stop and Disconnect | R1 / extension lead | B-T01, B-T12, B-T14 |
-| GAB-010 | Scope collection/action to selected origin, path, tab, document/frame, account, task and expiry; revalidate after navigation and account changes | R1 / extension + security | B-T02, B-T03, B-T06 |
+| GAB-010 | Scope collection/action to selected origin, path, tab, document/frame, account, task and expiry; revalidate after navigation and account changes; associated/new tabs require explicit admission | R1 / extension + security | B-T02, B-T03, B-T06, B-T28 |
 | GAB-011 | Minimize rendered semantic page content before upload; exclude passwords, OTPs, hidden fields and storage/token scraping; screenshots need explicit permission and safe preview/redaction | R1 / privacy + extension | B-T04, B-T13, B-T20 |
 | GAB-012 | Pair only to the approved authenticated Gabriel endpoint; validate sender/schema; page content must not forge approvals or access extension tokens | R1 / security lead | B-T05, B-T06, B-T15 |
-| GAB-013 | Complete supported investigations through authorized console UIs with all direct vendor API credentials/integrations absent | R1 / integration lead | B-T17, B-T21 |
+| GAB-013 | Complete supported vendor-agnostic investigations through engineer-authenticated approved console tabs with all direct vendor API credentials/integrations absent; no required brand or autonomous external sign-in | R1 / integration lead | B-T17, B-T21, B-T27, B-T28 |
 | GAB-014 | Execute existing approved read-only searches, filters and validated template parameters; refuse new query programs, saved-search edits, rule writes, scheduling and side-effecting queries in investigative mode | R1 / integration + security | B-T09, B-T22 |
 | GAB-015 | Keep proposed queries, response drafts and rule changes inside Gabriel; no third-party field entry or autosave in draft mode | R1 / product + extension | B-T23 |
-| GAB-016 | Use reviewed site adapters and finite typed operations; reject remote code, arbitrary requests and unsupported operations; unknown sites permit only admitted limited observation | R1 / extension lead | B-T09, B-T13, B-T15 |
+| GAB-016 | Use vendor-neutral shared contracts, reviewed site adapters and finite typed operations; reject remote code, arbitrary requests, external login/SSO/MFA/session replay and unsupported operations; unknown sites permit only admitted limited observation | R1 / extension lead | B-T09, B-T13, B-T15, B-T27, B-T28 |
 | GAB-017 | Serialize actions with per-tab leases; check current account/target/state before each operation; re-observe to verify; refuse ambiguous or stale targets | R1 / extension lead | B-T08, B-T10 |
-| GAB-018 | Survive service-worker suspension and reconnect safely; revalidate scope/freshness; show disconnected or missing-coverage periods; no blind repeat of uncertain side effects | R1 / extension + backend | B-T07, B-T11, B-T12, T15 |
+| GAB-018 | Survive service-worker suspension and reconnect safely; revalidate scope/freshness; authentication walls require human handoff, never autonomous login; show missing-coverage periods; no blind repeat of uncertain side effects | R1 / extension + backend | B-T07, B-T11, B-T12, B-T28, T15 |
 | GAB-019 | Version extension/backend/adapter compatibility; inspect permission changes and package provenance; support revocation and documented upgrade recovery | R1 baseline, R4 managed / release lead | B-T14, B-T19 |
 
 ### 5.3 Investigation and analyst experience
@@ -284,7 +287,7 @@ Use the companion's selected NIST SSDF and incident-response references as desig
 
 ## 12. Test strategy and acceptance catalog
 
-The companion contains **34 core cases (T01–T34), 26 browser cases (B-T01–B-T26), four conversion cases (D-T01–D-T04) and eight learning/operations cases (L-T01–L-T08)**. This PRD adds the six cases below, producing **78 acceptance obligations**. These are scenario specifications, not 78 executed automated tests. All start NOT_RUN; each requires normal, boundary and failure variants as relevant.
+The companion contains **34 core cases (T01–T34), 28 browser cases (B-T01–B-T28), four conversion cases (D-T01–D-T04) and eight learning/operations cases (L-T01–L-T08)**. This PRD adds the six cases below, producing **80 acceptance obligations**. These are scenario specifications, not 80 executed automated tests. All start NOT_RUN; each requires normal, boundary and failure variants as relevant. B-T27/B-T28 add vendor neutrality and human-only external authentication; existing IDs remain stable.
 
 | ID | Additional acceptance obligation | Required result |
 | --- | --- | --- |
@@ -367,7 +370,7 @@ Availability, detection latency and browser capacity cannot be promised until me
 
 Accountable roles describe responsibilities, not confirmed staffing. A small customer team does not remove development review needs or permit bypassing an organization's two-person high-impact approval policy. Where that policy applies, an external/on-call reviewer is needed.
 
-Do not reuse the earlier connector-first schedule estimate as a commitment. Browser-first support for three selected console workflows, real lab access and legacy fixes require re-estimation after C00/C01/B0. No artificial deadline or confidence score should conceal these dependencies.
+Do not reuse the earlier connector-first schedule estimate as a commitment. Browser-first support for discovery-selected console workflows, real lab access and legacy fixes require re-estimation after C00/C01/B0. No fixed vendor trio is required. No artificial deadline or confidence score should conceal these dependencies.
 
 ## 16. Definition of done and handoff
 
@@ -381,9 +384,11 @@ Confidence in requirement/design coverage: **high, with unresolved implementatio
 
 ## 17. Reference baseline
 
-- [Supporting conversion and testing plan v1.4](GABRIEL_CONVERSION_AND_TEST_PLAN.md): detailed repository conversion map, 72 original acceptance obligations, incident scenarios and browser/learning specifications.
+- [Supporting conversion and testing plan v1.5](GABRIEL_CONVERSION_AND_TEST_PLAN.md): detailed repository conversion map, 74 companion acceptance obligations, incident scenarios and browser/learning specifications.
 - [Pinned repository engineering instructions](https://github.com/emporiumtrading/redamon/blob/34ab441647779a9c16580379f4f2d76e32002e0e/AGENTS.md).
 - [Pinned repository testing guide](https://github.com/emporiumtrading/redamon/blob/34ab441647779a9c16580379f4f2d76e32002e0e/docs/readmes/README.TESTING.md).
 - The supporting plan retains primary Chrome/Brave and NIST references with their original verification context. Recheck applicable versions and platform behavior during B0/C01 and before packaging.
 
 Change control: new product requests must update requirement IDs, release/dependency placement, threats, acceptance mappings and affected loop/gate obligations together. Preserve earlier decisions and rationale through version control. Never mark a requested capability implemented merely because its requirement was added here.
+
+Version 1.1 records the 18 October 2026 clarification: named security products are examples only; external-console authentication belongs exclusively to the engineer, with approved-tab/session visibility supplied by the extension. Internal Gabriel account/worker identity remains required. New browser acceptance obligations are design requirements, not claims that an extension has shipped.
