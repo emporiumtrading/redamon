@@ -50,6 +50,31 @@ Schema migration is transactionally locked, versioned and checksum-checked. Reap
 
 `bash gabriel.sh identity-test /absolute/path/to/evidence` creates fresh secrets and a unique disposable project, starts a real PostgreSQL server, migrates, runs the matching image's unit/integration cases, restarts PostgreSQL and checks persisted account/membership/session state and revocation. It then removes only its own disposable database project/volume. Checkpoint tokens and secret files are outside the evidence directory. Reports contain counts, sanitized rendered deployment and source/image/version identifiers. Missing Docker/required tests block verification; no host pytest fallback is used.
 
-The VM workflow also repeats the runtime/inventory and foundation regressions. Automated operator/contract tests are not human UAT or production verification. MFA/SSO, browser pairing, REST/stream/job scopes, service identity, encryption/rotation of provider secrets, disaster restore, durable cases and response authority remain separate requirements.
+The VM workflow also repeats the runtime/inventory and foundation regressions. Automated operator/contract tests are not human UAT or production verification. MFA/SSO, browser pairing, REST/stream/job scopes, encryption/rotation of provider secrets, disaster restore, durable cases and response authority remain separate requirements.
+
+## Service identity — increment 4
+
+These are **internal Gabriel worker credentials only**. They do not log into security consoles or external systems. Engineers authenticate to those systems manually; the future extension uses only approved authenticated browser tabs, pauses at authentication walls and never extracts/replays vendor sessions. Named security vendors are examples, not dependencies. Gabriel user sign-in/pairing/internal authorization must not be confused with external-system login.
+
+Schema version 2 adds service grants without rewriting version 1. Run `identity-migrate` before using the upgraded runtime. Migration verifies every applied checksum, rejects unknown/gapped histories and applies outstanding versions in one transaction. The tests exercise actual v1-to-v2 upgrade and failed-migration rollback; this is not a backup/restore procedure or a rolling-upgrade compatibility guarantee.
+
+An owner/admin can issue a service credential for one task UUID and an explicit subset of `capabilities.list` and `evidence.hash`. Its issuer, audience and resource are server constants: `gabriel-identity-service-v1`, `gabriel-local-worker-v1`, and `local-inspection-v1`. `gbs1_` tokens are 32 random bytes with only SHA-256 digests stored; they cannot serve as human sessions or create other grants. Lifetime defaults to 900 seconds, bounded to 60–3600 seconds. There are at most 100 active grants per tenant. Service listing returns the latest 100 rows without raw credentials or digests.
+
+```bash
+bash gabriel.sh identity issue-service --name 'Local evidence worker' \
+  --task-id YOUR_TASK_UUID --operation evidence.hash --ttl-seconds 900
+# Prompts for an owner/admin session. New service token is printed ONCE to stdout.
+# Securely hand it to the intended worker; never record it in Git or shared logs.
+bash gabriel.sh identity services
+bash gabriel.sh identity service-execute --token-file /private/worker-token --task-id YOUR_TASK_UUID
+# Supply the existing versioned capability request on stdin.
+bash gabriel.sh identity revoke-service --grant-id YOUR_GRANT_UUID
+```
+
+Service execution reads tenant/task/scope/expiry/revocation and current issuer activity/privileged membership from storage, not request claims. Issuer membership changes and password reset revoke their outstanding service credentials; explicit revocation is tenant-admin scoped. Human logout ends that session, not separately issued delegations: revoke those explicitly or let their short lifetime expire. All tenant admins can revoke/list tenant grants. This is deliberate tenant administration, not one-admin/one-service ownership isolation.
+
+Issuance, revocation and successful local execution require a committed audit event. Audit failure withholds execution results or rolls back the mutation. Organization locks use the same ordering as human operations. A local computation already admitted may finish before a concurrent revocation commits; all later admissions deny. No externally mutating work is performed. No model decision can widen scope.
+
+Task UUIDs bind credentials to a supplied correlation identifier, **not to a verified job record**: durable jobs/resources do not exist yet. There is no external response, connector, browser, network endpoint, workload attestation or general-purpose service identity platform here. Rotation means issue a replacement then revoke the old grant; safe distribution and transport belong to later deployment work. Service SQL credentials remain trusted backend credentials, never credentials given to workers.
 
 Dependency/API references verified for this increment: [Psycopg 3.3.6](https://pypi.org/project/psycopg/3.3.6/), [argon2-cffi 25.1.0](https://pypi.org/project/argon2-cffi/25.1.0/), and [password verification/rehashing](https://argon2-cffi.readthedocs.io/en/stable/howto.html). The PostgreSQL review applied least privilege, composite key/index coverage, consistent lock ordering and short bounded transactions from the Postgres best-practices skill. Dependency choice alone is not security certification.

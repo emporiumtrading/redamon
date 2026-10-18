@@ -1,8 +1,9 @@
 name: Gabriel database identity
 on:
   push:
-    branches: ['feature/gabriel-identity']
+    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity']
     paths:
+      - 'gabriel/capabilities.py'
       - 'gabriel/identity/**'
       - 'testing/gabriel_identity/**'
       - 'tooling/scripts/gabriel_identity_*.py'
@@ -12,6 +13,7 @@ on:
       - '.github/workflows/gabriel-identity.yml'
   pull_request:
     paths:
+      - 'gabriel/capabilities.py'
       - 'gabriel/identity/**'
       - 'testing/gabriel_identity/**'
       - 'tooling/scripts/gabriel_identity_*.py'

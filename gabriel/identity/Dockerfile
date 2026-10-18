@@ -4,7 +4,7 @@ WORKDIR /app
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY gabriel/__init__.py gabriel/capabilities.py /app/gabriel/
-COPY gabriel/identity/__init__.py gabriel/identity/service.py gabriel/identity/cli.py gabriel/identity/schema.sql /app/gabriel/identity/
+COPY gabriel/identity/__init__.py gabriel/identity/service.py gabriel/identity/machine.py gabriel/identity/cli.py gabriel/identity/schema.sql gabriel/identity/schema_v2.sql /app/gabriel/identity/
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]
 
