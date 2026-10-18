@@ -19,12 +19,16 @@ def unique(pairs):
     return result
 
 
-def prepare(directory, previous=None):
+def prepare(directory, previous=None, *, purpose=None):
     repo = Path(__file__).resolve().parents[2]
     directory = Path(directory).resolve()
     if directory == repo or repo in directory.parents:
         raise ValueError('external_key_directory_required')
     data = {'schema_version':1,'generation':1,'active':'','keys':{}}
+    if purpose is not None:
+        if purpose!='evidence-v1':
+            raise ValueError('unsupported_key_purpose')
+        data['purpose'] = purpose
     if previous:
         fd = os.open(previous,os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd,'rb') as stream:
@@ -33,7 +37,9 @@ def prepare(directory, previous=None):
                 raise ValueError('invalid_previous_keyring')
             raw = stream.read(8193)
         data = json.loads(raw,object_pairs_hook=unique)
-        if (len(raw)>8192 or not isinstance(data,dict) or set(data)!={'schema_version','generation','active','keys'}
+        fields = {'schema_version','generation','active','keys'} | ({'purpose'} if purpose else set())
+        if (len(raw)>8192 or not isinstance(data,dict) or set(data)!=fields
+                or (purpose is not None and data.get('purpose')!=purpose)
                 or type(data['schema_version']) is not int or data['schema_version']!=1
                 or type(data['generation']) is not int or not 1<=data['generation']<1000000
                 or not isinstance(data['keys'],dict) or not 1<=len(data['keys'])<16

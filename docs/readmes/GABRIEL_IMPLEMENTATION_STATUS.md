@@ -1,5 +1,15 @@
 # Gabriel implementation ledger
 
+## Case/evidence increment 7 — verification in progress
+
+Source baseline: `4155303f6f6a4739d343f29a72516f3850bf6b52`. PRD links: GAB-003/GAB-005/GAB-006/GAB-007/GAB-008/GAB-022, C04 and T11/T12/T13/T14/T16/T19. Status: **Implemented for component verification; hosted VM results pending. Full C04 and product acceptance remain open.**
+
+Schema 5 adds tenant cases, real task links, approved-text evidence metadata, immutable key fingerprints, append-only custody and two-phase export receipts. A separate encrypted volume and purpose-separated evidence keys preserve original/declared-redacted artifacts. Durable acquisition intent precedes file writes; tenant locking serializes retries, conflicts deny and interrupted completion remains pending. Content hashes, authenticated provenance and custody checks gate reads, exports and nonempty-case closure. Source authenticity is explicitly unverified.
+
+New real-database/filesystem tests cover scope/roles/workers, concurrent retries, audit failure, ciphertext/provenance/custody damage, lost/wrong keys, export failure/reconciliation, path confinement, quotas, CLI, migration preservation and rollback. The recovery probe uses a separate checkpoint database, actual pg_dump/restore and copied encrypted objects with independently retained keys. Prior regressions remain required. Local syntax/diff checks passed; Docker remains unavailable locally and no host pytest is substituted.
+
+See [operator flow and exact limits](README.GABRIEL_CASE_EVIDENCE.md). Browser collection, source authenticity, retention/holds/purge, external custody anchors, key rewrap, response/approval state, memory and UI remain open. No production deployment or human UAT is claimed. All earlier C00–C03 review and release gates remain applicable.
+
 ## Foundation increment 1 — truthful test gates
 
 Date: 18 October 2026 UTC. Source baseline: `017fe462bb2557e8cf7ffe9e6b238cb803e915ab`.

@@ -63,7 +63,20 @@ services:
       GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
       GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
       GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring
-    secrets: [app_dsn, owner_dsn, provider_keyring]
+      GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+    secrets: [app_dsn, owner_dsn, provider_keyring, evidence_keyring]
+  case-data:
+    <<: *identity
+    profiles: [cases]
+    entrypoint: [python, -m, gabriel.identity.case_cli]
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+      GABRIEL_EVIDENCE_ROOT: /var/lib/gabriel-evidence
+      GABRIEL_CASE_INTAKE_ROOT: /intake
+    secrets: [app_dsn, evidence_keyring]
+    volumes:
+      - evidence_data:/var/lib/gabriel-evidence
   provider-secrets:
     <<: *identity
     profiles: [vault]
@@ -78,6 +91,7 @@ networks:
     internal: true
 volumes:
   identity_data:
+  evidence_data:
 secrets:
   db_password:
     file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/db_password
@@ -89,3 +103,5 @@ secrets:
     file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/role_init.sql
   provider_keyring:
     file: ${GABRIEL_PROVIDER_KEY_DIR:-/nonexistent-gabriel-provider-keys}/keyring.json
+  evidence_keyring:
+    file: ${GABRIEL_EVIDENCE_KEY_DIR:-/nonexistent-gabriel-evidence-keys}/keyring.json
