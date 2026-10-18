@@ -291,7 +291,7 @@ class CaseService(IdentityService):
             _audit(conn,'case.integrity_checked',principal,case['id'])
             return {'case_id':str(case['id']),'evidence':findings,'complete':bool(findings) and all(f['integrity']=='verified' for f in findings)}
 
-    def close_case(self,token,case_id):
+    def close_case(self,token,case_id,*,approval_id=None):
         blocked = False
         with connection(self._dsn) as conn:
             principal = self._human(conn,token,write=True)
@@ -301,8 +301,10 @@ class CaseService(IdentityService):
                 _audit(conn,'case.closure_blocked',principal,case['id'])
                 blocked = True
             else:
-                conn.execute("UPDATE gabriel_identity.cases SET state='closed',closed_at=COALESCE(closed_at,clock_timestamp()) WHERE organization_id=%s AND id=%s",(principal.organization_id,case['id']))
-                _audit(conn,'case.closed',principal,case['id'])
+                if approval_id is None:
+                    raise AccessDenied('case_closure_approval_required')
+                from gabriel.identity.actions import ActionService
+                return ActionService(self._dsn,self.store)._execute_close(conn,principal,case,approval_id,token)
         if blocked:
             raise EvidenceError('case_evidence_integrity_failed')
 

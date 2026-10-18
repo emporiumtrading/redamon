@@ -1,5 +1,7 @@
 # Gabriel cases and evidence — increment 7
 
+Migration 6 now requires an exact human-approved request for valid-case closure. Follow the [policy/approval operator flow](README.GABRIEL_APPROVALS.md); `close` without `--approval-id` is denied. Earlier integrity, export and storage controls remain in force.
+
 This C04 component persists tenant cases, real task links and approved UTF-8 artifacts. It does not collect from browsers, authenticate to consoles, run queries or execute responses. Vendor-neutral labels identify engineer-supplied artifacts; they do not prove source authenticity or a live attack. A matching hash verifies stored bytes against acquisition metadata, not the truth of the evidence.
 
 ## Storage and authority

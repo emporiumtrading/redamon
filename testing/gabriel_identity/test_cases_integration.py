@@ -13,6 +13,7 @@ import psycopg
 import pytest
 
 from gabriel.identity.cases import CaseService
+from gabriel.identity.actions import ActionService
 from gabriel.identity.case_cli import ExportError,approved_file,export_file
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore,MAX_BYTES
 from gabriel.identity.machine import ServiceIdentityService
@@ -112,7 +113,12 @@ def test_real_task_links_and_closed_case_intake_gate(tenant,cases,case,evidence)
     assert cases.get_case(tenant.token,case['id'])['task_ids']==[task['id']]
     with pytest.raises(AccessDenied):
         cases.link_task(tenant.token,case['id'],uuid4())
-    cases.close_case(tenant.token,case['id'])
+    actions = ActionService(tenant.db.app,cases.store)
+    actions.set_policy(tenant.token,distinct_approver=False)
+    request = actions.propose_close(tenant.token,case['id'],uuid4(),'Approved local closure')
+    actions.submit(tenant.token,request['id'])
+    actions.approve(tenant.token,request['id'],request['digest'])
+    cases.close_case(tenant.token,case['id'],approval_id=request['id'])
     assert cases.get_case(tenant.token,case['id'])['case']['state']=='closed'
     with pytest.raises(AccessDenied,match='case_not_open'):
         intake(tenant,cases,case)
@@ -401,7 +407,14 @@ def test_real_cli_intake_verify_export_and_close(tenant,tmp_path):
     output = tmp_path/'export.txt'
     assert cli('export','--evidence-id',evidence_id,'--output',str(output))[0]==0
     assert output.read_text()==CONTENT
-    assert cli('close','--case-id',case_id)[0]==0
+    assert cli('close','--case-id',case_id)[0]==1
+    assert cli('policy-set','--distinct-approver','no')[0]==0
+    code,proposed = cli('propose-close','--case-id',case_id,'--request-id',str(uuid4()),'--rationale','Reviewed CLI closure')
+    assert code==0
+    action_id = proposed['result']['id']
+    assert cli('action-submit','--approval-id',action_id)[0]==0
+    assert cli('action-approve','--approval-id',action_id,'--expected-digest',proposed['result']['digest'])[0]==0
+    assert cli('close','--case-id',case_id,'--approval-id',action_id)[0]==0
     assert cli('list')[0]==0 and cli('exports')[0]==0
 
 
