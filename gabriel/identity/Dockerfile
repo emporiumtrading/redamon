@@ -4,7 +4,7 @@ WORKDIR /app
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY gabriel/__init__.py gabriel/capabilities.py /app/gabriel/
-COPY gabriel/identity/__init__.py gabriel/identity/service.py gabriel/identity/machine.py gabriel/identity/tasks.py gabriel/identity/cli.py gabriel/identity/vault.py gabriel/identity/vault_cli.py gabriel/identity/actions.py gabriel/identity/cases.py gabriel/identity/evidence_store.py gabriel/identity/case_cli.py gabriel/identity/schema.sql gabriel/identity/schema_v2.sql gabriel/identity/schema_v3.sql gabriel/identity/schema_v4.sql gabriel/identity/schema_v5.sql gabriel/identity/schema_v6.sql gabriel/identity/schema_v7.sql /app/gabriel/identity/
+COPY gabriel/identity/__init__.py gabriel/identity/service.py gabriel/identity/machine.py gabriel/identity/tasks.py gabriel/identity/cli.py gabriel/identity/vault.py gabriel/identity/vault_cli.py gabriel/identity/retention.py gabriel/identity/actions.py gabriel/identity/cases.py gabriel/identity/evidence_store.py gabriel/identity/case_cli.py gabriel/identity/schema.sql gabriel/identity/schema_v2.sql gabriel/identity/schema_v3.sql gabriel/identity/schema_v4.sql gabriel/identity/schema_v5.sql gabriel/identity/schema_v6.sql gabriel/identity/schema_v7.sql gabriel/identity/schema_v8.sql /app/gabriel/identity/
 RUN mkdir -p /var/lib/gabriel-evidence /intake && chown 10001:10001 /var/lib/gabriel-evidence
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]

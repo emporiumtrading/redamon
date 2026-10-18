@@ -11,6 +11,7 @@ from gabriel.identity.cli import read_secret
 from gabriel.identity.service import IdentityError,InvalidIdentityInput
 from gabriel.identity.cases import CaseService
 from gabriel.identity.actions import ActionService
+from gabriel.identity.retention import RetentionService
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore,MAX_BYTES
 
 
@@ -84,7 +85,9 @@ def export_file(service,token,evidence_id,path):
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
     parser.add_argument('command',choices=('create','list','get','link-task','acquire','custody','verify','close','export','exports',
-        'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute'))
+        'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
+        'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
+        'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel'))
     parser.add_argument('--token-file')
     parser.add_argument('--title')
     parser.add_argument('--case-id')
@@ -105,13 +108,43 @@ def main():
     parser.add_argument('--ttl',type=int,default=900)
     parser.add_argument('--approval-ttl',type=int,default=300)
     parser.add_argument('--distinct-approver',choices=('yes','no'),default='yes')
+    parser.add_argument('--days',type=int)
+    parser.add_argument('--hold-id')
+    parser.add_argument('--attempt-id')
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
         store = LocalEvidenceStore(os.environ.get('GABRIEL_EVIDENCE_ROOT'),keys)
-        service = ActionService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
+        service = RetentionService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
         token = read_secret(args.token_file,128) if args.token_file else getpass.getpass('Gabriel session: ')
-        if args.command=='policy-set':
+        if args.command=='retention-set':
+            result = service.set_retention(token,args.days)
+        elif args.command=='retention-get':
+            result = service.get_retention(token)
+        elif args.command=='hold-place':
+            result = service.place_hold(token,args.case_id,args.rationale)
+        elif args.command=='hold-release':
+            service.release_hold(token,args.hold_id,args.expected_digest,args.rationale)
+            result = {'released':True}
+        elif args.command=='governance':
+            result = service.governance(token,args.case_id)
+        elif args.command=='purge-propose':
+            result = service.propose_purge(token,args.evidence_id,args.request_id,args.rationale)
+        elif args.command=='purge-get':
+            result = service.get_purge(token,args.approval_id)
+        elif args.command=='purge-approve':
+            service.approve_purge(token,args.approval_id,args.expected_digest)
+            result = {'approved':True}
+        elif args.command=='purge-prepare':
+            result = service.prepare_purge(token,args.approval_id)
+        elif args.command=='purge-execute':
+            result = service.execute_purge(token,args.attempt_id)
+        elif args.command in {'purge-reconcile','purge-abort'}:
+            result = service.reconcile_purge(token,args.attempt_id,abort=args.command=='purge-abort')
+        elif args.command=='purge-cancel':
+            service.cancel_purge(token,args.approval_id)
+            result = {'cancelled':True}
+        elif args.command=='policy-set':
             result = service.set_policy(token,distinct_approver=args.distinct_approver=='yes',approval_ttl=args.approval_ttl)
         elif args.command=='policy-get':
             result = service.get_policy(token)
