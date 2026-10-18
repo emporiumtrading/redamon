@@ -1,0 +1,54 @@
+name: Gabriel database identity
+on:
+  push:
+    branches: ['feature/gabriel-identity']
+    paths:
+      - 'gabriel/identity/**'
+      - 'testing/gabriel_identity/**'
+      - 'tooling/scripts/gabriel_identity_*.py'
+      - 'tooling/scripts/gabriel_identity_check.sh'
+      - 'compose.gabriel-identity.yml'
+      - 'gabriel.sh'
+      - '.github/workflows/gabriel-identity.yml'
+  pull_request:
+    paths:
+      - 'gabriel/identity/**'
+      - 'testing/gabriel_identity/**'
+      - 'tooling/scripts/gabriel_identity_*.py'
+      - 'tooling/scripts/gabriel_identity_check.sh'
+      - 'compose.gabriel-identity.yml'
+      - 'gabriel.sh'
+      - '.github/workflows/gabriel-identity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gabriel-identity-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Database identity and restart verification
+        run: |
+          bash -n gabriel.sh tooling/scripts/gabriel_identity_check.sh
+          bash tooling/scripts/gabriel_identity_check.sh "$RUNNER_TEMP/gabriel-identity-evidence"
+      - name: Defensive runtime regression
+        run: bash tooling/scripts/gabriel_runtime_check.sh "$RUNNER_TEMP/gabriel-runtime-evidence"
+      - name: Foundation regression
+        run: bash tooling/scripts/gabriel_foundation_check.sh "$RUNNER_TEMP/gabriel-foundation-evidence"
+      - name: Retain identity evidence without credential checkpoint files
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-identity-evidence
+          path: |
+            ${{ runner.temp }}/gabriel-identity-evidence
+            ${{ runner.temp }}/gabriel-runtime-evidence
+            ${{ runner.temp }}/gabriel-foundation-evidence
+          if-no-files-found: warn
+          retention-days: 14
