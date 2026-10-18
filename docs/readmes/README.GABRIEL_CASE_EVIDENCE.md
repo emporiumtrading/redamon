@@ -30,10 +30,10 @@ bash gabriel.sh case-data link-task --case-id CASE_UUID --task-id REAL_TASK_UUID
 bash gabriel.sh case-data verify --case-id CASE_UUID
 ```
 
-Prepare reviewed text outside Git in a private parent directory; make only the selected file container-readable. Admission requires an ingestion UUID for retries and refuses paths outside `/intake`. Mount only the selected artifact read-only:
+Prepare reviewed text outside Git in a private parent directory; make only the selected file container-readable (for example mode 0444 within a host directory of mode 0700). Admission requires an ingestion UUID for retries and refuses paths outside `/intake`. Mount only the selected artifact read-only:
 
 ```bash
-docker compose -f compose.gabriel-identity.yml run --rm --no-deps \
+docker compose --project-name gabriel-identity -f compose.gabriel-identity.yml run --rm --no-deps \
   -v /absolute/private/reviewed.txt:/intake/source.txt:ro case-data acquire \
   --case-id CASE_UUID --ingestion-id INGESTION_UUID \
   --content-file /intake/source.txt --source-label 'Approved console artifact' \
@@ -45,7 +45,7 @@ For a redacted derivative use `--redaction-state user_declared_redacted --parent
 Exports commit a prepared receipt before releasing plaintext to a new absolute file; they never overwrite files. Explicitly mount the operator's private output directory. Using the operator UID owns the mode-0600 result. Protect the plaintext after export.
 
 ```bash
-docker compose -f compose.gabriel-identity.yml run --rm --no-deps \
+docker compose --project-name gabriel-identity -f compose.gabriel-identity.yml run --rm --no-deps \
   --user "$(id -u):$(id -g)" -v /absolute/private/exports:/exports \
   case-data export --evidence-id EVIDENCE_UUID --output /exports/artifact.txt
 bash gabriel.sh case-data exports
