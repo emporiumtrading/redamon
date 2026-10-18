@@ -14,22 +14,28 @@ from gabriel.identity.machine import ServiceIdentityService
 from gabriel.identity.service import (AccessDenied, AuthenticationDenied, IdentityConfigurationError,
     IdentityUnavailable, InvalidIdentityInput, migrate)
 from testing.gabriel_identity.test_identity_integration import database, tenant, owner_connection
+from testing.gabriel_identity.db_history import remove_v4
 
 pytestmark = pytest.mark.integration
 REQUEST = {'schema_version':1, 'operation':'evidence.hash', 'arguments':{'content':'supplied test fixture'}}
 
 
+def make_task(tenant):
+    return ServiceIdentityService(tenant.db.app).create_task(tenant.token,'machine fixture',
+        ['capabilities.list','evidence.hash'],3600,1000)['id']
+
+
 @pytest.fixture
 def machine(tenant):
     service = ServiceIdentityService(tenant.db.app)
-    task = uuid4()
+    task = make_task(tenant)
     grant = service.issue_service(tenant.token, 'fixture worker', task, ['evidence.hash'])
     return service, task, grant
 
 
 def test_machine_identity_persists_without_raw_credential(tenant, machine):
     service, task, grant = machine
-    result = ServiceIdentityService(tenant.db.app).execute_service(grant.token, task, REQUEST)
+    result = ServiceIdentityService(tenant.db.app).execute_service(grant.token, task, REQUEST, uuid4())
     assert result['organization_id'] == str(tenant.org)
     assert result['service_id'] == str(grant.id) and result['task_id'] == str(task)
     assert result['result']['digest'] == sha256(REQUEST['arguments']['content'].encode()).hexdigest()
@@ -53,26 +59,26 @@ def test_service_cannot_impersonate_human_or_issue_credentials(tenant, machine):
         with pytest.raises(AuthenticationDenied):
             call()
     with pytest.raises(AuthenticationDenied):
-        service.execute_service(tenant.token, task, REQUEST)
+        service.execute_service(tenant.token, task, REQUEST, uuid4())
 
 
 def test_task_operation_and_request_authority_are_restricted(tenant, machine):
     service, task, grant = machine
     with pytest.raises(AuthenticationDenied):
-        service.execute_service(grant.token, uuid4(), REQUEST)
+        service.execute_service(grant.token, uuid4(), REQUEST, uuid4())
     for op in ('capabilities.list', 'isolate_endpoint', 'run_command', None, []):
         with pytest.raises(AccessDenied):
-            service.execute_service(grant.token, task, {**REQUEST, 'operation': op})
+            service.execute_service(grant.token, task, {**REQUEST, 'operation': op}, uuid4())
     from gabriel.capabilities import InvalidRequest
     for field in ('organization_id', 'role', 'approved', 'task_id'):
         with pytest.raises(InvalidRequest):
-            service.execute_service(grant.token, task, {**REQUEST, field:str(uuid4())})
+            service.execute_service(grant.token, task, {**REQUEST, field:str(uuid4())}, uuid4())
 
 
-@pytest.mark.parametrize('token', [None, '', 'gbs1_short', 'gbs1_'+'a'*43])
+@pytest.mark.parametrize('token', [None, '', 'gbs1_short', 'gbs1_'+'a'*43, 'gbs2_short', 'gbs2_'+'a'*43])
 def test_forged_machine_credentials_denied(tenant, token):
     with pytest.raises(AuthenticationDenied):
-        ServiceIdentityService(tenant.db.app).execute_service(token, uuid4(), REQUEST)
+        ServiceIdentityService(tenant.db.app).execute_service(token, uuid4(), REQUEST, uuid4())
 
 
 def test_cross_tenant_list_and_revocation_denied(tenant, machine):
@@ -84,7 +90,7 @@ def test_cross_tenant_list_and_revocation_denied(tenant, machine):
     assert service.list_services(token) == []
     with pytest.raises(AccessDenied):
         service.revoke_service(token, grant.id)
-    assert service.execute_service(grant.token, task, REQUEST)['organization_id'] == str(tenant.org)
+    assert service.execute_service(grant.token, task, REQUEST, uuid4())['organization_id'] == str(tenant.org)
 
 
 @pytest.mark.parametrize('role', ['analyst', 'viewer'])
@@ -104,19 +110,19 @@ def test_revocation_and_expiry_are_checked_on_each_execution(tenant, machine):
     service.revoke_service(tenant.token, grant.id)
     service.revoke_service(tenant.token, grant.id)
     with pytest.raises(AuthenticationDenied):
-        service.execute_service(grant.token, task, REQUEST)
+        service.execute_service(grant.token, task, REQUEST, uuid4())
     expired = service.issue_service(tenant.token, 'expired fixture', task, ['evidence.hash'])
     with owner_connection(tenant.db) as conn:
         conn.execute('''UPDATE gabriel_identity.service_grants SET created_at=clock_timestamp()-interval '2 hours',
             expires_at=clock_timestamp()-interval '90 minutes' WHERE id=%s''', (expired.id,))
     with pytest.raises(AuthenticationDenied):
-        service.execute_service(expired.token, task, REQUEST)
+        service.execute_service(expired.token, task, REQUEST, uuid4())
 
 
 @pytest.mark.parametrize('change', ['membership', 'password', 'direct_disable'])
 def test_issuer_lifecycle_invalidates_delegation(tenant, change):
     service = ServiceIdentityService(tenant.db.app)
-    secret, task = secrets.token_urlsafe(24), uuid4()
+    secret, task = secrets.token_urlsafe(24), make_task(tenant)
     admin = service.create_member(tenant.token, 'issuing-admin', secret, 'admin')
     token = service.login(tenant.org, 'issuing-admin', secret).token
     grant = service.issue_service(token, 'issued fixture', task, ['evidence.hash'])
@@ -128,7 +134,7 @@ def test_issuer_lifecycle_invalidates_delegation(tenant, change):
         with owner_connection(tenant.db) as conn:
             conn.execute('UPDATE gabriel_identity.users SET active=false WHERE organization_id=%s AND id=%s', (tenant.org,admin))
     with pytest.raises(AuthenticationDenied):
-        service.execute_service(grant.token, task, REQUEST)
+        service.execute_service(grant.token, task, REQUEST, uuid4())
 
 
 def test_audit_failure_blocks_issue_execute_and_revoke(tenant, machine):
@@ -138,7 +144,7 @@ def test_audit_failure_blocks_issue_execute_and_revoke(tenant, machine):
         conn.execute('REVOKE INSERT ON gabriel_identity.audit_events FROM gabriel_identity_app')
     try:
         for call in (lambda: service.issue_service(tenant.token, 'not persisted', task, ['evidence.hash']),
-                     lambda: service.execute_service(grant.token, task, REQUEST),
+                     lambda: service.execute_service(grant.token, task, REQUEST, uuid4()),
                      lambda: service.revoke_service(tenant.token, grant.id)):
             with pytest.raises(IdentityUnavailable):
                 call()
@@ -146,14 +152,14 @@ def test_audit_failure_blocks_issue_execute_and_revoke(tenant, machine):
         with owner_connection(tenant.db) as conn:
             conn.execute('GRANT INSERT ON gabriel_identity.audit_events TO gabriel_identity_app')
     assert service.list_services(tenant.token) == before
-    assert service.execute_service(grant.token, task, REQUEST)['service_id'] == str(grant.id)
+    assert service.execute_service(grant.token, task, REQUEST, uuid4())['service_id'] == str(grant.id)
 
 
 def test_concurrent_revoke_has_no_lock_cycle_and_prevents_later_use(tenant, machine):
     service, task, grant = machine
     def run():
         try:
-            return service.execute_service(grant.token, task, REQUEST)
+            return service.execute_service(grant.token, task, REQUEST, uuid4())
         except AuthenticationDenied:
             return 'revoked'
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -161,7 +167,7 @@ def test_concurrent_revoke_has_no_lock_cycle_and_prevents_later_use(tenant, mach
         service.revoke_service(tenant.token, grant.id)
         assert future.result() is not None
     with pytest.raises(AuthenticationDenied):
-        service.execute_service(grant.token, task, REQUEST)
+        service.execute_service(grant.token, task, REQUEST, uuid4())
 
 
 @pytest.mark.parametrize('operations,ttl', [([],900), (['run_command'],900), (['evidence.hash']*2,900),
@@ -186,7 +192,7 @@ def test_database_enforces_tenant_fk_and_fixed_claims(tenant, machine):
 def test_cli_issue_execute_list_and_revoke(tenant, tmp_path):
     human = tmp_path/'human'
     human.write_text(tenant.token)
-    task = str(uuid4())
+    task = str(make_task(tenant))
     def cli(*args, data=None):
         result = subprocess.run([sys.executable,'-m','gabriel.identity.cli',*args],input=data,
             capture_output=True,text=True,timeout=10)
@@ -197,19 +203,20 @@ def test_cli_issue_execute_list_and_revoke(tenant, tmp_path):
     assert code == 0
     service_file = tmp_path/'service'
     service_file.write_text(result['result']['service_token'])
-    code, execution = cli('service-execute','--token-file',str(service_file),'--task-id',task,data=json.dumps(REQUEST))
+    code, execution = cli('service-execute','--token-file',str(service_file),'--task-id',task,'--request-id',str(uuid4()),data=json.dumps(REQUEST))
     assert code == 0 and execution['result']['service_id'] == result['result']['grant_id']
     code, listing = cli('services','--token-file',str(human))
     assert code == 0 and service_file.read_text() not in repr(listing)
     code, _ = cli('revoke-service','--token-file',str(human),'--grant-id',result['result']['grant_id'])
     assert code == 0
-    code, denied = cli('service-execute','--token-file',str(service_file),'--task-id',task,data=json.dumps(REQUEST))
+    code, denied = cli('service-execute','--token-file',str(service_file),'--task-id',task,'--request-id',str(uuid4()),data=json.dumps(REQUEST))
     assert code == 1 and denied['status'] == 'denied'
 
 
 def test_upgrade_from_v1_preserves_account_and_session(tenant):
     # The disposable DB is sequential/per-file. Recreate the actual pre-v2 state.
     with owner_connection(tenant.db) as conn:
+        remove_v4(conn)
         conn.execute('''DROP TABLE gabriel_identity.provider_secrets,gabriel_identity.provider_key_state,
             gabriel_identity.provider_key_registry,gabriel_identity.service_grants''')
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version>=2')
@@ -217,9 +224,9 @@ def test_upgrade_from_v1_preserves_account_and_session(tenant):
     migrate(tenant.db.owner)
     assert tenant.service.whoami(tenant.token).user_id == tenant.owner
     service = ServiceIdentityService(tenant.db.app)
-    task = uuid4()
+    task = make_task(tenant)
     grant = service.issue_service(tenant.token,'after upgrade',task,['evidence.hash'])
-    assert service.execute_service(grant.token,task,REQUEST)['service_id'] == str(grant.id)
+    assert service.execute_service(grant.token,task,REQUEST, uuid4())['service_id'] == str(grant.id)
 
 
 def test_unknown_migration_and_checksum_change_fail_closed(tenant):
@@ -246,6 +253,7 @@ def test_failed_upgrade_rolls_back_schema_and_version_without_losing_session(ten
     from pathlib import Path
     original = Path.read_text
     with owner_connection(tenant.db) as conn:
+        remove_v4(conn)
         conn.execute('''DROP TABLE gabriel_identity.provider_secrets,gabriel_identity.provider_key_state,
             gabriel_identity.provider_key_registry,gabriel_identity.service_grants''')
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version>=2')
@@ -267,11 +275,11 @@ def test_failed_upgrade_rolls_back_schema_and_version_without_losing_session(ten
 
 
 def test_scope_boundaries_active_grant_quota_and_safe_listing(tenant):
-    service, task = ServiceIdentityService(tenant.db.app), uuid4()
+    service, task = ServiceIdentityService(tenant.db.app), make_task(tenant)
     grants = [service.issue_service(tenant.token,'bounded worker',task,
         ['capabilities.list','evidence.hash'],60 if i == 0 else 3600) for i in range(100)]
     assert service.execute_service(grants[0].token,task,
-        {'schema_version':1,'operation':'capabilities.list','arguments':{}})['result']['response_execution'] is False
+        {'schema_version':1,'operation':'capabilities.list','arguments':{}}, uuid4())['result']['response_execution'] is False
     with pytest.raises(AccessDenied):
         service.issue_service(tenant.token,'overflow',task,['evidence.hash'])
     rows = service.list_services(tenant.token)
@@ -297,7 +305,7 @@ def test_external_authentication_cannot_be_admitted_or_dispatched(tenant, machin
     with pytest.raises(InvalidIdentityInput):
         service.issue_service(tenant.token,'not external login',task,[operation])
     with pytest.raises(AccessDenied):
-        service.execute_service(grant.token,task,request)
+        service.execute_service(grant.token,task,request, uuid4())
     with pytest.raises(CapabilityDenied):
         service.execute(tenant.token,request)
     with pytest.raises(CapabilityDenied):

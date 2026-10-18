@@ -58,15 +58,20 @@ These are **internal Gabriel worker credentials only**. They do not log into sec
 
 Schema version 2 adds service grants without rewriting version 1. Run `identity-migrate` before using the upgraded runtime. Migration verifies every applied checksum, rejects unknown/gapped histories and applies outstanding versions in one transaction. The tests exercise actual v1-to-v2 upgrade and failed-migration rollback; this is not a backup/restore procedure or a rolling-upgrade compatibility guarantee.
 
-An owner/admin can issue a service credential for one task UUID and an explicit subset of `capabilities.list` and `evidence.hash`. Its issuer, audience and resource are server constants: `gabriel-identity-service-v1`, `gabriel-local-worker-v1`, and `local-inspection-v1`. `gbs1_` tokens are 32 random bytes with only SHA-256 digests stored; they cannot serve as human sessions or create other grants. Lifetime defaults to 900 seconds, bounded to 60–3600 seconds. There are at most 100 active grants per tenant. Service listing returns the latest 100 rows without raw credentials or digests.
+An owner/admin can issue a service credential for one task UUID and an explicit subset of `capabilities.list` and `evidence.hash`. Its issuer, audience and resource are server constants: `gabriel-identity-service-v1`, `gabriel-local-worker-v2`, and `local-inspection-v1`. Current `gbs2_` tokens are 32 random bytes with only SHA-256 digests stored; they cannot serve as human sessions or create other grants. Version-1 tokens were retired by schema version 4. Lifetime defaults to 900 seconds, bounded to 60–3600 seconds. There are at most 100 active grants per tenant. Service listing returns the latest 100 rows without raw credentials or digests.
+
+Schema version 4 now requires a persisted active task, caps grant expiry to that task and revokes old unbound grants. Follow [the task and migration guide](README.GABRIEL_TASKS.md). Worker execution also requires a stable request UUID for receipt-based retries.
 
 ```bash
+bash gabriel.sh identity task-create --name 'Local review' --operation evidence.hash
+# Use the returned task UUID below.
 bash gabriel.sh identity issue-service --name 'Local evidence worker' \
   --task-id YOUR_TASK_UUID --operation evidence.hash --ttl-seconds 900
 # Prompts for an owner/admin session. New service token is printed ONCE to stdout.
 # Securely hand it to the intended worker; never record it in Git or shared logs.
 bash gabriel.sh identity services
-bash gabriel.sh identity service-execute --token-file /private/worker-token --task-id YOUR_TASK_UUID
+bash gabriel.sh identity service-execute --token-file /private/worker-token \
+  --task-id YOUR_TASK_UUID --request-id YOUR_REQUEST_UUID
 # Supply the existing versioned capability request on stdin.
 bash gabriel.sh identity revoke-service --grant-id YOUR_GRANT_UUID
 ```
@@ -75,7 +80,7 @@ Service execution reads tenant/task/scope/expiry/revocation and current issuer a
 
 Issuance, revocation and successful local execution require a committed audit event. Audit failure withholds execution results or rolls back the mutation. Organization locks use the same ordering as human operations. A local computation already admitted may finish before a concurrent revocation commits; all later admissions deny. No externally mutating work is performed. No model decision can widen scope.
 
-Task UUIDs bind credentials to a supplied correlation identifier, **not to a verified job record**: durable jobs/resources do not exist yet. There is no external response, connector, browser, network endpoint, workload attestation or general-purpose service identity platform here. Rotation means issue a replacement then revoke the old grant; safe distribution and transport belong to later deployment work. Service SQL credentials remain trusted backend credentials, never credentials given to workers.
+Task UUIDs now identify server-created persisted local task records with deadlines, operation scope and step budgets. This supersedes increment 4's correlation-only binding. There is no external response, connector, browser, network endpoint, workload attestation or general-purpose service identity platform here. Token rotation means issue a replacement then revoke the old grant; request receipts remain bound to their original grant. Safe distribution and transport belong to later deployment work. Service SQL credentials remain trusted backend credentials, never credentials given to workers.
 
 ## Model-provider secrets — increment 5
 
