@@ -219,6 +219,27 @@ def test_last_owner_guard_is_concurrency_safe(tenant):
         assert conn.execute("SELECT count(*) AS n FROM gabriel_identity.memberships WHERE organization_id=%s AND role='owner' AND active", (tenant.org,)).fetchone()['n'] == 1
 
 
+def test_password_reset_and_target_request_have_consistent_lock_order(tenant):
+    secret = secrets.token_urlsafe(24)
+    member = tenant.service.create_member(tenant.token, 'concurrent-target', secret)
+    for _ in range(3):
+        token = tenant.service.login(tenant.org, 'concurrent-target', secret).token
+        replacement = secrets.token_urlsafe(24)
+        def read():
+            try:
+                return IdentityService(tenant.db.app).execute(token,
+                    {'schema_version':1,'operation':'evidence.hash','arguments':{'content':'fixture'}})
+            except AuthenticationDenied:
+                return 'revoked'
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future = executor.submit(read)
+            tenant.service.reset_password(tenant.token, member, replacement)
+            assert future.result() is not None
+        with pytest.raises(AuthenticationDenied):
+            tenant.service.whoami(token)
+        secret = replacement
+
+
 def test_audit_failure_blocks_mutation_and_successful_login(tenant):
     with owner_connection(tenant.db) as conn:
         conn.execute('REVOKE INSERT ON gabriel_identity.audit_events FROM gabriel_identity_app')

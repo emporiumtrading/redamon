@@ -165,14 +165,17 @@ class IdentityService:
             JOIN gabriel_identity.memberships m ON (m.organization_id,m.user_id)=(s.organization_id,s.user_id)
             WHERE s.token_digest=%s AND s.audience=%s AND s.revoked_at IS NULL
               AND s.expires_at > clock_timestamp() AND u.active AND m.active'''
-        row = conn.execute(query + (' FOR UPDATE OF s,u,m' if lock else ''), (_digest(token), AUDIENCE)).fetchone()
+        parameters = (_digest(token), AUDIENCE)
+        row = conn.execute(query, parameters).fetchone()
+        if row and lock:
+            # One order for login, revocation and target changes avoids session/user lock cycles.
+            conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,73582302))', (str(row['organization_id']),))
+            row = conn.execute(query + ' FOR UPDATE OF s,u,m', parameters).fetchone()
         if not row:
             raise AuthenticationDenied('invalid_session')
         return Principal(**row)
 
     def _admin(self, conn, token):
-        principal = self._principal(conn, token)
-        conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,73582302))', (str(principal.organization_id),))
         principal = self._principal(conn, token, lock=True)
         if principal.role not in {'owner', 'admin'}:
             raise AccessDenied('operation_not_permitted')
@@ -199,6 +202,7 @@ class IdentityService:
             raise AuthenticationDenied('invalid_credentials')
         grant = None
         with connection(self._dsn) as conn:
+            conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,73582302))', (str(org),))
             row = conn.execute('''SELECT u.id,u.password_hash,u.active AS user_active,m.active,m.role
                 FROM gabriel_identity.users u JOIN gabriel_identity.memberships m
                   ON (u.organization_id,u.id)=(m.organization_id,m.user_id)
