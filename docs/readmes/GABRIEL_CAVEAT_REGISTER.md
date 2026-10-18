@@ -4,7 +4,7 @@ This register distinguishes executable engineering work from product/review gate
 
 | ID | Caveat | Current resolution / next work | Acceptance evidence |
 | --- | --- | --- | --- |
-| CV-01 | Durable policy and human approval state absent | **Component gap resolved for local case closure:** increment 8 verified; complete external-action acceptance stays in CV-07 | 43 new real SQL approval cases, existing CLI/regression and restart/restore passed; old closure path requires the same approval; evidence in ledger |
+| CV-01 | Durable policy and human approval state absent | **Component gap resolved for local case closure:** increment 8 verified; complete external-action acceptance stays in CV-07 | 46 new real SQL approval/compatibility cases, existing CLI/regression and restart/restore passed; service gate and database trigger deny old closure paths; evidence in ledger |
 | CV-02 | Independent trust-boundary review incomplete | Keep PRs draft; independent reviewer acceptance pending | Review findings resolved against exact source; no AI confidence score substitutes for sign-off |
 | CV-03 | Operational/product UAT incomplete | Component VM regression/recovery runs exist; integrated staging and human UAT remain NOT_RUN | Full critical-path staging UAT/regression, artifact approval, then post-release UAT/regression and observation |
 | CV-04 | Custody lacks external anchoring | Application append-only grants, hash checks and approval-bound prefixes exist; independently controlled anchor storage/signing still needed | Demonstrate privileged rewriting/valid-tail deletion detected against a trusted externally retained checkpoint; key/store authority separation |
