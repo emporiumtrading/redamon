@@ -13,7 +13,7 @@ from gabriel.identity.evidence_store import EvidenceError
 from gabriel.identity.machine import ServiceIdentityService
 from gabriel.identity.service import (AccessDenied,AuthenticationDenied,IdentityUnavailable,
     InvalidIdentityInput,migrate,provision_organization)
-from testing.gabriel_identity.db_history import remove_v6
+from testing.gabriel_identity.db_history import remove_v6,remove_v7
 from testing.gabriel_identity.test_cases_integration import cases,case,evidence,intake,audit_permission
 from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
 
@@ -54,6 +54,54 @@ def test_policy_is_required_and_only_real_local_operation_is_proposed(tenant,act
     assert 'requester_session' not in row and tenant.token not in repr(row)
     with pytest.raises(AccessDenied):
         actions.approve(tenant.token,row['id'],row['digest'])
+
+
+def test_database_denies_old_closure_sql_even_with_an_approved_request(tenant,actions,case,approved):
+    with psycopg.connect(tenant.db.app) as conn:
+        conn.execute("UPDATE gabriel_identity.action_requests SET state='dispatching' WHERE organization_id=%s AND id=%s",(tenant.org,approved.request['id']))
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute("UPDATE gabriel_identity.cases SET state='closed',closed_at=clock_timestamp() WHERE organization_id=%s AND id=%s",(tenant.org,case['id']))
+        conn.rollback()
+        conn.execute("SELECT set_config('gabriel.action_request',%s,true)",(str(approved.request['id']),))
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute("UPDATE gabriel_identity.cases SET state='closed',closed_at=clock_timestamp() WHERE organization_id=%s AND id=%s",(tenant.org,case['id']))
+        conn.rollback()
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            conn.execute('DROP TRIGGER require_case_close_approval ON gabriel_identity.cases')
+        conn.rollback()
+    assert actions.execute(tenant.token,approved.request['id'])['state']=='closed'
+
+
+def test_v6_upgrade_preserves_approval_and_adds_old_runtime_guard(tenant,actions,case,approved):
+    with owner_connection(tenant.db) as conn:
+        remove_v7(conn)
+    migrate(tenant.db.owner)
+    assert actions.get_action(tenant.token,approved.request['id'])['state']=='approved'
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute("UPDATE gabriel_identity.cases SET state='closed',closed_at=clock_timestamp() WHERE organization_id=%s AND id=%s",(tenant.org,case['id']))
+        conn.rollback()
+    assert actions.execute(tenant.token,approved.request['id'])['state']=='closed'
+
+
+def test_interrupted_v7_upgrade_rolls_back_guard_without_losing_approval(tenant,actions,approved,monkeypatch):
+    original = Path.read_text
+    with owner_connection(tenant.db) as conn:
+        remove_v7(conn)
+    def interrupted(path,*args,**kwargs):
+        value = original(path,*args,**kwargs)
+        return value+'\nSELECT 1/0;' if path.name=='schema_v7.sql' else value
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(Path,'read_text',interrupted)
+            with pytest.raises(IdentityUnavailable):
+                migrate(tenant.db.owner)
+        with owner_connection(tenant.db) as conn:
+            assert conn.execute("SELECT count(*) AS n FROM pg_trigger WHERE tgname='require_case_close_approval' AND tgrelid='gabriel_identity.cases'::regclass").fetchone()['n']==0
+            assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.migrations').fetchone()['n']==6
+        assert actions.get_action(tenant.token,approved.request['id'])['state']=='approved'
+    finally:
+        migrate(tenant.db.owner)
 
 
 def test_approval_closes_exact_case_and_records_atomic_receipt(tenant,actions,case,evidence,approved):

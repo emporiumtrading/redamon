@@ -2,6 +2,8 @@
 
 ## Approval increment 8 — exact local consent and transactional closure
 
+Compatibility hardening in progress: migration 7 adds a database trigger to reject older runtime closure SQL, while preserving migration 6's published checksum. New regressions cover old SQL, trigger-removal denial, v6 upgrade and interrupted v7 rollback. The 316-case result below applies to the preceding source; compatibility-guard verification is pending and is not inferred from that pass.
+
 Baseline: `1b2d62d503b00f9d3e93c776a842b2d9d5148820`. Links: GAB-003/GAB-005/GAB-006/GAB-037/GAB-038, C04 and component evidence supporting T07/T08/T09/T11/T12/T27. Engineering owner: Codex; independent reviewer acceptance pending. Component VM checks **PASS**; lifecycle/release gate state **BLOCKED** pending independent/integrated acceptance. Earlier full conversion/C03/C04 gates remain open.
 
 Migration 6 adds immutable local-action policies, canonical requests, exact-digest approvals, append-only decisions and execution receipts. The only admitted effect is real local case closure, whose old direct path now requires approval. Default distinct approval, live human sessions/roles, expiry, exact evidence/resource/policy binding, rejection/cancellation and transactional effect/receipt/audit admission govern execution. No external response or login capability is added. See [operator details](README.GABRIEL_APPROVALS.md) and [tracked caveats](GABRIEL_CAVEAT_REGISTER.md).

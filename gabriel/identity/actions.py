@@ -269,6 +269,8 @@ class ActionService(CaseService):
         self._approval_current(conn,p,row,approval,policy,dispatch_time)
         conn.execute("UPDATE gabriel_identity.action_requests SET state='dispatching' WHERE organization_id=%s AND id=%s",(p.organization_id,row['id']))
         _audit(conn,'action.dispatching',p,row['id'])
+        # Transaction-local context makes older closure SQL fail at the database boundary.
+        conn.execute("SELECT set_config('gabriel.action_request',%s,true)",(str(row['id']),))
         conn.execute("UPDATE gabriel_identity.cases SET state='closed',closed_at=clock_timestamp() WHERE organization_id=%s AND id=%s",(p.organization_id,case['id']))
         _audit(conn,'case.closed',p,case['id'])
         result = {'case_id':str(case['id']),'state':'closed','request_id':str(row['id']),'digest':row['digest']}

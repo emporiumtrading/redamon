@@ -23,8 +23,15 @@ def remove_v5(conn):
 
 
 def remove_v6(conn):
+    remove_v7(conn)
     if conn.execute("SELECT to_regclass('gabriel_identity.action_requests') AS t").fetchone()['t'] is not None:
         conn.execute('''DROP TABLE gabriel_identity.action_executions,gabriel_identity.action_decisions,
             gabriel_identity.action_approvals,gabriel_identity.action_requests,
             gabriel_identity.action_policy_state,gabriel_identity.action_policies''')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=6')
+
+
+def remove_v7(conn):
+    conn.execute('DROP TRIGGER IF EXISTS require_case_close_approval ON gabriel_identity.cases')
+    conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_case_close_approval()')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=7')
