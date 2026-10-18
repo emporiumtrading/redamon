@@ -8,9 +8,12 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
     exit 2
 fi
 
-report_dir="${1:-$(mktemp -d)}"
-mkdir -p "$report_dir"
-report_dir="$(cd "$report_dir" && pwd)"
+report_root="${1:-$(mktemp -d)}"
+mkdir -p "$report_root"
+report_root="$(cd "$report_root" && pwd)"
+# Never mix a prior green report with a new build or execution attempt.
+report_dir="$(mktemp -d "$report_root/run.XXXXXX")"
+printf 'Evidence directory: %s\n' "$report_dir"
 image="gabriel-foundation-tests:$(git rev-parse --short=12 HEAD)"
 git rev-parse HEAD > "$report_dir/source-sha.txt"
 docker build -f testing/gabriel_foundation/Dockerfile -t "$image" .

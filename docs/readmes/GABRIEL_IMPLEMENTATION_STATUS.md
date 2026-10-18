@@ -38,6 +38,8 @@ The foundation image validates only test infrastructure. It is not a replacement
 
 ### Remaining dependencies
 
+The first hosted push/PR jobs failed during checkout, before tests ran: the inherited `redamon.wiki` gitlink had no `.gitmodules` URL. The fix declares the upstream wiki URL already referenced by the repository documentation; CI still leaves submodule fetching disabled. A fresh evidence subdirectory per attempt also prevents an old result from being reused after a failed build. These failures remain failed runs, not test passes.
+
 Record the hosted workflow outcome before accepting Python behavior. Then complete C00's inherited-capability disposition inventory and real full-stack test baseline, close C01's pilot/browser decisions, and implement C02's separate defensive runtime. C03/C04 and the browser product are not implemented by this increment. No staging UAT, production shipment or post-shipment UAT/regression is claimed.
 
 Release readiness remains **BLOCKED**. This engineering increment must not be described as a usable or deployed Gabriel defender.
