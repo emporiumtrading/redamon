@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+from uuid import uuid4
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -121,3 +122,64 @@ class LocalEvidenceStore:
                 os.close(root)
         except (OSError,ValueError,TypeError,IdentityError):
             raise EvidenceError('evidence_object_write_failed') from None
+
+    def identity(self,*,enroll=False):
+        try:
+            root = self._open_root()
+            try:
+                if enroll:
+                    try:
+                        fd = os.open('store-id',os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,0o444,dir_fd=root)
+                    except FileExistsError:
+                        pass
+                    else:
+                        with os.fdopen(fd,'wb') as stream:
+                            stream.write(str(uuid4()).encode('ascii'))
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                        os.fsync(root)
+                fd = os.open('store-id',os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,dir_fd=root)
+                with os.fdopen(fd,'rb') as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise ValueError
+                    value = stream.read(38).decode('ascii')
+                return str(identifier(value))
+            finally:
+                os.close(root)
+        except (OSError,ValueError,UnicodeError,IdentityError):
+            raise EvidenceError('evidence_store_identity_unavailable') from None
+
+    def absent(self,row,*,sync=False):
+        try:
+            root = self._open_root()
+            try:
+                try:
+                    os.stat(self._name(row['object_id']),dir_fd=root,follow_symlinks=False)
+                except FileNotFoundError:
+                    if sync:
+                        os.fsync(root)
+                    return True
+                return False
+            finally:
+                os.close(root)
+        except OSError:
+            raise EvidenceError('evidence_store_inspection_failed') from None
+
+    def remove(self,row,aad,*,admit=None):
+        # Only absence is idempotent; a present corrupt/symlink object is never removed.
+        if self.absent(row):
+            return 'absence_confirmed'
+        self.read(row,aad)
+        if not callable(admit):
+            raise EvidenceError('evidence_removal_admission_required')
+        admit()
+        try:
+            root = self._open_root()
+            try:
+                os.unlink(self._name(row['object_id']),dir_fd=root)
+                os.fsync(root)
+            finally:
+                os.close(root)
+        except OSError:
+            raise EvidenceError('evidence_object_removal_unconfirmed') from None
+        return 'removed'

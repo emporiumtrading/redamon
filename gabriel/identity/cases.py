@@ -45,6 +45,7 @@ def metadata(row):
     result = {k:v for k,v in row.items() if k not in {'object_id','intake_digest','acquisition_hash'}}
     result['source_verified'] = False
     result['normalization_status'] = 'unverified_user_supplied'
+    result['storage_state'] = 'active'
     return result
 
 
@@ -106,7 +107,17 @@ class CaseService(IdentityService):
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s)''',
             (principal.organization_id,row['id'],sequence,principal.user_id,event,previous,event_hash,created))
 
-    def _verify(self,conn,row,*,ready=True):
+    def _disposition(self,conn,row):
+        # Historical migration tests and older readable snapshots may predate disposition tables.
+        if conn.execute("SELECT to_regclass('gabriel_identity.purge_attempts') AS t").fetchone()['t'] is None:
+            return None
+        return conn.execute("SELECT * FROM gabriel_identity.purge_attempts WHERE organization_id=%s AND evidence_id=%s AND state IN ('prepared','completed')",
+            (row['organization_id'],row['id'])).fetchone()
+
+    def _verify(self,conn,row,*,ready=True,allow_disposition=False):
+        disposition = self._disposition(conn,row)
+        if disposition and not allow_disposition:
+            raise EvidenceError('evidence_purged' if disposition['state']=='completed' else 'evidence_disposition_pending')
         chain = self._chain(conn,row)
         if ready and row['state']!='ready':
             raise EvidenceError('evidence_not_ready')
@@ -148,7 +159,14 @@ class CaseService(IdentityService):
                 (principal.organization_id,case['id'])).fetchall()
             tasks = conn.execute('SELECT task_id FROM gabriel_identity.case_tasks WHERE organization_id=%s AND case_id=%s ORDER BY task_id',
                 (principal.organization_id,case['id'])).fetchall()
-            return {'case':case,'evidence':[metadata(row) for row in rows],'task_ids':[row['task_id'] for row in tasks]}
+            entries = []
+            for row in rows:
+                item = metadata(row)
+                disposition = self._disposition(conn,row)
+                if disposition:
+                    item['storage_state'] = 'purged' if disposition['state']=='completed' else 'disposition_pending'
+                entries.append(item)
+            return {'case':case,'evidence':entries,'task_ids':[row['task_id'] for row in tasks]}
 
     def link_task(self,token,case_id,task_id):
         with connection(self._dsn) as conn:
@@ -186,6 +204,8 @@ class CaseService(IdentityService):
                 WHERE organization_id=%s AND case_id=%s AND ingestion_id=%s FOR UPDATE''',
                 (principal.organization_id,case['id'],ingestion_id)).fetchone()
             if row:
+                if self._disposition(conn,row):
+                    raise AccessDenied('evidence_content_unavailable')
                 if row['intake_digest']!=intake_digest:
                     raise AccessDenied('evidence_intake_conflict')
             else:
