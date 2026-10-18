@@ -1,0 +1,79 @@
+x-identity: &identity
+  image: gabriel-identity:dev
+  build:
+    context: .
+    dockerfile: gabriel/identity/Dockerfile
+    target: production
+  user: '10001:10001'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 512m
+  cpus: 1
+  networks: [identity]
+  tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=64m]
+
+services:
+  identity-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gabriel
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+      - source: role_init
+        target: /docker-entrypoint-initdb.d/01-gabriel-role.sql
+    volumes:
+      - identity_data:/var/lib/postgresql/data
+    networks: [identity]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d gabriel']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  identity:
+    <<: *identity
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+    secrets: [app_dsn]
+    stdin_open: true
+    tty: true
+  identity-admin:
+    <<: *identity
+    profiles: [operator]
+    environment:
+      GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
+    secrets: [owner_dsn]
+    stdin_open: true
+    tty: true
+  identity-tests:
+    <<: *identity
+    profiles: [test]
+    image: gabriel-identity-tests:dev
+    build:
+      context: .
+      dockerfile: gabriel/identity/Dockerfile
+      target: test
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
+    secrets: [app_dsn, owner_dsn]
+
+networks:
+  identity:
+    internal: true
+volumes:
+  identity_data:
+secrets:
+  db_password:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/db_password
+  app_dsn:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/app_dsn
+  owner_dsn:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/owner_dsn
+  role_init:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/role_init.sql
