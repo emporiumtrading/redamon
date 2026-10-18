@@ -4,7 +4,7 @@
 
 Date: 18 October 2026 UTC. Source baseline: `017fe462bb2557e8cf7ffe9e6b238cb803e915ab`.
 PRD links: GAB-040, T34, P-T05. Related evidence: T31/P-T06 final-result reporting.
-Status: **IMPLEMENTED_UNVERIFIED for Python runtime behavior; local shell contracts verified.**
+Status: **Foundation test infrastructure verified in isolated CI; full-stack and product acceptance remain NOT_RUN.**
 
 ### Delivered code
 
@@ -40,6 +40,10 @@ The foundation image validates only test infrastructure. It is not a replacement
 
 The first hosted push/PR jobs failed during checkout, before tests ran: the inherited `redamon.wiki` gitlink had no `.gitmodules` URL. The fix declares the upstream wiki URL already referenced by the repository documentation; CI still leaves submodule fetching disabled. A fresh evidence subdirectory per attempt also prevents an old result from being reused after a failed build. These failures remain failed runs, not test passes.
 
-Record the hosted workflow outcome before accepting Python behavior. Then complete C00's inherited-capability disposition inventory and real full-stack test baseline, close C01's pilot/browser decisions, and implement C02's separate defensive runtime. C03/C04 and the browser product are not implemented by this increment. No staging UAT, production shipment or post-shipment UAT/regression is claimed.
+The repaired source commit `6e3b8737ea17fd8759dbe9dc7659f24f8f4b2422` passed both [push VM verification](https://github.com/emporiumtrading/redamon/actions/runs/39098433202) and [pull-request VM verification](https://github.com/emporiumtrading/redamon/actions/runs/39098437130). The PR job ran on Ubuntu 24.04, built the dedicated foundation image and ran it with no network, a read-only root, dropped capabilities and no new privileges. Its result was **21 cases collected, 21 passed, zero failures/errors/skips**, across the new regression module and the existing tier-selection module. The VM also passed eight new shell scenarios and the existing missing-input suite (26 reported assertions with Docker available).
+
+The PR job's built image ID was `sha256:c4c856d53a8f12381194271d319215d157169cccddb03ffabb6715148435c853`. Its [retained evidence artifact](https://github.com/emporiumtrading/redamon/actions/runs/39098437130/artifacts/12126055200) includes JSON counts, checkout source SHA and image ID. The foundation tests use clearly labeled disposable test projects; they do not simulate a functioning Gabriel service or attack detection.
+
+Next complete C00's inherited-capability disposition inventory and real full-stack test baseline, close C01's pilot/browser decisions, and implement C02's separate defensive runtime. C03/C04 and the browser product are not implemented by this increment. No staging UAT, production shipment or post-shipment UAT/regression is claimed.
 
 Release readiness remains **BLOCKED**. This engineering increment must not be described as a usable or deployed Gabriel defender.

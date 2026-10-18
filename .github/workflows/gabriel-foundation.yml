@@ -2,12 +2,28 @@ name: Gabriel foundation contracts
 on:
   push:
     branches: ['feature/gabriel-foundation-gates']
-  pull_request:
     paths:
+      - '.gitmodules'
+      - 'conftest.py'
+      - 'pytest.ini'
       - 'tooling/scripts/pytest_isolated.py'
       - 'tooling/scripts/gabriel_foundation_check.sh'
       - 'testing/gabriel_foundation/**'
       - 'tests/gabriel_strict_gate_test.sh'
+      - 'tests/redamon_gate_unskippable_test.sh'
+      - 'tests/test_pytest_isolated_tiers.py'
+      - 'redamon.sh'
+      - '.github/workflows/gabriel-foundation.yml'
+  pull_request:
+    paths:
+      - '.gitmodules'
+      - 'conftest.py'
+      - 'pytest.ini'
+      - 'tooling/scripts/pytest_isolated.py'
+      - 'tooling/scripts/gabriel_foundation_check.sh'
+      - 'testing/gabriel_foundation/**'
+      - 'tests/gabriel_strict_gate_test.sh'
+      - 'tests/redamon_gate_unskippable_test.sh'
       - 'tests/test_pytest_isolated_tiers.py'
       - 'redamon.sh'
       - '.github/workflows/gabriel-foundation.yml'
