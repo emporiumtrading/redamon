@@ -64,8 +64,14 @@ The shipped runtime image tested in the PR job was `sha256:29fadd5dde24f84dc896a
 
 ## Identity increment 3 — database users, memberships and revocable sessions
 
-Source baseline: `e3236a29f865ca78b3df92ff19b0eb72302d6384`. PRD links: GAB-003/GAB-004/GAB-005 and P-T01. Status: **IMPLEMENTED_UNVERIFIED pending real PostgreSQL/image checks**.
+Source baseline: `e3236a29f865ca78b3df92ff19b0eb72302d6384`. PRD links: GAB-003/GAB-004/GAB-005 and P-T01. Status: **Identity component verified against real PostgreSQL in isolated CI; full C03 and product release acceptance remain open.**
 
 The new identity service and operator CLI persist tenant accounts, Argon2id password hashes, memberships, opaque-session digests, login budgets and audit records in PostgreSQL. Separate migration/runtime credentials, fixed token audience, live membership checks, exact tenant predicates, composite keys, revocation and transactional audit admission enforce the current service boundary. There is no listening authentication endpoint or browser integration in this increment.
 
 The matching-image workflow uses a disposable real PostgreSQL server, tests cross-tenant and privilege-denial paths, audit-write failure, concurrent last-owner changes, rehash/reset/revocation, CLI state and a database restart checkpoint. Existing runtime/foundation regressions remain required. Local VM/Docker execution remains unavailable; host pytest is not substituted. See [identity setup, controls and remaining boundaries](README.GABRIEL_IDENTITY.md).
+
+Verified source `15edcdd96f5192d58a284b1611d84e88e054c5ee` passed [PR VM verification](https://github.com/emporiumtrading/redamon/actions/runs/39125969289) and [push VM verification](https://github.com/emporiumtrading/redamon/actions/runs/39125966344). The workflow executed **40 identity unit/integration cases, 49 runtime/inventory cases and 21 foundation cases**, all passing with zero failures/errors/skips. It also passed the real PostgreSQL restart/account/session checkpoint and post-restart revocation check, rendered secret/network separation, and the 80 legacy-name denials. Credential checkpoint files were excluded from the retained evidence; the disposable database project/volume was removed after verification.
+
+The first VM attempt failed before tests because a comma-containing tmpfs value was parsed as multiple mounts. The corrected composition uses a block list and TCP readiness for the final PostgreSQL listener. Lock-order review also led to one organization lock before session/user row locks, with a regression test for password reset concurrent with a target request. Earlier failed runs remain failures in history.
+
+This is not a production deployment or human UAT. Full inherited-stack verification/conversion review, service identity, MFA/SSO, browser pairing, network API/stream/job/graph/export authorization, provider-secret encryption/rotation, disaster restore and durable case/action state remain outstanding. The PostgreSQL skill review informed least-privilege grants, composite key/index coverage and lock ordering; it does not certify security.
