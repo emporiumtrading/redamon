@@ -1,0 +1,45 @@
+name: Gabriel foundation contracts
+on:
+  push:
+    branches: ['feature/gabriel-foundation-gates']
+  pull_request:
+    paths:
+      - 'tooling/scripts/pytest_isolated.py'
+      - 'tooling/scripts/gabriel_foundation_check.sh'
+      - 'testing/gabriel_foundation/**'
+      - 'tests/gabriel_strict_gate_test.sh'
+      - 'tests/test_pytest_isolated_tiers.py'
+      - 'redamon.sh'
+      - '.github/workflows/gabriel-foundation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gabriel-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Shell syntax and gate contracts
+        run: |
+          bash -n redamon.sh tooling/scripts/gabriel_foundation_check.sh tests/gabriel_strict_gate_test.sh
+          bash tests/gabriel_strict_gate_test.sh
+          bash tests/redamon_gate_unskippable_test.sh
+      - name: Real isolated-runner regressions inside the foundation image
+        run: bash tooling/scripts/gabriel_foundation_check.sh "$RUNNER_TEMP/gabriel-evidence"
+      - name: Retain foundation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-foundation-evidence
+          path: ${{ runner.temp }}/gabriel-evidence
+          if-no-files-found: warn
+          retention-days: 14

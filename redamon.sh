@@ -4618,6 +4618,11 @@ _test_section_may_skip() {
 
 _test_missing_input() {
     local name="$1" what="$2" fix="$3" tier="$4"
+    if [[ "${REDAMON_TEST_STRICT:-0}" == "1" ]]; then
+        error "BLOCKED section '$name': $what (strict gate; no missing-input opt-out)"
+        error "  Fix: $fix"
+        return 1
+    fi
     if [[ "$tier" != "unit" && "$tier" != "all" && "$tier" != "coverage" ]]; then
         warn "SKIP section '$name' ($what)"
         return 0
@@ -4662,6 +4667,7 @@ _test_run_section() {
         -e COVERAGE_FILE=/tmp/redamon.coverage \
         -e HOME=/tmp \
         -e REDAMON_TEST_PARALLEL="${REDAMON_TEST_PARALLEL:-8}" \
+        -e REDAMON_TEST_STRICT="${REDAMON_TEST_STRICT:-0}" \
         `# recon_orchestrator/api.py resolves host paths at import; satisfy the` \
         `# *_PATH lookups so its tests import outside docker-compose (harmless elsewhere).` \
         -e RECON_PATH=/repo/recon \
@@ -4691,12 +4697,6 @@ cmd_test() {
             error "section '$name' had failures"
         fi
     done
-    echo
-    if [[ $failed -eq 0 ]]; then
-        success "ALL TEST SECTIONS GREEN (tier: $tier)"
-    else
-        error "TEST FAILURES ABOVE (tier: $tier)"
-    fi
     # Shell (bash) — the redamon.sh/deploy logic the Python sections cannot reach.
     # Same tiers as webapp: these suites are hermetic, so they belong in the gate.
     if [[ "$tier" == "all" || "$tier" == "coverage" || "$tier" == "unit" ]]; then
@@ -4705,6 +4705,12 @@ cmd_test() {
     # Webapp (vitest) — only for the broader tiers; needs node_modules.
     if [[ "$tier" == "all" || "$tier" == "coverage" || "$tier" == "unit" ]]; then
         _test_run_webapp "$tier" || failed=1
+    fi
+    echo
+    if [[ $failed -eq 0 ]]; then
+        success "ALL TEST SECTIONS GREEN (tier: $tier)"
+    else
+        error "TEST FAILURES ABOVE (tier: $tier)"
     fi
     return $failed
 }
