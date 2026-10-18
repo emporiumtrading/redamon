@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Approval increment 8 — component verification pending
+
+Baseline: `1b2d62d503b00f9d3e93c776a842b2d9d5148820`. Links: GAB-003/GAB-005/GAB-006/GAB-037/GAB-038, C04, T07/T08/T09/T11/T12/T27. Engineering owner: Codex; independent reviewer acceptance pending. Component state **IMPLEMENTED_UNVERIFIED**; product release state **BLOCKED**. Earlier full conversion/C03/C04 gates remain open.
+
+Migration 6 adds immutable local-action policies, canonical requests, exact-digest approvals, append-only decisions and execution receipts. The only admitted effect is real local case closure, whose old direct path now requires approval. Default distinct approval, live human sessions/roles, expiry, exact evidence/resource/policy binding, rejection/cancellation and transactional effect/receipt/audit admission govern execution. No external response or login capability is added. See [operator details](README.GABRIEL_APPROVALS.md) and [tracked caveats](GABRIEL_CAVEAT_REGISTER.md).
+
+Hypothesis: no unauthorized, stale, altered or cancelled approval closes a case; concurrency admits one atomic local effect, and failed receipt persistence rolls it back. Matching-image real PostgreSQL tests and actual restart/restore will verify this with previous regressions. Local AST/shell/diff checks passed; Docker remains unavailable locally, with no host-pytest fallback. Hosted source/counts/evidence are pending. Repair attempts: zero before first hosted run. Rollback disables entry points while retaining schema/data/keys; see the operator guide. Security review, operational UAT, external anchors, retention/holds/purge, key rewrap, browser/source authenticity, external effects and specialist/hunting evaluations remain open; they are not waived.
+
 ## Case/evidence increment 7 — encrypted artifacts and custody
 
 Source baseline: `4155303f6f6a4739d343f29a72516f3850bf6b52`. PRD links: GAB-003/GAB-005/GAB-006/GAB-007/GAB-008/GAB-022, C04 and supporting T11/T12 evidence. Status: **Case/approved-text evidence component verified in isolated hosted CI; full C04 and product acceptance remain open.**

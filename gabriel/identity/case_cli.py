@@ -10,6 +10,7 @@ import stat
 from gabriel.identity.cli import read_secret
 from gabriel.identity.service import IdentityError,InvalidIdentityInput
 from gabriel.identity.cases import CaseService
+from gabriel.identity.actions import ActionService
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore,MAX_BYTES
 
 
@@ -82,7 +83,8 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('create','list','get','link-task','acquire','custody','verify','close','export','exports'))
+    parser.add_argument('command',choices=('create','list','get','link-task','acquire','custody','verify','close','export','exports',
+        'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute'))
     parser.add_argument('--token-file')
     parser.add_argument('--title')
     parser.add_argument('--case-id')
@@ -96,13 +98,39 @@ def main():
     parser.add_argument('--parent-id')
     parser.add_argument('--approved-content',action='store_true')
     parser.add_argument('--output')
+    parser.add_argument('--approval-id')
+    parser.add_argument('--request-id')
+    parser.add_argument('--rationale')
+    parser.add_argument('--expected-digest')
+    parser.add_argument('--ttl',type=int,default=900)
+    parser.add_argument('--approval-ttl',type=int,default=300)
+    parser.add_argument('--distinct-approver',choices=('yes','no'),default='yes')
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
         store = LocalEvidenceStore(os.environ.get('GABRIEL_EVIDENCE_ROOT'),keys)
-        service = CaseService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
+        service = ActionService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
         token = read_secret(args.token_file,128) if args.token_file else getpass.getpass('Gabriel session: ')
-        if args.command=='create':
+        if args.command=='policy-set':
+            result = service.set_policy(token,distinct_approver=args.distinct_approver=='yes',approval_ttl=args.approval_ttl)
+        elif args.command=='policy-get':
+            result = service.get_policy(token)
+        elif args.command=='propose-close':
+            result = service.propose_close(token,args.case_id,args.request_id,args.rationale,ttl=args.ttl)
+        elif args.command=='action-get':
+            result = service.get_action(token,args.approval_id)
+        elif args.command=='action-submit':
+            service.submit(token,args.approval_id)
+            result = {'submitted':True}
+        elif args.command=='action-approve':
+            service.approve(token,args.approval_id,args.expected_digest)
+            result = {'approved':True}
+        elif args.command in {'action-reject','action-cancel'}:
+            service.end(token,args.approval_id,'rejected' if args.command=='action-reject' else 'cancelled')
+            result = {'ended':True}
+        elif args.command=='action-execute':
+            result = service.execute(token,args.approval_id)
+        elif args.command=='create':
             result = service.create_case(token,args.title)
         elif args.command=='list':
             result = service.list_cases(token)
@@ -122,8 +150,7 @@ def main():
         elif args.command=='verify':
             result = service.verify_case(token,args.case_id)
         elif args.command=='close':
-            service.close_case(token,args.case_id)
-            result = {'closed':True}
+            result = service.close_case(token,args.case_id,approval_id=args.approval_id)
         elif args.command=='exports':
             result = service.list_exports(token)
         else:
