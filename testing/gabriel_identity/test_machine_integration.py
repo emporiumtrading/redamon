@@ -210,8 +210,9 @@ def test_cli_issue_execute_list_and_revoke(tenant, tmp_path):
 def test_upgrade_from_v1_preserves_account_and_session(tenant):
     # The disposable DB is sequential/per-file. Recreate the actual pre-v2 state.
     with owner_connection(tenant.db) as conn:
-        conn.execute('DROP TABLE gabriel_identity.service_grants')
-        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=2')
+        conn.execute('''DROP TABLE gabriel_identity.provider_secrets,gabriel_identity.provider_key_state,
+            gabriel_identity.provider_key_registry,gabriel_identity.service_grants''')
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version>=2')
     migrate(tenant.db.owner)
     migrate(tenant.db.owner)
     assert tenant.service.whoami(tenant.token).user_id == tenant.owner
@@ -245,8 +246,9 @@ def test_failed_upgrade_rolls_back_schema_and_version_without_losing_session(ten
     from pathlib import Path
     original = Path.read_text
     with owner_connection(tenant.db) as conn:
-        conn.execute('DROP TABLE gabriel_identity.service_grants')
-        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=2')
+        conn.execute('''DROP TABLE gabriel_identity.provider_secrets,gabriel_identity.provider_key_state,
+            gabriel_identity.provider_key_registry,gabriel_identity.service_grants''')
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version>=2')
     def damaged(path, *args, **kwargs):
         text = original(path, *args, **kwargs)
         # A runtime error occurs after valid DDL, exercising rollback of partial work.

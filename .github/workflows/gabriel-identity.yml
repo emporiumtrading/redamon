@@ -1,12 +1,13 @@
 name: Gabriel database identity
 on:
   push:
-    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity']
+    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity', 'feature/gabriel-provider-secrets']
     paths:
       - 'gabriel/capabilities.py'
       - 'gabriel/identity/**'
       - 'testing/gabriel_identity/**'
       - 'tooling/scripts/gabriel_identity_*.py'
+      - 'tooling/scripts/gabriel_provider_keys.py'
       - 'tooling/scripts/gabriel_identity_check.sh'
       - 'compose.gabriel-identity.yml'
       - 'gabriel.sh'
@@ -17,6 +18,7 @@ on:
       - 'gabriel/identity/**'
       - 'testing/gabriel_identity/**'
       - 'tooling/scripts/gabriel_identity_*.py'
+      - 'tooling/scripts/gabriel_provider_keys.py'
       - 'tooling/scripts/gabriel_identity_check.sh'
       - 'compose.gabriel-identity.yml'
       - 'gabriel.sh'

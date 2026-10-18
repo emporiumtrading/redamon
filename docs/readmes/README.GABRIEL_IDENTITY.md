@@ -77,4 +77,8 @@ Issuance, revocation and successful local execution require a committed audit ev
 
 Task UUIDs bind credentials to a supplied correlation identifier, **not to a verified job record**: durable jobs/resources do not exist yet. There is no external response, connector, browser, network endpoint, workload attestation or general-purpose service identity platform here. Rotation means issue a replacement then revoke the old grant; safe distribution and transport belong to later deployment work. Service SQL credentials remain trusted backend credentials, never credentials given to workers.
 
+## Model-provider secrets — increment 5
+
+The optional vault profile adds separately mounted encryption keys, authenticated ciphertext, tenant-scoped resolution, transactional key rotation and a component backup/restore rehearsal. Follow [the vault operator and recovery guide](README.GABRIEL_PROVIDER_VAULT.md). Schema version 3 is required; no existing plaintext legacy settings are imported automatically. Earlier descriptions of missing provider encryption describe the previous increment; the new vault still has no deployed model route or external login capability.
+
 Dependency/API references verified for this increment: [Psycopg 3.3.6](https://pypi.org/project/psycopg/3.3.6/), [argon2-cffi 25.1.0](https://pypi.org/project/argon2-cffi/25.1.0/), and [password verification/rehashing](https://argon2-cffi.readthedocs.io/en/stable/howto.html). The PostgreSQL review applied least privilege, composite key/index coverage, consistent lock ordering and short bounded transactions from the Postgres best-practices skill. Dependency choice alone is not security certification.

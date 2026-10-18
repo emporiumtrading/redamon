@@ -88,7 +88,7 @@ def main():
             owner_dsn = read_secret(os.environ.get('GABRIEL_MIGRATION_DSN_FILE'))
             if args.command == 'migrate':
                 migrate(owner_dsn)
-                result = {'migration': 2}
+                result = {'migration': 3}
             else:
                 org, user = provision_organization(owner_dsn, args.organization_name,
                     args.username, _password(args, confirm=True))
