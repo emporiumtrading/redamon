@@ -231,15 +231,7 @@ class ActionService(CaseService):
         row = self.get_action(token,request_id)
         return self.close_case(token,row['case_id'],approval_id=row['id'])
 
-    def _execute_close(self,conn,p,case,request_id,token):
-        if p.role not in {'owner','admin'}:
-            raise AccessDenied('operation_not_permitted')
-        row = self._request(conn,p,request_id)
-        policy,now = self._context(conn,p,row)
-        if row['case_id']!=case['id'] or row['state'] not in {'approved','succeeded'}:
-            raise AccessDenied('action_not_executable')
-        approval = conn.execute('SELECT * FROM gabriel_identity.action_approvals WHERE organization_id=%s AND request_id=%s',
-            (p.organization_id,row['id'])).fetchone()
+    def _approval_current(self,conn,p,row,approval,policy,now):
         if not approval or approval['digest']!=row['digest'] or approval['expires_at']<=now:
             raise AccessDenied('action_approval_expired_or_invalid')
         actor = conn.execute('''SELECT m.role FROM gabriel_identity.sessions s
@@ -251,6 +243,17 @@ class ActionService(CaseService):
         if (not actor or actor['role'] not in {'owner','admin'}
                 or policy['distinct_approver'] and approval['approved_by']==row['requested_by']):
             raise AccessDenied('action_approver_revoked')
+
+    def _execute_close(self,conn,p,case,request_id,token):
+        if p.role not in {'owner','admin'}:
+            raise AccessDenied('operation_not_permitted')
+        row = self._request(conn,p,request_id)
+        policy,now = self._context(conn,p,row)
+        if row['case_id']!=case['id'] or row['state'] not in {'approved','succeeded'}:
+            raise AccessDenied('action_not_executable')
+        approval = conn.execute('SELECT * FROM gabriel_identity.action_approvals WHERE organization_id=%s AND request_id=%s',
+            (p.organization_id,row['id'])).fetchone()
+        self._approval_current(conn,p,row,approval,policy,now)
         if row['state']=='succeeded':
             receipt = conn.execute('SELECT * FROM gabriel_identity.action_executions WHERE organization_id=%s AND request_id=%s',
                 (p.organization_id,row['id'])).fetchone()
@@ -262,9 +265,8 @@ class ActionService(CaseService):
             return receipt['result']
         self._unchanged(conn,p,row,case)
         self._principal(conn,token,lock=True)
-        _,dispatch_time = self._context(conn,p,row)
-        if approval['expires_at']<=dispatch_time:
-            raise AccessDenied('action_approval_expired_or_invalid')
+        policy,dispatch_time = self._context(conn,p,row)
+        self._approval_current(conn,p,row,approval,policy,dispatch_time)
         conn.execute("UPDATE gabriel_identity.action_requests SET state='dispatching' WHERE organization_id=%s AND id=%s",(p.organization_id,row['id']))
         _audit(conn,'action.dispatching',p,row['id'])
         conn.execute("UPDATE gabriel_identity.cases SET state='closed',closed_at=clock_timestamp() WHERE organization_id=%s AND id=%s",(p.organization_id,case['id']))

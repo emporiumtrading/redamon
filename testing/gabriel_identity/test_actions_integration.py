@@ -293,6 +293,21 @@ def test_receipt_failure_after_case_update_rolls_back_real_local_effect(tenant,a
     assert actions.execute(tenant.token,row['id'])['state']=='closed'
 
 
+def test_approver_session_expiring_during_verification_denies_dispatch(tenant,actions,case,approved,monkeypatch):
+    original = ActionService._unchanged
+    def expires_after_verification(self,conn,p,row,target):
+        original(self,conn,p,row,target)
+        with owner_connection(tenant.db) as owner:
+            owner.execute("UPDATE gabriel_identity.sessions SET created_at=clock_timestamp()-interval '2 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE organization_id=%s AND user_id=%s",
+                (tenant.org,approved.admin))
+    with monkeypatch.context() as patch:
+        patch.setattr(ActionService,'_unchanged',expires_after_verification)
+        with pytest.raises(AccessDenied,match='action_approver_revoked'):
+            actions.execute(tenant.token,approved.request['id'])
+    assert actions.get_case(tenant.token,case['id'])['case']['state']=='open'
+    assert actions.get_action(tenant.token,approved.request['id'])['execution'] is None
+
+
 @pytest.mark.parametrize('table,column',[
     ('action_requests',"digest=repeat('0',64)"),('action_approvals',"digest=repeat('0',64)"),
     ('action_policies','distinct_approver=false'),('action_decisions',"decision='cancelled'"),
