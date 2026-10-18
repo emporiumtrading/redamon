@@ -249,7 +249,8 @@ def test_failed_upgrade_rolls_back_schema_and_version_without_losing_session(ten
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=2')
     def damaged(path, *args, **kwargs):
         text = original(path, *args, **kwargs)
-        return text + '\nTHIS IS INTENTIONALLY INVALID SQL;' if path.name == 'schema_v2.sql' else text
+        # A runtime error occurs after valid DDL, exercising rollback of partial work.
+        return text + '\nSELECT 1/0;' if path.name == 'schema_v2.sql' else text
     try:
         with monkeypatch.context() as patch:
             patch.setattr(Path, 'read_text', damaged)
