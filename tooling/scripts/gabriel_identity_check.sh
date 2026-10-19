@@ -50,6 +50,11 @@ assert c['services']['case-data']['volumes'][0]['source']=='evidence_data'
 print('PASS: private network; separate evidence/provider keys and encrypted evidence volume')
 PY
 "${compose[@]}" --profile test build identity identity-tests
+docker build -f gabriel/identity/Dockerfile --target checkpoint-signer -t gabriel-checkpoint-signer:dev .
+docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --entrypoint python gabriel-checkpoint-signer:dev -c \
+    "import importlib.util; from gabriel.identity.checkpoints import new_keypair,seal,verify; assert importlib.util.find_spec('psycopg') is None; assert importlib.util.find_spec('gabriel.identity.service') is None; print('PASS: offline signer excludes database drivers and application services')"
+docker image inspect gabriel-checkpoint-signer:dev --format '{{.Id}}' > "$report_dir/checkpoint-signer-image-id.txt"
 docker image inspect gabriel-identity:dev --format '{{.Id}}' > "$report_dir/identity-image-id.txt"
 "${compose[@]}" up -d --wait identity-db
 "${compose[@]}" exec -T identity-db postgres --version > "$report_dir/postgres-version.txt"
