@@ -116,6 +116,10 @@ def test_https_case_report_custody_and_explicit_content_view(tenant,cases,case,e
     code,html,_=call(server,path+'/content',dict(csrf=token),cookie=cookie)
     assert code==200 and CONTENT in html
     assert cases.custody(tenant.token,evidence['id'])[-1]['event']=='accessed'
+    code,html,_=call(server,'/audit',cookie=cookie)
+    assert code==200 and 'evidence.accessed' in html and CONTENT not in html and tenant.token not in html
+    code,html,_=call(server,'/sources',cookie=cookie)
+    assert code==200 and 'No browser sessions recorded' in html
     assert call(server,'/disconnect',dict(csrf=token),cookie=cookie)[0]==200
     assert call(server,'/cases',cookie=cookie)[0]==403
 
@@ -210,6 +214,8 @@ def test_viewer_can_read_metadata_but_not_create_or_reveal_content(tenant,cases,
     assert code==200 and 'View evidence content' not in html
     assert call(server,path+'/content',dict(csrf=token),cookie=cookie)[0]==403
     assert call(server,'/cases/new',cookie=cookie)[0]==403
+    assert call(server,'/audit',cookie=cookie)[0]==403
+    assert call(server,'/sources',cookie=cookie)[0]==200
     assert len(cases.list_cases(tenant.token))==1
 
 

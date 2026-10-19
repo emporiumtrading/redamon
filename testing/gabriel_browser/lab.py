@@ -165,6 +165,9 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             loaded("document.title==='Investigations · Gabriel'")
             html=cdp.evaluate(session,'document.documentElement.outerHTML')
             assert human not in html and ticket not in html and '__Host-gabriel_workbench' not in cdp.evaluate(session,'document.cookie')
+            cdp.send('Page.navigate',{'url':target+'/sources'},session)
+            loaded("document.title==='Browser health and coverage · Gabriel'")
+            assert 'disconnected' in cdp.evaluate(session,'document.body.innerText')
             mark(family+':workbench-case')
             cdp.send('Page.navigate',{'url':target+'/cases/new'},session)
             loaded("Boolean(document.querySelector('input[name=title]'))")
@@ -187,6 +190,9 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             assert human not in html and ticket not in html
             shot=cdp.send('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False},session)
             (output/(family+'-generated-workbench.png')).write_bytes(base64.b64decode(shot['data']))
+            cdp.send('Page.navigate',{'url':target+'/audit'},session)
+            loaded("document.title==='Audit activity · Gabriel'")
+            assert 'evidence.accessed' in cdp.evaluate(session,'document.body.innerText')
             cdp.evaluate(session,"document.querySelector('form[action=\"/disconnect\"]').requestSubmit();true")
             loaded("document.title==='Disconnected · Gabriel'")
             cdp.send('Page.navigate',{'url':target+'/cases'},session)
@@ -335,7 +341,7 @@ def run_browser(family,executable,output):
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
-                'workbench_checks':['private_claim','persisted_case_form','timeline_screen','explicit_evidence_view','disconnect_and_cookie_denial'],
+                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
         except Exception:

@@ -14,6 +14,7 @@ import time
 from urllib.parse import parse_qsl,urlsplit
 
 from gabriel.identity.browser_gateway import endpoint
+from gabriel.identity.analyst_views import audit_history,source_health
 from gabriel.identity.cases import CaseService
 from gabriel.identity.checkpoints import read_document,write_document
 from gabriel.identity.cli import read_secret
@@ -84,8 +85,9 @@ class Workbench:
     def _page(self,title,body,principal=None):
         navigation=''
         if principal:
-            navigation='<p id="team-scope">Organization '+e(principal.organization_id)+' · Role '+e(principal.role)+'</p><nav><a href="/cases">Cases</a>'
+            navigation='<p id="team-scope">Organization '+e(principal.organization_id)+' · Role '+e(principal.role)+'</p><nav><a href="/cases">Cases</a><a href="/sources">Browser health</a>'
             if principal.role!='viewer': navigation+='<a href="/cases/new">New case</a>'
+            if principal.role!='viewer': navigation+='<a href="/audit">Audit</a>'
             navigation+=self._form('/disconnect','Disconnect workbench')+'</nav>'
         return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+e(title)+' · Gabriel</title><style>'+STYLE+'</style></head><body><header><a href="/cases">Gabriel — The Defender</a>'+navigation+'</header><main id="main"><h1>'+e(title)+'</h1>'+body+'</main></body></html>').encode()
 
@@ -132,6 +134,17 @@ class Workbench:
             self._claimed=True
             return '303 See Other',b'',[('Location','/cases'),('Set-Cookie',COOKIE+'='+self._cookie+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=600')]
         principal=self._authenticate(environ)
+        if method=='GET' and path=='/sources':
+            result=source_health(self.service,self._token)
+            body='<p class="notice">Partial coverage. A recent heartbeat does not establish current page visibility or uninterrupted monitoring. Sources are sampled individually.</p>'
+            body+=table(['Browser','Health','Last heartbeat','Expires','Case'],[(e(row['browser']),e(row['health']),e(row['last_seen'] or 'Never recorded'),e(row['expires_at']),'<a href="/cases/'+e(row['case_id'])+'">'+e(row['case_id'])+'</a>') for row in result['sources']]) if result['sources'] else '<p>No browser sessions recorded.</p>'
+            body+='<p>Showing up to 32 most recent sessions.'+(' Older sessions are omitted.' if result['truncated'] else '')+'</p>'
+            return '200 OK',self._page('Browser health and coverage',body,principal),[]
+        if method=='GET' and path=='/audit':
+            result=audit_history(self.service,self._token)
+            body=table(['Server time','Event','Actor','Target'],[(e(row['created_at']),e(row['event']),e(row['actor_id'] or ''),e(row['target_id'] or '')) for row in result['events']])
+            body+='<p>Showing up to 200 most recent tenant events.'+(' Older events are omitted.' if result['truncated'] else '')+'</p>'
+            return '200 OK',self._page('Audit activity',body,principal),[]
         if method=='POST' and path=='/disconnect' and set(fields)=={'csrf'}:
             self._cookie=None
             self._create=None
