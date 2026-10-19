@@ -43,6 +43,9 @@ ARG LAB_UID=10001
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip libnss3-tools xvfb xauth xdotool openbox scrot fonts-liberation \
     && curl --fail --location --proto '=https' --tlsv1.2 https://github.com/brave/brave-browser/releases/download/v1.97.59/brave-browser_1.97.59_amd64.deb -o /tmp/brave.deb \
     && echo '666f817b640a3284fbb5c9b34917b78854e2acd92fa7febad704dc2b29349be5  /tmp/brave.deb' | sha256sum -c - \
+    && curl --fail --location --proto '=https' --tlsv1.2 https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg -o /usr/share/keyrings/brave-browser-archive-keyring.gpg \
+    && curl --fail --location --proto '=https' --tlsv1.2 https://brave-browser-apt-release.s3.brave.com/brave-browser.sources -o /etc/apt/sources.list.d/brave-browser-release.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends /tmp/brave.deb \
     && curl --fail --location --proto '=https' --tlsv1.2 https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.84/linux64/chrome-linux64.zip -o /tmp/chrome.zip \
     && unzip -q /tmp/chrome.zip -d /opt \
