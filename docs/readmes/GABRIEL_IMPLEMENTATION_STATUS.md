@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Custody checkpoint increment 10 — component verification pending
+
+Baseline: `8f9f1f9a9b4ea5f06a9d920a8ba29c033e274220`. Links: GAB-005/GAB-006/GAB-007/GAB-008/GAB-037/GAB-038, C04, T06/T11/T12/T27 and CV-04. Owner: Codex; independent reviewer acceptance pending. Component **IMPLEMENTED_UNVERIFIED**; lifecycle/release **BLOCKED**. Existing C00–C04 acceptance gaps remain open.
+
+Case-scoped capture binds immutable metadata and current custody prefixes; a separate offline image seals the snapshot with Ed25519. Verification requires a trusted public key and independently retained accepted digest, so valid rehash/tail deletion and old signed-checkpoint substitution can be detected. No signing key/database credential co-mount is introduced; schema 8 and published migration checksums remain unchanged. See [operator flow and exact trust assumptions](README.GABRIEL_CHECKPOINTS.md).
+
+Hypothesis: privileged changes that preserve local hash consistency disagree with a trusted checkpoint; valid later events and approved primary-content deletion preserve historical comparison; untrusted keys/digests, cross-scope identities and unavailable audit admission cannot report success. New actual cryptographic/file/CLI/SQL tests and restart/dump/object-restore probes await hosted VM execution. Local AST/shell/diff checks are required; no host pytest substitutes for missing Docker. Source/counts/artifact evidence pending. Rollback disables checkpoint commands while retaining trusted external records and existing data. Automatic periodic/freshness enforcement, independently operated custody storage/acceptance, key rotation/revocation, governance anchoring, review and integrated human UAT remain open. This increment does not accept all of CV-04 or C04.
+
 ## Retention increment 9 — primary-content component verified
 
 Baseline: `283597e1494a1a7b624972b91d37d4e692517e3d`. Links: GAB-003/GAB-005/GAB-006/GAB-007/GAB-008/GAB-037/GAB-038; C04, T06/T09/T10/T11/T12/T27 and CV-05. Owner: Codex; independent reviewer acceptance pending. Component VM checks **PASS**; lifecycle/release state **BLOCKED**. Earlier conversion/C03/C04 gates remain open.

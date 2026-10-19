@@ -17,6 +17,10 @@ from gabriel.identity.service import AccessDenied, IdentityUnavailable, connecti
 from gabriel.identity.cases import CaseService
 from gabriel.identity.actions import ActionService
 from gabriel.identity.retention import RetentionService
+from gabriel.identity.checkpoint_service import CheckpointService
+from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,read_document,seal,write_document
+from gabriel.identity.cases import custody_hash
+from datetime import timedelta
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore
 from testing.gabriel_identity.test_retention_integration import historical_artifact
 
@@ -30,6 +34,7 @@ cases = CaseService(app_dsn,LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT
 state = Path('/checkpoint/state.json')
 actions = ActionService(app_dsn,cases.store)
 retention = RetentionService(app_dsn,cases.store)
+checkpoints = CheckpointService(app_dsn,cases.store)
 
 
 def counts():
@@ -106,6 +111,14 @@ if sys.argv[1] == 'before':
             finally:
                 with connection(owner_dsn,runtime=False) as conn:
                     conn.execute('GRANT INSERT ON gabriel_identity.retention_events TO gabriel_identity_app')
+    signing_key,public_key = new_keypair()
+    write_document('/checkpoint/custody-public.json',public_key)
+    checkpoint_digests = {}
+    for label,target in [('active',case['id']),('purged',purge_case['id'])]:
+        envelope = seal(checkpoints.capture_checkpoint(token,target),signing_key)
+        write_document('/checkpoint/custody-'+label+'.json',envelope)
+        checkpoint_digests[label] = fingerprint(canonical(envelope))
+    del signing_key
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
@@ -114,6 +127,7 @@ if sys.argv[1] == 'before':
         'hold_id':str(hold['id']),'purge_case_id':str(purge_case['id']),
         'completed_purge':str(attempts[0]),'pending_purge':str(attempts[1]),
         'purged_evidence':[str(artifact['id']) for artifact in artifacts],
+        'checkpoint_digests':checkpoint_digests,
         'provider_digest':sha256(provider_value.encode()).hexdigest(),'counts':counts()}))
     state.chmod(0o600)
     print('PASS: real database checkpoint created without logging credentials')
@@ -121,6 +135,10 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
+    trusted_key = read_document('/checkpoint/custody-public.json')
+    for label,target in [('active',saved['case_id']),('purged',saved['purge_case_id'])]:
+        assert checkpoints.verify_checkpoint(saved['token'],target,read_document('/checkpoint/custody-'+label+'.json'),
+            trusted_key,saved['checkpoint_digests'][label])['custody_prefixes_match']
     principal = service.whoami(saved['token'])
     assert str(principal.organization_id) == saved['org']
     assert str(principal.user_id) == saved['user'] and principal.role == 'owner'
@@ -162,6 +180,31 @@ elif sys.argv[1] in {'after','restored'}:
         pass
     else:
         raise AssertionError('revoked service survived')
+    if sys.argv[1]=='restored':
+        envelope = read_document('/checkpoint/custody-active.json')
+        anchored = envelope['body']['snapshot']['evidence'][0]
+        owner_dsn = make_conninfo(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']),dbname='gabriel_vault_restore')
+        with connection(owner_dsn,runtime=False) as conn:
+            events = conn.execute('SELECT * FROM gabriel_identity.custody_events WHERE organization_id=%s AND evidence_id=%s ORDER BY sequence',
+                (saved['org'],anchored['evidence_id'])).fetchall()
+            previous = None
+            for event in events:
+                if event['sequence']<anchored['sequence']:
+                    previous = event['event_hash']
+                    continue
+                instant = event['created_at']+timedelta(microseconds=1)
+                head = custody_hash(saved['org'],anchored['evidence_id'],event['sequence'],event['actor_id'],event['event'],previous,instant)
+                conn.execute('UPDATE gabriel_identity.custody_events SET previous_hash=%s,event_hash=%s,created_at=%s WHERE organization_id=%s AND evidence_id=%s AND sequence=%s',
+                    (previous,head,instant,saved['org'],anchored['evidence_id'],event['sequence']))
+                previous = head
+        assert cases.custody(saved['token'],anchored['evidence_id'])[-1]['event_hash']==head
+        try:
+            checkpoints.verify_checkpoint(saved['token'],saved['case_id'],envelope,trusted_key,saved['checkpoint_digests']['active'])
+        except EvidenceError as exc:
+            assert str(exc)=='checkpoint_custody_changed'
+        else:
+            raise AssertionError('trusted checkpoint missed privileged restored history rewrite')
+        print('PASS: independent signed checkpoint detected privileged valid rehash after restore')
     service.logout(saved['token'])
     try:
         service.whoami(saved['token'])
@@ -174,6 +217,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: case linkage and encrypted evidence/custody survived recovery; integrity-checked closure enforced')
     print('PASS: exact policy/approval survived recovery; pending local closure executed and completed receipt replayed')
     print('PASS: legal hold and retention survived recovery; completed purge retained and interrupted unlink reconciled without another deletion')
+    print('PASS: externally retained signed custody checkpoints matched active and purged evidence after recovery')
     if sys.argv[1] == 'restored':
         print('PASS: real pg_dump/pg_restore recovered matching row counts and encrypted values with separately retained keys')
 else:

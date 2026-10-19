@@ -12,6 +12,8 @@ from gabriel.identity.service import IdentityError,InvalidIdentityInput
 from gabriel.identity.cases import CaseService
 from gabriel.identity.actions import ActionService
 from gabriel.identity.retention import RetentionService
+from gabriel.identity.checkpoint_service import CheckpointService
+from gabriel.identity.checkpoints import read_document,write_document,canonical,fingerprint
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore,MAX_BYTES
 
 
@@ -87,7 +89,7 @@ def main():
     parser.add_argument('command',choices=('create','list','get','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
-        'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel'))
+        'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify'))
     parser.add_argument('--token-file')
     parser.add_argument('--title')
     parser.add_argument('--case-id')
@@ -111,13 +113,22 @@ def main():
     parser.add_argument('--days',type=int)
     parser.add_argument('--hold-id')
     parser.add_argument('--attempt-id')
+    parser.add_argument('--checkpoint-file')
+    parser.add_argument('--trusted-public-key')
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
         store = LocalEvidenceStore(os.environ.get('GABRIEL_EVIDENCE_ROOT'),keys)
-        service = RetentionService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
+        service = CheckpointService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
         token = read_secret(args.token_file,128) if args.token_file else getpass.getpass('Gabriel session: ')
-        if args.command=='retention-set':
+        if args.command=='checkpoint-capture':
+            snapshot = service.capture_checkpoint(token,args.case_id)
+            write_document(args.output,snapshot)
+            result = {'snapshot_digest':fingerprint(canonical(snapshot)),'case_id':str(args.case_id),'sealed':False}
+        elif args.command=='checkpoint-verify':
+            result = service.verify_checkpoint(token,args.case_id,read_document(args.checkpoint_file),
+                read_document(args.trusted_public_key),args.expected_digest)
+        elif args.command=='retention-set':
             result = service.set_retention(token,args.days)
         elif args.command=='retention-get':
             result = service.get_retention(token)
