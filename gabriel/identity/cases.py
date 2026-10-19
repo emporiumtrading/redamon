@@ -148,6 +148,10 @@ class CaseService(IdentityService):
             return conn.execute('SELECT * FROM gabriel_identity.cases WHERE organization_id=%s ORDER BY created_at DESC,id LIMIT 100',
                 (principal.organization_id,)).fetchall()
 
+    def case_report(self,token,case_id):
+        from gabriel.identity.reports import case_report
+        return case_report(self,token,case_id)
+
     def get_case(self,token,case_id):
         with connection(self._dsn) as conn:
             principal = self._human(conn,token)

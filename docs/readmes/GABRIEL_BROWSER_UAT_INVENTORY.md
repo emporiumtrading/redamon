@@ -1,6 +1,6 @@
 # Browser Companion control and UAT inventory
 
-Candidate: extension `0.1.0`, six reviewed package files. Native-browser lab at source `cfef1ffe37477c76d5be34bd0c8e817cfc03855e` passed the 15-check subset per browser in hosted run `39217905170`; expanded checks are pending. Human UAT is **NOT_RUN** throughout this inventory. Server/package source `35d2d38da6241ad2e17a1c0a48c3aedb8936a4ca` passed 579 component/regression cases. Neither result accepts all scenarios below or establishes real security-console compatibility.
+Candidate: extension `0.1.0`, six reviewed package files. Native-browser source `1fecd75d8c0d99ba8f956b23943fd0c6d2a4ce71` passed the 19-check subset per browser in hosted PR run `39218948832` and push run `39218944064`. Human UAT is **NOT_RUN** throughout this inventory. Server/package and report regression have separate source-specific evidence in the ledger. Neither result accepts all scenarios below or establishes real security-console compatibility.
 
 | Control / selector | Expected normal result | Required denial, gap or failure result |
 | --- | --- | --- |

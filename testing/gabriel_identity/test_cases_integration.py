@@ -402,6 +402,10 @@ def test_real_cli_intake_verify_export_and_close(tenant,tmp_path):
     assert code==0
     evidence_id = acquired['result']['id']
     assert cli('get','--case-id',case_id)[0]==0
+    code,reported = cli('report','--case-id',case_id)
+    assert code==0 and reported['result']['snapshot']['case']['id']==case_id
+    assert reported['result']['snapshot']['evidence'][0]['id']==evidence_id
+    assert reported['result']['snapshot']['content_integrity']=='not_checked'
     assert cli('custody','--evidence-id',evidence_id)[0]==0
     assert cli('verify','--case-id',case_id)[1]['result']['complete']
     output = tmp_path/'export.txt'

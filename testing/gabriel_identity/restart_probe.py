@@ -195,7 +195,9 @@ if sys.argv[1] == 'before':
             conn.execute('GRANT INSERT ON gabriel_identity.browser_observation_receipts TO gabriel_identity_app')
     with connection(app_dsn) as conn:
         pending_observation = conn.execute("SELECT id FROM gabriel_identity.browser_observations WHERE organization_id=%s AND state='prepared'",(observation_org,)).fetchone()['id']
+    report_snapshot = cases.case_report(token,case['id'])['snapshot']
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
+        'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
         'case_id':str(case['id']),'evidence_id':str(evidence['id']),
@@ -267,11 +269,16 @@ elif sys.argv[1] in {'after','restored'}:
             raise AssertionError('purged evidence became readable')
     assert cases.verify_case(saved['token'],saved['case_id'])['complete']
     assert cases.read_evidence(saved['token'],saved['evidence_id']).reveal()==b'approved recovery fixture'
+    report_snapshot = cases.case_report(saved['token'],saved['case_id'])['snapshot']
+    assert report_snapshot['evidence']==saved['report_evidence']
+    assert all(event in report_snapshot['timeline'] for event in saved['report_timeline'])
+    assert report_snapshot['assessment']=='not_performed' and report_snapshot['content_integrity']=='not_checked'
     assert service.get_task(saved['token'],saved['task'])['id'] in cases.get_case(saved['token'],saved['case_id'])['task_ids']
     assert actions.get_action(saved['token'],saved['action_id'])['state']=='approved'
     assert actions.execute(saved['token'],saved['completed_action_id'])==saved['action_receipt']
     actions.execute(saved['token'],saved['action_id'],checkpoint_digest=saved['checkpoint_digests']['active'])
     assert cases.get_case(saved['token'],saved['case_id'])['case']['state']=='closed'
+    assert cases.case_report(saved['token'],saved['case_id'])['snapshot']['case']['state']=='closed'
     assert sha256(vault.resolve_for_backend(saved['token'],'model_restart').reveal().encode()).hexdigest()==saved['provider_digest']
     vault.revoke(saved['token'],'model_restart')
     try:
@@ -334,6 +341,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: identities, service grant and encrypted provider value survived PostgreSQL restart; all revocations enforced')
     print('PASS: durable task/receipt replay survived recovery without another step; task cancellation enforced')
     print('PASS: case linkage and encrypted evidence/custody survived recovery; integrity-checked closure enforced')
+    print('PASS: metadata report reconstructed evidence and prior timeline after recovery without inventing source truth or content-integrity verification')
     print('PASS: exact policy/approval survived recovery; pending local closure executed and completed receipt replayed')
     print('PASS: legal hold and retention survived recovery; completed purge retained and interrupted unlink reconciled without another deletion')
     print('PASS: externally retained signed custody checkpoints matched active and purged evidence after recovery')

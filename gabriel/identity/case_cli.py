@@ -88,7 +88,7 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('create','list','get','link-task','acquire','custody','verify','close','export','exports',
+    parser.add_argument('command',choices=('create','list','get','report','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
@@ -213,6 +213,8 @@ def main():
             result = service.list_cases(token)
         elif args.command=='get':
             result = service.get_case(token,args.case_id)
+        elif args.command=='report':
+            result = service.case_report(token,args.case_id)
         elif args.command=='link-task':
             service.link_task(token,args.case_id,args.task_id)
             result = {'linked':True}
