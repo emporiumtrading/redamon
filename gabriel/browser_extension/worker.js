@@ -35,6 +35,14 @@ function gatewayURL(value) {
   return url.origin;
 }
 
+function wireContext(selected) {
+  const document = selected.document_id;
+  if (typeof document !== "string" || !/^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(document))
+    throw new Error("Unsupported browser document identifier.");
+  const hex = document.replaceAll("-", "").toLowerCase();
+  return {...selected, document_id: [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join("-")};
+}
+
 async function current(selected, collect = false) {
   const tab = await chrome.tabs.get(selected.tab_id);
   if (tab.incognito || safeURL(tab.url) !== selected.page_url) throw new Error("Page changed. Stop and obtain fresh pairing.");
@@ -111,21 +119,23 @@ async function handle(message) {
       await current(selected);
       const target = gatewayURL(message.endpoint);
       if (!await chrome.permissions.contains({origins: [target + "/*"]})) throw new Error("Grant permission for the selected Gabriel endpoint first.");
-      const result = await request({endpoint: target}, "claim", {ticket: message.ticket, context: selected});
+      const context = wireContext(selected);
+      const result = await request({endpoint: target}, "claim", {ticket: message.ticket, context});
       if (revision !== generation) throw new Error("Sharing was stopped.");
-      if (!result.context || Object.keys(result.context).length !== Object.keys(selected).length ||
-          Object.keys(selected).some(key => result.context[key] !== selected[key]) || !/^gbp1_[A-Za-z0-9_-]{43}$/.test(result.token)) throw new Error("Gateway scope mismatch.");
+      if (!result.context || Object.keys(result.context).length !== Object.keys(context).length ||
+          Object.keys(context).some(key => result.context[key] !== context[key]) || !/^gbp1_[A-Za-z0-9_-]{43}$/.test(result.token)) throw new Error("Gateway scope mismatch.");
       await current(selected);
       await persist({session: {endpoint: target, token: result.token, context: selected, expires_at: result.expires_at,
         lease_id: result.lease_id, organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id,
         sharing_approved: result.sharing_approved, sequence: 0}}, revision);
-      return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at};
+      return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at,
+        organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id};
     }
     if (!session || Date.parse(session.expires_at) <= Date.now()) throw new Error("Pairing is missing or expired. Obtain fresh approval.");
     if (paused && ["preview","share"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
     if (message.operation === "receipts") {
       await current(selected);
-      const result = await request(session, "receipts", {context: selected});
+      const result = await request(session, "receipts", {context: wireContext(selected)});
       if (result.observations.some(row => row.state === "prepared")) throw new Error("An observation is pending. Ask the engineer to reconcile it before continuing.");
       if (revision !== generation) throw new Error("Sharing was stopped.");
       session.sequence = result.observations.length ? Math.max(...result.observations.map(row => row.sequence)) : 0;
@@ -134,10 +144,11 @@ async function handle(message) {
       return {message: "Receipts checked. " + result.observations.length + " captured observations.", observations: result.observations};
     }
     await current(selected);
-    await request(session, "heartbeat", {context: selected});
+    await request(session, "heartbeat", {context: wireContext(selected)});
     if (revision !== generation) throw new Error("Sharing was stopped.");
     if (message.operation === "resume") { await persist({paused: false}, revision); return {message: "Live scope checked. Sharing resumed; a new reviewed preview is required."}; }
-    if (message.operation === "status") return {message: "Current scope and heartbeat confirmed.", scope: selected, expires_at: session.expires_at};
+    if (message.operation === "status") return {message: "Current scope and heartbeat confirmed.", scope: selected, expires_at: session.expires_at,
+      organization_id: session.organization_id, case_id: session.case_id, task_id: session.task_id};
     if (message.operation === "preview") {
       if (pending) throw new Error("Previous capture outcome is unconfirmed. Inspect receipts first.");
       const view = await current(selected, true);
@@ -148,7 +159,7 @@ async function handle(message) {
     const observed = Date.parse(message.observed_at);
     if (!Number.isFinite(observed) || Date.now() - observed > 55000 || observed > Date.now() + 5000) throw new Error("Preview is stale. Capture a new preview.");
     const payload = {schema_version: 1, operation: "browser.observe", request_id: crypto.randomUUID(), sequence: session.sequence + 1,
-      context: selected, observed_at: message.observed_at, visibility: "partial", client_minimized: true, content: message.content};
+      context: wireContext(selected), observed_at: message.observed_at, visibility: "partial", client_minimized: true, content: message.content};
     // Only a non-sensitive cursor persists; an uncertain write never triggers automatic recapture.
     await persist({pending: {request_id: payload.request_id, sequence: payload.sequence}}, revision);
     await current(selected);

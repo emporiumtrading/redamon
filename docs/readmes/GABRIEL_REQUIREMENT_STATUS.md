@@ -1,6 +1,6 @@
 # Gabriel PRD requirement reconciliation
 
-Baseline: draft PR 16 head `41ed782a99d44334a12b9f8bb4bcb990b1bc94dd`; PR 17 server/package source `35d2d38da6241ad2e17a1c0a48c3aedb8936a4ca` passed the 579-case/recovery gate. Actual client lab is in progress. This maps all 40 requirement IDs to actual implementation gaps. Component CI evidence is in the implementation ledger. None of the forty requirements has full post-release acceptance; a component pass does not accept a complete release requirement.
+Baseline: PR 17 server/package source `35d2d38da6241ad2e17a1c0a48c3aedb8936a4ca` passed the 579-case/recovery gate. PR 18 browser source `cfef1ffe37477c76d5be34bd0c8e817cfc03855e` passed actual generated-console Chrome for Testing/Brave journeys (15 checks each); expanded checks are pending. This maps all 40 requirement IDs to actual implementation gaps. Component CI evidence is in the implementation ledger. None of the forty requirements has full post-release acceptance; a component pass does not accept a complete release requirement.
 
 | Requirement | Implemented evidence / remaining work |
 | --- | --- |
@@ -12,17 +12,17 @@ Baseline: draft PR 16 head `41ed782a99d44334a12b9f8bb4bcb990b1bc94dd`; PR 17 ser
 | GAB-006 | Cases/tasks/approval state persist; scoped memory, graph projection and workbench are outstanding. |
 | GAB-007 | Encrypted evidence/custody and unverified observation lineage tested; actual client/source adapters and deduplication outstanding. |
 | GAB-008 | Fresh migrations, restart/dump/restore and interrupted evidence operations tested; integrated product and external-effect recovery outstanding. |
-| GAB-009 | MV3 client implementation in progress; actual Chrome/Brave package tests and reviewed distribution outstanding. |
+| GAB-009 | Real MV3 package and Chrome for Testing/Brave generated-console journey verified; consumer Chrome/OS matrix, full human UAT and reviewed distribution outstanding. |
 | GAB-010 | Backend exact page/tab/document/account scope tested; actual browser lifecycle/associated-tab acceptance outstanding. |
-| GAB-011 | Bounded envelope and conservative secret filter tested; actual rendered-text minimization, preview and browser privacy acceptance outstanding. |
+| GAB-011 | Actual generated-console viewport preview and form/hidden exclusion passed; broad privacy/adversarial and real-console acceptance outstanding. |
 | GAB-012 | Single-use native-TLS gateway network/component tests passed; actual browser abuse tests and independent protocol review outstanding. |
 | GAB-013 | Vendor-neutral backend contracts exist; selected real console investigation with no vendor API and human-only login outstanding. |
 | GAB-014 | No search executor admitted; reviewed existing-search/template adapters and side-effect tests outstanding. |
 | GAB-015 | No third-party draft entry admitted; Gabriel proposal workspace and draft/autosave acceptance outstanding. |
 | GAB-016 | Finite backend capabilities reject unsupported operations; packaged adapter vocabulary and browser proof outstanding. |
 | GAB-017 | Backend serialization exists; actual tab action leases, targets and postcondition checks outstanding. |
-| GAB-018 | Backend heartbeat/revocation/recovery tested; client suspension, permissions and human-handoff lab outstanding. |
-| GAB-019 | Extension/backend version bound in leases; package provenance, compatibility and managed upgrade recovery outstanding. |
+| GAB-018 | Backend heartbeat/revocation/recovery and actual client Pause/Resume/Stop tested; suspension/restart, drift, authority-loss and human-handoff browser scenarios outstanding. |
+| GAB-019 | Lease versions, deterministic package hash and observed lab source/image/binary hashes recorded; full compatibility, distribution and managed upgrade recovery outstanding. |
 | GAB-020 | Environment/control profile with evidence states and freshness not implemented. |
 | GAB-021 | Proactive hunt selection/execution and benign alternatives not implemented or evaluated. |
 | GAB-022 | Core cases/evidence persist; assignment, entity/time correlation, deduplication, timelines and reports outstanding. |
