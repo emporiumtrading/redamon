@@ -1,0 +1,245 @@
+"""Actual HTTPS workbench forms, live identity, PostgreSQL and encrypted evidence."""
+from concurrent.futures import ThreadPoolExecutor
+import base64
+import http.client
+import json
+import os
+import re
+import secrets
+import socket
+import ssl
+import subprocess
+import sys
+import time
+from urllib.parse import urlencode
+
+import pytest
+
+from gabriel.identity.checkpoints import read_document,write_document
+from gabriel.identity.service import provision_organization
+from gabriel.identity.workbench import COOKIE,load_workbench,prepare_workbench
+from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
+from testing.gabriel_identity.test_cases_integration import cases,case,evidence,CONTENT,audit_permission
+from testing.gabriel_identity.tls_lab import certificates
+
+pytestmark=pytest.mark.integration
+
+
+@pytest.fixture
+def boot(tenant,cases,tmp_path,monkeypatch,request):
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1',0)); port=sock.getsockname()[1]
+    directory=tmp_path/'workbench'
+    target='https://localhost:'+str(port)
+    token=tenant.token
+    if getattr(request,'param','owner')=='viewer':
+        password=secrets.token_urlsafe(24)
+        cases.create_member(token,'workbench-viewer',password,'viewer')
+        token=cases.login(tenant.org,'workbench-viewer',password).token
+    prepare_workbench(cases,token,target,directory)
+    keys=tmp_path/'keys.json'
+    ring=cases.store.keys
+    write_document(keys,dict(schema_version=1,purpose='evidence-v1',generation=ring.generation,active=ring.active,
+        keys={k:base64.b64encode(v).decode() for k,v in ring._keys.items()}))
+    monkeypatch.setenv('GABRIEL_EVIDENCE_KEYRING_FILE',str(keys))
+    monkeypatch.setenv('GABRIEL_EVIDENCE_ROOT',str(cases.store.root))
+    return dict(directory=directory,port=port,target=target,ticket=read_document(directory/'claim.json',private=True)['ticket'],tls=certificates(tmp_path))
+
+
+def call(boot,path,fields=None,*,cookie=None,origin=None,headers=None,method=None,raw=None,trust=True):
+    context=ssl.create_default_context(cafile=str(boot['tls']['ca.pem'])) if trust else ssl.create_default_context()
+    client=http.client.HTTPSConnection('localhost',boot['port'],context=context,timeout=8)
+    method=method or ('POST' if fields is not None else 'GET')
+    request_headers=dict(headers or {})
+    if fields is not None:
+        request_headers.setdefault('Content-Type','application/x-www-form-urlencoded')
+        request_headers.setdefault('Origin',origin or boot['target'])
+    if cookie: request_headers['Cookie']=cookie
+    try:
+        client.request(method,path,body=raw if raw is not None else urlencode(fields) if fields is not None else None,headers=request_headers)
+        response=client.getresponse()
+        return response.status,response.read().decode(),dict(response.getheaders())
+    finally: client.close()
+
+
+@pytest.fixture
+def server(boot):
+    process=subprocess.Popen([sys.executable,'-m','gabriel.identity.workbench_cli','serve','--configuration',str(boot['directory']/'workbench.json'),
+        '--certificate',str(boot['tls']['server.pem']),'--key',str(boot['tls']['server.key']),'--bind','127.0.0.1:'+str(boot['port'])],
+        stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    try:
+        end=time.monotonic()+12
+        while time.monotonic()<end:
+            if process.poll() is not None: raise AssertionError('workbench exited before readiness')
+            try:
+                if call(boot,'/claim')[0]==200: break
+            except OSError: pass
+            time.sleep(0.05)
+        else: raise AssertionError('workbench TLS readiness failed')
+        yield boot
+    finally:
+        process.terminate()
+        out,err=process.communicate(timeout=10)
+        assert boot['ticket'] not in out+err and CONTENT not in out+err
+
+
+def csrf(html): return re.search(r'name="csrf" value="([A-Za-z0-9_-]+)"',html)[1]
+
+
+def connect(server):
+    code,html,_=call(server,'/claim')
+    assert code==200
+    token=csrf(html)
+    code,_,headers=call(server,'/claim',dict(csrf=token,ticket=server['ticket']))
+    assert code==303
+    return headers['Set-Cookie'].split(';',1)[0],token,headers
+
+
+def test_https_case_report_custody_and_explicit_content_view(tenant,cases,case,evidence,server):
+    cookie,token,headers=connect(server)
+    assert all(value in headers['Set-Cookie'] for value in ('Secure','HttpOnly','SameSite=Strict','Path=/'))
+    code,html,headers=call(server,'/cases',cookie=cookie)
+    assert code==200 and str(tenant.org) in html and case['title'] in html
+    assert headers['Cache-Control']=='no-store' and "default-src 'none'" in headers['Content-Security-Policy']
+    assert tenant.token not in html and server['ticket'] not in html and CONTENT not in html
+    path='/cases/'+str(case['id'])
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'unverified_supplied' in html and 'not performed' in html and CONTENT not in html
+    code,report,headers=call(server,path+'/report',cookie=cookie)
+    assert code==200 and headers['Content-Type']=='application/json'
+    assert json.loads(report)['snapshot']['evidence'][0]['id']==str(evidence['id'])
+    assert CONTENT not in report
+    path+='/evidence/'+str(evidence['id'])
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'acquired' in html and CONTENT not in html
+    assert call(server,path+'/content',cookie=cookie)[0]==403
+    code,html,_=call(server,path+'/content',dict(csrf=token),cookie=cookie)
+    assert code==200 and CONTENT in html
+    assert cases.custody(tenant.token,evidence['id'])[-1]['event']=='accessed'
+    code,html,_=call(server,'/audit',cookie=cookie)
+    assert code==200 and 'evidence.accessed' in html and CONTENT not in html and tenant.token not in html
+    code,html,_=call(server,'/sources',cookie=cookie)
+    assert code==200 and 'No browser sessions recorded' in html
+    assert call(server,'/disconnect',dict(csrf=token),cookie=cookie)[0]==200
+    assert call(server,'/cases',cookie=cookie)[0]==403
+
+
+def test_case_form_persists_one_case_under_concurrent_replay(tenant,cases,server):
+    cookie,token,_=connect(server)
+    code,html,_=call(server,'/cases/new',cookie=cookie)
+    assert code==200
+    nonce=re.search(r'name="nonce" value="([A-Za-z0-9_-]+)"',html)[1]
+    fields=dict(csrf=token,nonce=nonce,title='Generated <script>alert(1)</script> case')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(lambda _:call(server,'/cases',fields,cookie=cookie),range(2)))
+    assert sorted(row[0] for row in results)==[303,403]
+    rows=cases.list_cases(tenant.token)
+    assert len(rows)==1 and rows[0]['title']==fields['title']
+    code,html,_=call(server,'/cases/'+str(rows[0]['id']),cookie=cookie)
+    assert code==200 and '<script>alert(1)</script>' not in html and '&lt;script&gt;' in html
+
+
+@pytest.mark.parametrize('attack',['missing_csrf','wrong_origin','null_origin','duplicate_field','forwarding','wrong_host','query','cross_site','duplicate_cookie','get_body','json','unknown_route'])
+def test_boundary_denials_do_not_create_case(tenant,cases,server,attack):
+    cookie,token,_=connect(server)
+    _,form,_=call(server,'/cases/new',cookie=cookie)
+    nonce=re.search(r'name="nonce" value="([A-Za-z0-9_-]+)"',form)[1]
+    path='/cases'
+    fields=dict(csrf=token,nonce=nonce,title='Denied generated case')
+    kwargs=dict(cookie=cookie)
+    if attack=='missing_csrf': fields.pop('csrf')
+    elif attack=='wrong_origin': kwargs['origin']='https://generated-hostile.invalid'
+    elif attack=='null_origin': kwargs['origin']='null'
+    elif attack=='duplicate_field': kwargs['raw']=urlencode(fields)+'&csrf='+token
+    elif attack=='forwarding': kwargs['headers']={'X-Forwarded-Proto':'https'}
+    elif attack=='wrong_host': kwargs['headers']={'Host':'generated-hostile.invalid'}
+    elif attack=='query': path+='?ticket=blocked'
+    elif attack=='cross_site': kwargs['headers']={'Sec-Fetch-Site':'cross-site'}
+    elif attack=='duplicate_cookie': kwargs['cookie']=cookie+'; '+cookie
+    elif attack=='get_body': kwargs.update(method='GET',raw='body')
+    elif attack=='json': kwargs['headers']={'Content-Type':'application/json'}
+    else: path='/admin/execute'
+    assert call(server,path,fields,**kwargs)[0]==403
+    assert not cases.list_cases(tenant.token)
+
+
+def test_wrong_ticket_and_claim_replay(tenant,server):
+    _,html,_=call(server,'/claim')
+    token=csrf(html)
+    assert call(server,'/claim',dict(csrf=token,ticket='gwt1_'+'a'*43))[0]==403
+    cookie,_,_=connect(server)
+    assert call(server,'/claim',dict(csrf=token,ticket=server['ticket']))[0]==403
+    assert call(server,'/cases',cookie=cookie)[0]==200
+
+
+def test_original_logout_denies_existing_cookie(tenant,cases,case,server):
+    cookie,_,_=connect(server)
+    cases.logout(tenant.token)
+    code,html,_=call(server,'/cases/'+str(case['id']),cookie=cookie)
+    assert code==403 and case['title'] not in html
+
+
+def test_foreign_case_is_denied(tenant,cases,server):
+    password=secrets.token_urlsafe(24)
+    org,_=provision_organization(tenant.db.owner,'Generated foreign workbench','owner',password)
+    foreign=cases.login(org,'owner',password).token
+    case=cases.create_case(foreign,'Generated foreign case')
+    cookie,_,_=connect(server)
+    code,html,_=call(server,'/cases/'+str(case['id']),cookie=cookie)
+    assert code==403 and case['title'] not in html
+
+
+def test_audit_failure_cannot_issue_cookie(tenant,server):
+    _,html,_=call(server,'/claim')
+    audit_permission(tenant,False)
+    try:
+        code,_,headers=call(server,'/claim',dict(csrf=csrf(html),ticket=server['ticket']))
+        assert code==503 and 'Set-Cookie' not in headers
+    finally: audit_permission(tenant,True)
+    assert connect(server)[0].startswith(COOKIE+'=')
+
+
+def test_restart_cannot_resurrect_bootstrap(server):
+    with pytest.raises(FileExistsError): load_workbench(server['directory']/'workbench.json')
+
+
+def test_tls_requires_trust(server):
+    with pytest.raises(ssl.SSLCertVerificationError): call(server,'/claim',trust=False)
+
+
+@pytest.mark.parametrize('boot',['viewer'],indirect=True)
+def test_viewer_can_read_metadata_but_not_create_or_reveal_content(tenant,cases,case,evidence,server):
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/evidence/'+str(evidence['id'])
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'View evidence content' not in html
+    assert call(server,path+'/content',dict(csrf=token),cookie=cookie)[0]==403
+    assert call(server,'/cases/new',cookie=cookie)[0]==403
+    assert call(server,'/audit',cookie=cookie)[0]==403
+    assert call(server,'/sources',cookie=cookie)[0]==200
+    assert len(cases.list_cases(tenant.token))==1
+
+
+def test_evidence_html_is_escaped(tenant,cases,case,server):
+    content='<img src=x onerror=alert(1)> Generated hostile artifact'
+    from uuid import uuid4
+    artifact=cases.acquire(tenant.token,case['id'],uuid4(),content,'Generated HTML fixture',approved=True)
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/evidence/'+str(artifact['id'])+'/content'
+    code,html,_=call(server,path,dict(csrf=token),cookie=cookie)
+    assert code==200 and content not in html and '&lt;img src=x onerror=alert(1)&gt;' in html
+
+
+def test_operator_cli_prepares_exclusive_private_files(tenant,boot,tmp_path):
+    token=tmp_path/'operator-session'
+    token.write_text(tenant.token)
+    token.chmod(0o600)
+    directory=tmp_path/'cli-workbench'
+    command=[sys.executable,'-m','gabriel.identity.workbench_cli','prepare','--token-file',str(token),'--endpoint',boot['target'],'--directory',str(directory)]
+    result=subprocess.run(command,capture_output=True,text=True,timeout=10)
+    assert result.returncode==0 and tenant.token not in result.stdout+result.stderr
+    original=(directory/'claim.json').read_bytes()
+    assert directory.stat().st_mode&0o777==0o700
+    assert (directory/'human.json').stat().st_mode&0o777==0o600
+    assert subprocess.run(command,capture_output=True,timeout=10).returncode==1
+    assert (directory/'claim.json').read_bytes()==original
