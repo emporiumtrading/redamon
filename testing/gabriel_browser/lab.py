@@ -133,6 +133,7 @@ def text(cdp,popup,identifier):
 
 def run_browser(family,executable,output):
     global stage
+    mark(family+':certificate-store')
     with tempfile.TemporaryDirectory(prefix='gabriel-browser-private-') as private:
         root=Path(private)
         tls=certificates(root)
@@ -271,7 +272,9 @@ def run_browser(family,executable,output):
 
 def main():
     output=Path(sys.argv[1]); output.mkdir(parents=True,exist_ok=True)
+    mark('database-migrate')
     migrate(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']))
+    mark('extension-package')
     metadata=package(SOURCE,output/'gabriel-browser-0.1.0.zip')
     (output/'package.json').write_text(json.dumps(metadata,indent=2))
     manager=subprocess.Popen(['openbox'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
