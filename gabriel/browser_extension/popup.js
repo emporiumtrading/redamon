@@ -1,0 +1,37 @@
+const byId = id => document.getElementById(id);
+let observedAt = null;
+let paired = false;
+const field = (id) => byId(id).value;
+async function run(operation, extra = {}) {
+  byId("message").textContent = operation === "stop" ? "Stopping locally…" : "Working…";
+  try {
+    if (["stop","pause","select"].includes(operation)) paired = false;
+    if (["stop","pause"].includes(operation)) { byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null; }
+    const value = await chrome.runtime.sendMessage({operation, ...extra});
+    if (!value?.ok) throw new Error(value?.error || "Connection lost. Nothing is confirmed.");
+    const result = value.result;
+    if (["pair","resume"].includes(operation)) paired = true;
+    if (operation === "state") paired = result.stored_pairing && !result.paused;
+    if (result.context) { byId("context").value = JSON.stringify(result.context, null, 2); byId("extension-origin").textContent = result.extension_origin; }
+    if (result.content) { byId("preview-text").value = result.content; observedAt = result.observed_at; byId("approved").checked = false; }
+    if (operation === "share" || operation === "stop") { byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null; }
+    byId("message").textContent = result.message || (operation === "preview" ? "Partial preview ready. Review before sharing." : "Page selected. Give this context to your Gabriel operator.");
+    byId("result").textContent = result.receipt ? "Observation " + result.receipt.observation_id + "; evidence " + result.receipt.evidence_id : result.expires_at ? "Pairing expires: " + result.expires_at + (result.organization_id ? "; Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id : "") : "";
+  } catch (error) { byId("message").textContent = error.message; }
+}
+byId("select").onclick = () => run("select", {browser: field("browser"), account: field("account")});
+byId("pair").onclick = () => { const ticket = field("ticket"); byId("ticket").value = ""; return run("pair", {endpoint: field("endpoint"), ticket}); };
+byId("preview").onclick = () => run("preview");
+byId("share").onclick = () => run("share", {content: field("preview-text"), observed_at: observedAt, approved: byId("approved").checked});
+for (const operation of ["status", "receipts", "pause", "resume", "stop"]) byId(operation).onclick = () => run(operation);
+byId("permission").onclick = async () => {
+  try {
+    const value = new URL(field("endpoint"));
+    if (value.protocol !== "https:" || value.username || value.password || value.pathname !== "/" || value.search || value.hash) throw new Error("Enter an HTTPS origin only.");
+    const accepted = await chrome.permissions.request({origins: [value.origin + "/*"]});
+    byId("message").textContent = accepted ? "Permission granted only for this Gabriel origin. Pairing is still required." : "Permission declined.";
+  } catch { byId("message").textContent = "Endpoint permission was not granted."; }
+};
+document.addEventListener("visibilitychange", () => { if (document.hidden) { byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false; } });
+setInterval(() => { if (paired && !document.hidden) run("status"); }, 20000);
+run("state");

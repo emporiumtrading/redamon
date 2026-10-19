@@ -10,6 +10,7 @@ COPY gabriel/identity/checkpoints.py gabriel/identity/checkpoint_service.py gabr
 COPY gabriel/identity/evidence_crypto.py gabriel/identity/evidence_keys.py gabriel/identity/key_retirement.py gabriel/identity/schema_v10.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_sessions.py gabriel/identity/browser_cli.py gabriel/identity/schema_v11.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_observations.py gabriel/identity/schema_v12.sql /app/gabriel/identity/
+COPY gabriel/identity/browser_gateway.py gabriel/identity/gateway_cli.py /app/gabriel/identity/
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]
 
@@ -21,6 +22,8 @@ WORKDIR /repo
 COPY conftest.py pytest.ini /repo/
 COPY tooling/scripts/pytest_isolated.py tooling/scripts/gabriel_identity_prepare.py tooling/scripts/gabriel_provider_keys.py tooling/scripts/gabriel_evidence_keys.py /repo/tooling/scripts/
 COPY testing/gabriel_identity/ /repo/testing/gabriel_identity/
+COPY gabriel/browser_extension/ /repo/gabriel/browser_extension/
+COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
 COPY gabriel/identity/checkpoint_cli.py /app/gabriel/identity/
 USER 10001:10001
 ENTRYPOINT ["python", "tooling/scripts/pytest_isolated.py", "all", "testing/gabriel_identity", "--strict", "--parallel", "1"]
