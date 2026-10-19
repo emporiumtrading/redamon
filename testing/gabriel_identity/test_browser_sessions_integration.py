@@ -15,6 +15,7 @@ from gabriel.identity.browser_sessions import BrowserSessionService,approved_con
 from gabriel.identity.checkpoints import write_document
 from gabriel.identity.service import (AccessDenied,AuthenticationDenied,InvalidIdentityInput,IdentityUnavailable,
     migrate,provision_organization)
+from gabriel.identity.tasks import TaskService
 from testing.gabriel_identity.test_cases_integration import cases,case,audit_permission
 from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
 from testing.gabriel_identity.db_history import remove_v11
@@ -113,7 +114,7 @@ def test_authority_loss_denies_current_browser_session(tenant,browser,context,gr
     browser.connect_browser(grant.token,context)
     row = browser.get_browser_lease(tenant.token,grant.id)
     if change=='human_logout': browser.logout(tenant.token)
-    elif change=='task_cancel': browser.end_task(tenant.token,row['task_id'],'cancelled')
+    elif change=='task_cancel': TaskService(tenant.db.app).end_task(tenant.token,row['task_id'],'cancelled')
     else:
         with owner_connection(tenant.db) as conn:
             if change=='role_change':
