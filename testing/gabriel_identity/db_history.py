@@ -39,8 +39,18 @@ def remove_v7(conn):
 
 
 def remove_v8(conn):
+    remove_v9(conn)
     if conn.execute("SELECT to_regclass('gabriel_identity.retention_policies') AS t").fetchone()['t'] is not None:
         conn.execute('''DROP TABLE gabriel_identity.retention_events,gabriel_identity.purge_attempts,
             gabriel_identity.purge_approvals,gabriel_identity.purge_requests,gabriel_identity.hold_releases,
             gabriel_identity.legal_holds,gabriel_identity.case_hold_versions,gabriel_identity.retention_policies''')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=8')
+
+
+def remove_v9(conn):
+    conn.execute('DROP TRIGGER IF EXISTS require_case_checkpoint ON gabriel_identity.cases')
+    conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_case_checkpoint()')
+    if conn.execute("SELECT to_regclass('gabriel_identity.checkpoint_keys') AS t").fetchone()['t'] is not None:
+        conn.execute('''DROP TABLE gabriel_identity.checkpoint_receipts,gabriel_identity.checkpoint_captures,
+            gabriel_identity.checkpoint_policies,gabriel_identity.checkpoint_key_revocations,gabriel_identity.checkpoint_keys''')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=9')

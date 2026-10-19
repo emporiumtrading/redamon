@@ -120,6 +120,10 @@ def new_keypair():
             {'purpose':PURPOSE,'public_key':base64.b64encode(public).decode()})
 
 
+def public_fingerprint(document):
+    return fingerprint(_key(document).public_bytes(Encoding.Raw,PublicFormat.Raw))
+
+
 def _key(document,private=False):
     field = 'private_key' if private else 'public_key'
     try:

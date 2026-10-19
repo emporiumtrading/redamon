@@ -1,5 +1,7 @@
 # Gabriel local action policy and approvals — increment 8
 
+Tenants with [checkpoint policy](README.GABRIEL_CHECKPOINT_POLICY.md) additionally require a current accepted checkpoint and `--checkpoint-digest` for new local closure. Schema 9 adds the database guard for this configured gate; the existing exact action consent remains required.
+
 Migration 6 adds immutable policy revisions, canonical requests, human approvals, append-only decisions and transactional execution receipts. Migration 7 adds a database compatibility guard without changing migration 6's checksum. The only admitted operation is **Gabriel-local case closure**. There is no external response executor, browser control, external login or generated query program. Unsupported future operations have no placeholder implementations.
 
 ## Authority and exact consent
