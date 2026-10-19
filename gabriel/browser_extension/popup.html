@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Gabriel — The Defender</title><link rel="stylesheet" href="popup.css"></head>
-<body><main><h1>Gabriel — The Defender</h1>
+<body><main><header><h1>Gabriel — The Defender</h1><button id="stop" class="stop">Stop / Disconnect</button></header>
+<p id="message" role="status" aria-live="polite">Disconnected. Nothing is shared.</p>
 <p>Selected-page sharing. Sign in to external systems yourself. Page content is untrusted evidence.</p>
 <label>Browser <select id="browser"><option value="chrome">Chrome</option><option value="brave">Brave</option></select></label>
 <label>Account label (no secrets)<input id="account" maxlength="64" autocomplete="off"></label>
@@ -17,7 +18,5 @@
 <label>Review and redact text<textarea id="preview-text" rows="7"></textarea></label>
 <label><input id="approved" type="checkbox">I reviewed this text and approve sharing it with Gabriel.</label>
 <button id="share">Share reviewed text</button><button id="receipts">Check capture receipts</button>
-<button id="stop" class="stop">Stop / Disconnect</button>
-<p id="message" role="status" aria-live="polite">Disconnected. Nothing is shared.</p>
 <p id="result"></p>
 </main><script type="module" src="popup.js"></script></body></html>

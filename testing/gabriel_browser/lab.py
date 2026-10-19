@@ -166,6 +166,8 @@ def run_browser(family,executable,output):
             wait_for(lambda:cdp.evaluate(console,'document.title')=='Generated Gabriel Lab Console')
             mark(family+':native-popup')
             popup=native_popup(cdp,target,origin)
+            assert cdp.evaluate(popup,"window.scrollTo(0,document.body.scrollHeight); (()=>{const r=document.getElementById('stop').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;})()")
+            cdp.evaluate(popup,'window.scrollTo(0,0);true')
             cdp.evaluate(popup,"document.getElementById('account').value='Generated lab account'; document.getElementById('browser').value="+json.dumps(family))
             click(cdp,popup,'select')
             wait_for(lambda:cdp.evaluate(popup,"document.getElementById('context').value") or None)
@@ -179,12 +181,12 @@ def run_browser(family,executable,output):
             click(cdp,popup,'permission')
             # The native browser permission prompt is deliberately exercised, not bypassed by test host grants.
             time.sleep(0.5)
-            subprocess.run(['xdotool','key','--clearmodifiers','Return'],check=True,timeout=5)
+            # Chromium focuses Deny by default; tab to Allow rather than accepting the default.
+            subprocess.run(['xdotool','key','--clearmodifiers','Tab','Return'],check=True,timeout=5)
             time.sleep(0.25)
             existing=next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None)
             popup=cdp.attach(existing['targetId']) if existing else native_popup(cdp,target,origin)
-            granted=cdp.evaluate(popup,'chrome.permissions.contains({origins:['+json.dumps(endpoint+'/*')+']})')
-            assert granted
+            wait_for(lambda:cdp.evaluate(popup,'chrome.permissions.contains({origins:['+json.dumps(endpoint+'/*')+']})'))
             owner=read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE'])
             app=read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE'])
             password=secrets.token_urlsafe(24)
@@ -246,7 +248,7 @@ def run_browser(family,executable,output):
             log.flush(); gateway_log.flush()
             assert all(secret not in (root/'browser.log').read_text()+(root/'gateway.log').read_text() for secret in (human,peer,ticket))
             report={'status':'PASS','browser_family':family,'browser_product':version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
-                'extension_version':'0.1.0','extension_origin':origin,'checks':['native_action','real_document_binding','endpoint_permission',
+                'extension_version':'0.1.0','extension_origin':origin,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
