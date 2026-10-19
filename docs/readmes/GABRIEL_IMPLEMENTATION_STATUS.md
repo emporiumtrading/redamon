@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Evidence-key lifecycle increment 12 — component verification pending
+
+Baseline: `630900b4101b2e036d7bf97c7450918dc0d046f1`. Links: C04, GAB-003/GAB-005/GAB-006/GAB-007/GAB-008/GAB-037/GAB-038, T06/T09/T10/T11/T12/T27 and CV-08. Owner: Codex; independent reviewer acceptance pending. Component **IMPLEMENTED_UNVERIFIED**; lifecycle/release **BLOCKED**. See [key lifecycle guide](README.GABRIEL_EVIDENCE_KEYS.md).
+
+Schema 10 adds tenant key epochs, separate encryption bindings, durable prepared replacements and result receipts while preserving original evidence metadata/AAD/hashes/custody. Authenticated temporary ciphertext is read back, source/caller/epoch/audit are rechecked, replacement is atomic and synced, and final receipt persistence is separate. A lost completion remains prepared; observation-only reconciliation proves original or target ciphertext without another replacement. Current-code downgrade and old SQL mutation guards deny stale generations. Tenant and migration-operator global live-reference reports explicitly do not authorize physical key deletion or certify historical backups.
+
+Hypothesis: rollover preserves original evidence and signed custody, cannot falsely complete after corruption/audit/session failure, and survives coherent restart/restore with required old keys retained. New actual database/filesystem/CLI/crypto and recovery probes await hosted execution; no host pytest substitutes for unavailable local Docker. Source/counts/artifact evidence pending. Independent review, historical backup/key custody, governance and full integrated UAT remain open. The engineering loop continues into the next ready browser prerequisite after this component's verification; a component pass is not a release approval.
+
 ## Checkpoint trust-policy increment 11 — component verified
 
 Baseline: `051e4357698ac5dab6cc39260e7d4374d3abdf98`. Links: GAB-003/GAB-005/GAB-006/GAB-007/GAB-008/GAB-037/GAB-038, C04, T06/T07/T08/T09/T11/T12/T27 and CV-04. Owner: Codex; independent reviewer acceptance pending. Component VM checks **PASS**; lifecycle/release **BLOCKED**. Existing C00–C04 gates remain open.

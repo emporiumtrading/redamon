@@ -48,9 +48,22 @@ def remove_v8(conn):
 
 
 def remove_v9(conn):
+    remove_v10(conn)
     conn.execute('DROP TRIGGER IF EXISTS require_case_checkpoint ON gabriel_identity.cases')
     conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_case_checkpoint()')
     if conn.execute("SELECT to_regclass('gabriel_identity.checkpoint_keys') AS t").fetchone()['t'] is not None:
         conn.execute('''DROP TABLE gabriel_identity.checkpoint_receipts,gabriel_identity.checkpoint_captures,
             gabriel_identity.checkpoint_policies,gabriel_identity.checkpoint_key_revocations,gabriel_identity.checkpoint_keys''')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=9')
+
+
+def remove_v10(conn):
+    conn.execute('DROP TRIGGER IF EXISTS require_evidence_insert_epoch ON gabriel_identity.evidence_objects')
+    conn.execute('DROP TRIGGER IF EXISTS require_evidence_update_epoch ON gabriel_identity.evidence_objects')
+    conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_evidence_epoch()')
+    if conn.execute("SELECT to_regclass('gabriel_identity.evidence_rewraps') AS t").fetchone()['t']:
+        conn.execute('DROP TRIGGER IF EXISTS require_rewrap_result ON gabriel_identity.evidence_rewraps')
+    conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_rewrap_result()')
+    if conn.execute("SELECT to_regclass('gabriel_identity.evidence_key_epochs') AS t").fetchone()['t'] is not None:
+        conn.execute('DROP TABLE gabriel_identity.evidence_rewrap_results,gabriel_identity.evidence_rewraps,gabriel_identity.evidence_key_epochs')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=10')

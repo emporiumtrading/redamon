@@ -149,6 +149,50 @@ class LocalEvidenceStore:
         except (OSError,ValueError,UnicodeError,IdentityError):
             raise EvidenceError('evidence_store_identity_unavailable') from None
 
+    def replace_encryption(self,row,aad,target_key_id,*,admit):
+        content = self.read(row,aad)
+        temporary = uuid4().hex+'.rewrap'
+        root = self._open_root()
+        try:
+            nonce = os.urandom(12)
+            sealed = nonce+AESGCM(self.keys._key(target_key_id)).encrypt(nonce,content,aad)
+            fd = os.open(temporary,os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,0o600,dir_fd=root)
+            with os.fdopen(fd,'w+b') as stream:
+                stream.write(sealed)
+                stream.flush()
+                os.fsync(stream.fileno())
+                stream.seek(0)
+                written = stream.read(MAX_BYTES+29)
+                if AESGCM(self.keys._key(target_key_id)).decrypt(written[:12],written[12:],aad)!=content:
+                    raise ValueError
+                os.fchmod(stream.fileno(),0o444)
+                os.fsync(stream.fileno())
+            if self.read(row,aad)!=content:
+                raise ValueError
+            admit()
+            os.replace(temporary,self._name(row['object_id']),src_dir_fd=root,dst_dir_fd=root)
+            os.fsync(root)
+        except (OSError,ValueError,InvalidTag):
+            raise EvidenceError('evidence_rewrap_file_unconfirmed') from None
+        finally:
+            try:
+                try:
+                    os.unlink(temporary,dir_fd=root)
+                except FileNotFoundError:
+                    pass
+            finally:
+                os.close(root)
+
+    def sync(self):
+        try:
+            root = self._open_root()
+            try:
+                os.fsync(root)
+            finally:
+                os.close(root)
+        except OSError:
+            raise EvidenceError('evidence_store_sync_failed') from None
+
     def absent(self,row,*,sync=False):
         try:
             root = self._open_root()
