@@ -231,7 +231,8 @@ class Workbench:
         return '200 OK',self._page(snapshot['case']['title'],body,principal),[]
 
     def __call__(self,environ,start_response):
-        headers=[('Content-Type','text/html; charset=utf-8'),('Cache-Control','no-store'),('X-Content-Type-Options','nosniff'),('Referrer-Policy','no-referrer'),('X-Frame-Options','DENY'),('Content-Security-Policy',"default-src 'none'; style-src 'sha256-"+STYLE_HASH+"'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),('Cross-Origin-Resource-Policy','same-origin')]
+        # Preserve the same-origin form Origin; suppress referrers to external destinations.
+        headers=[('Content-Type','text/html; charset=utf-8'),('Cache-Control','no-store'),('X-Content-Type-Options','nosniff'),('Referrer-Policy','same-origin'),('X-Frame-Options','DENY'),('Content-Security-Policy',"default-src 'none'; style-src 'sha256-"+STYLE_HASH+"'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"),('Cross-Origin-Resource-Policy','same-origin')]
         status='403 Forbidden'
         body=self._page('Access unavailable','<p>Check your access, scope and ticket expiry with your Gabriel operator.</p>')
         try:

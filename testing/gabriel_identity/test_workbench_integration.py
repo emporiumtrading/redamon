@@ -139,7 +139,7 @@ def test_case_form_persists_one_case_under_concurrent_replay(tenant,cases,server
     assert code==200 and '<script>alert(1)</script>' not in html and '&lt;script&gt;' in html
 
 
-@pytest.mark.parametrize('attack',['missing_csrf','wrong_origin','duplicate_field','forwarding','wrong_host','query','cross_site','duplicate_cookie','get_body','json','unknown_route'])
+@pytest.mark.parametrize('attack',['missing_csrf','wrong_origin','null_origin','duplicate_field','forwarding','wrong_host','query','cross_site','duplicate_cookie','get_body','json','unknown_route'])
 def test_boundary_denials_do_not_create_case(tenant,cases,server,attack):
     cookie,token,_=connect(server)
     _,form,_=call(server,'/cases/new',cookie=cookie)
@@ -149,6 +149,7 @@ def test_boundary_denials_do_not_create_case(tenant,cases,server,attack):
     kwargs=dict(cookie=cookie)
     if attack=='missing_csrf': fields.pop('csrf')
     elif attack=='wrong_origin': kwargs['origin']='https://generated-hostile.invalid'
+    elif attack=='null_origin': kwargs['origin']='null'
     elif attack=='duplicate_field': kwargs['raw']=urlencode(fields)+'&csrf='+token
     elif attack=='forwarding': kwargs['headers']={'X-Forwarded-Proto':'https'}
     elif attack=='wrong_host': kwargs['headers']={'Host':'generated-hostile.invalid'}
