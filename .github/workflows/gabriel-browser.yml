@@ -1,0 +1,31 @@
+name: Gabriel packaged browser lab
+on:
+  push:
+    branches: ['feature/gabriel-browser-lab']
+    paths: ['gabriel/**', 'testing/gabriel_browser/**', 'testing/gabriel_identity/tls_lab.py', 'tooling/scripts/gabriel_browser_check.sh', 'tooling/scripts/gabriel_extension_package.py', 'compose.gabriel-browser-lab.yml', '.github/workflows/gabriel-browser.yml']
+  pull_request:
+    paths: ['gabriel/**', 'testing/gabriel_browser/**', 'testing/gabriel_identity/tls_lab.py', 'tooling/scripts/gabriel_browser_check.sh', 'tooling/scripts/gabriel_extension_package.py', 'compose.gabriel-browser-lab.yml', '.github/workflows/gabriel-browser.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gabriel-browser-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Packaged Chrome and Brave isolated TLS browser lab
+        run: bash tooling/scripts/gabriel_browser_check.sh "$RUNNER_TEMP/gabriel-browser-evidence"
+      - name: Retain safe browser evidence and package
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-browser-evidence
+          path: ${{ runner.temp }}/gabriel-browser-evidence
+          if-no-files-found: error
+          retention-days: 14

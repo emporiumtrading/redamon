@@ -37,4 +37,24 @@ COPY gabriel/identity/__init__.py gabriel/identity/checkpoints.py gabriel/identi
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.checkpoint_cli"]
 
+FROM runtime AS browser-lab
+USER 0:0
+ARG LAB_UID=10001
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip libnss3-tools xvfb xauth xdotool openbox scrot fonts-liberation \
+    && curl --fail --location --proto '=https' --tlsv1.2 https://github.com/brave/brave-browser/releases/download/v1.97.59/brave-browser_1.97.59_amd64.deb -o /tmp/brave.deb \
+    && echo '666f817b640a3284fbb5c9b34917b78854e2acd92fa7febad704dc2b29349be5  /tmp/brave.deb' | sha256sum -c - \
+    && apt-get install -y --no-install-recommends /tmp/brave.deb \
+    && curl --fail --location --proto '=https' --tlsv1.2 https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.84/linux64/chrome-linux64.zip -o /tmp/chrome.zip \
+    && unzip -q /tmp/chrome.zip -d /opt \
+    && pip install --no-cache-dir websocket-client==1.9.0 \
+    && useradd --uid "$LAB_UID" --create-home browserlab
+COPY gabriel/browser_extension/ /repo/gabriel/browser_extension/
+COPY testing/gabriel_browser/ /repo/testing/gabriel_browser/
+COPY testing/gabriel_identity/tls_lab.py /repo/testing/gabriel_identity/
+COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
+ENV PYTHONPATH=/app:/repo
+WORKDIR /repo
+USER browserlab
+ENTRYPOINT ["xvfb-run", "-a", "python", "testing/gabriel_browser/lab.py"]
+
 FROM runtime AS production
