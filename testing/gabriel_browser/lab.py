@@ -151,6 +151,7 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
                     with socket.create_connection(('127.0.0.1',port),timeout=0.2): return True
                 except OSError: return False
             wait_for(ready,12)
+            mark(family+':workbench-claim-page')
             tab=cdp.send('Target.createTarget',{'url':target+'/claim'})['targetId']
             session=cdp.attach(tab)
             cdp.send('Page.enable',session=session)
@@ -161,6 +162,7 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
                     except AssertionError: return False
                 return wait_for(read)
             loaded("Boolean(document.querySelector('input[name=ticket]'))")
+            mark(family+':workbench-claim-submit')
             cdp.evaluate(session,"document.querySelector('input[name=ticket]').value="+json.dumps(ticket)+";document.querySelector('form').requestSubmit();true")
             loaded("document.title==='Investigations · Gabriel'")
             html=cdp.evaluate(session,'document.documentElement.outerHTML')
@@ -200,7 +202,10 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             logfile.flush()
             assert human not in (root/'workbench.log').read_text() and ticket not in (root/'workbench.log').read_text()
         finally:
-            process.terminate(); process.wait(timeout=10)
+            process.terminate()
+            try: process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.wait(timeout=5)
 
 
 def run_browser(family,executable,output):
