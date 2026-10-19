@@ -406,6 +406,10 @@ def test_real_cli_intake_verify_export_and_close(tenant,tmp_path):
     assert code==0 and reported['result']['snapshot']['case']['id']==case_id
     assert reported['result']['snapshot']['evidence'][0]['id']==evidence_id
     assert reported['result']['snapshot']['content_integrity']=='not_checked'
+    code,projected=cli('graph','--case-id',case_id)
+    assert code==0 and projected['result']['projection']['case_id']==case_id
+    assert {node['kind'] for node in projected['result']['projection']['nodes']}=={'case','evidence'}
+    assert projected['result']['projection']['assessment']=='not_performed'
     assert cli('custody','--evidence-id',evidence_id)[0]==0
     assert cli('verify','--case-id',case_id)[1]['result']['complete']
     assert cli('assign','--case-id',case_id,'--request-id',str(uuid4()),'--member-id',str(tenant.owner))[0]==0

@@ -88,7 +88,7 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('create','list','get','report','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
+    parser.add_argument('command',choices=('create','list','get','report','graph','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
@@ -219,6 +219,8 @@ def main():
             result = service.get_case(token,args.case_id)
         elif args.command=='report':
             result = service.case_report(token,args.case_id)
+        elif args.command=='graph':
+            result = service.case_graph(token,args.case_id)
         elif args.command=='workflow-get':
             result = service.case_workflow(token,args.case_id)
         elif args.command=='assign':

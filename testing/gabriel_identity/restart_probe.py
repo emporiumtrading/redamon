@@ -202,6 +202,7 @@ if sys.argv[1] == 'before':
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
         'workflow_assignment':assignment['id'],'workflow_question':question,
+        'provenance_digest':cases.case_graph(token,case['id'])['digest'],
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
         'case_id':str(case['id']),'evidence_id':str(evidence['id']),
@@ -277,6 +278,7 @@ elif sys.argv[1] in {'after','restored'}:
     assert report_snapshot['evidence']==saved['report_evidence']
     assert all(event in report_snapshot['timeline'] for event in saved['report_timeline'])
     assert report_snapshot['assessment']=='not_performed' and report_snapshot['content_integrity']=='not_checked'
+    assert cases.case_graph(saved['token'],saved['case_id'])['digest']==saved['provenance_digest']
     workflow=cases.case_workflow(saved['token'],saved['case_id'])
     assert workflow['assignment']['id']==saved['workflow_assignment'] and workflow['assignment']['assignee_active']
     assert workflow['questions'][0]['id']==saved['workflow_question'] and workflow['questions'][0]['state']=='human_answer_supplied'
@@ -350,6 +352,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: durable task/receipt replay survived recovery without another step; task cancellation enforced')
     print('PASS: case linkage and encrypted evidence/custody survived recovery; integrity-checked closure enforced')
     print('PASS: metadata report reconstructed evidence and prior timeline after recovery without inventing source truth or content-integrity verification')
+    print('PASS: case provenance graph rebuilt with identical checksum after actual database recovery')
     print('PASS: append-only case assignment and evidence-linked analyst answer survived recovery without granting authority or learned truth')
     print('PASS: exact policy/approval survived recovery; pending local closure executed and completed receipt replayed')
     print('PASS: legal hold and retention survived recovery; completed purge retained and interrupted unlink reconciled without another deletion')

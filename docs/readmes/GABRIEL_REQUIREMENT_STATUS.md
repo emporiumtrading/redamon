@@ -9,7 +9,7 @@ Baseline: final code source `012a877c616a5b2480fa0edb321a2a81cdf79813` passed 58
 | GAB-003 | Database identities, tenant predicates and bounded worker/browser grants tested; new HTTPS gateway and all future interfaces require acceptance. |
 | GAB-004 | Hashed accounts and encrypted provider vault tested; enabled provider/connector and operational secret custody acceptance remain open. |
 | GAB-005 | Transactional audit admission tested for current mutations; new product interfaces need equivalent tests and review. |
-| GAB-006 | Verified cases/tasks/approval state; workbench and append-only case workflow now implemented with hosted checks queued. Scoped memory and graph projection remain outstanding. |
+| GAB-006 | Verified cases/tasks/approval state; workbench, append-only case workflow and rebuildable case provenance projection implemented with hosted verification pending. Scoped memory and complete integrated acceptance remain outstanding. |
 | GAB-007 | Encrypted evidence/custody and unverified observation lineage tested; actual client/source adapters and deduplication outstanding. |
 | GAB-008 | Fresh migrations, restart/dump/restore and interrupted evidence operations tested; integrated product and external-effect recovery outstanding. |
 | GAB-009 | Real MV3 package and Chrome for Testing/Brave generated-console journey verified; consumer Chrome/OS matrix, full human UAT and reviewed distribution outstanding. |
@@ -25,7 +25,7 @@ Baseline: final code source `012a877c616a5b2480fa0edb321a2a81cdf79813` passed 58
 | GAB-019 | Lease versions, deterministic package hash and observed lab source/image/binary hashes recorded; full compatibility, distribution and managed upgrade recovery outstanding. |
 | GAB-020 | Browser source health/authority display implemented with checks queued; environment/control profile, ownership/recovery dependencies and discrepancies remain outstanding. |
 | GAB-021 | Proactive hunt selection/execution and benign alternatives not implemented or evaluated. |
-| GAB-022 | Persisted case/evidence reports and distinct-clock/custody timelines verified; workbench, assignments and evidence-linked questions implemented with checks queued. Entity/event correlation, event-level deduplication and report history remain outstanding. |
+| GAB-022 | Persisted case/evidence reports and distinct-clock/custody timelines verified; workbench, assignments, evidence-linked questions and provenance projection implemented with verification pending. Entity/event correlation, event-level deduplication and report history remain outstanding. |
 | GAB-023 | No model assessment engine admitted; evidence-linked revisions, abstention and escalation outstanding. |
 | GAB-024 | Case queue and assignment/question handoff implemented with checks queued; prioritization, correlated bundles, routine batching, urgent escalation and approval inbox remain outstanding. |
 | GAB-025 | Initial real case/evidence/report/browser-health/audit screens and control inventory implemented with checks queued; remaining R1 screens, full states, accessibility and human UAT outstanding. |

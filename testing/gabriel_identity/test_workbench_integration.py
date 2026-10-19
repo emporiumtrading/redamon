@@ -124,6 +124,27 @@ def test_https_case_report_custody_and_explicit_content_view(tenant,cases,case,e
     assert call(server,'/cases',cookie=cookie)[0]==403
 
 
+@pytest.mark.parametrize('boot',['owner','viewer'],indirect=True)
+def test_provenance_screen_and_download_use_actual_case_metadata(tenant,cases,case,evidence,server):
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])
+    code,html,_=call(server,path+'/relationships',cookie=cookie)
+    assert code==200 and 'Case provenance' in html and 'contains evidence' in html
+    assert CONTENT not in html and tenant.token not in html
+    code,body,headers=call(server,path+'/graph',cookie=cookie)
+    graph=json.loads(body)['projection']
+    assert code==200 and headers['Content-Type']=='application/json'
+    assert {node['record_id'] for node in graph['nodes']}=={str(case['id']),str(evidence['id'])}
+    assert graph['assessment']=='not_performed' and CONTENT not in body
+    assert call(server,path+'/graph',dict(csrf=token),cookie=cookie)[0]==403
+    password=secrets.token_urlsafe(24)
+    organization,_=provision_organization(tenant.db.owner,'Generated foreign graph owner','owner',password)
+    other=cases.login(organization,'owner',password).token
+    other_case=cases.create_case(other,'Generated foreign graph case')
+    for view in ('relationships','graph'):
+        assert call(server,'/cases/'+str(other_case['id'])+'/'+view,cookie=cookie)[0]==403
+
+
 def test_case_form_persists_one_case_under_concurrent_replay(tenant,cases,server):
     cookie,token,_=connect(server)
     code,html,_=call(server,'/cases/new',cookie=cookie)

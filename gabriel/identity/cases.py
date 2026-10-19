@@ -168,6 +168,10 @@ class CaseService(IdentityService):
         from gabriel.identity.reports import case_report
         return case_report(self,token,case_id)
 
+    def case_graph(self,token,case_id):
+        from gabriel.identity.case_graph import case_graph
+        return case_graph(self,token,case_id)
+
     def get_case(self,token,case_id):
         with connection(self._dsn) as conn:
             principal = self._human(conn,token)
