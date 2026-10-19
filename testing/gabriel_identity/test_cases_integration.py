@@ -408,6 +408,14 @@ def test_real_cli_intake_verify_export_and_close(tenant,tmp_path):
     assert reported['result']['snapshot']['content_integrity']=='not_checked'
     assert cli('custody','--evidence-id',evidence_id)[0]==0
     assert cli('verify','--case-id',case_id)[1]['result']['complete']
+    assert cli('assign','--case-id',case_id,'--request-id',str(uuid4()),'--member-id',str(tenant.owner))[0]==0
+    code,question=cli('question-add','--case-id',case_id,'--request-id',str(uuid4()),'--question','Generated CLI investigation question')
+    assert code==0
+    assert cli('question-answer','--case-id',case_id,'--question-id',question['result']['question_id'],
+        '--evidence-id',evidence_id,'--answer','Generated CLI analyst interpretation')[0]==0
+    code,workflow=cli('workflow-get','--case-id',case_id)
+    assert code==0 and workflow['result']['assignment']['assigned_to']==str(tenant.owner)
+    assert workflow['result']['questions'][0]['state']=='human_answer_supplied'
     output = tmp_path/'export.txt'
     assert cli('export','--evidence-id',evidence_id,'--output',str(output))[0]==0
     assert output.read_text()==CONTENT

@@ -107,10 +107,23 @@ def test_audit_failure_rolls_back_workflow(tenant,cases,case,evidence,operation)
 
 
 @pytest.mark.parametrize('table',['case_assignments','case_questions','case_question_answers'])
-def test_runtime_cannot_rewrite_workflow_history(tenant,table):
+@pytest.mark.parametrize('operation',['delete','update'])
+def test_runtime_cannot_rewrite_workflow_history(tenant,table,operation):
     with psycopg.connect(tenant.db.app) as conn:
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
-            conn.execute('DELETE FROM gabriel_identity.'+table)
+            conn.execute(('DELETE FROM ' if operation=='delete' else 'UPDATE ')+'gabriel_identity.'+table+
+                ('' if operation=='delete' else ' SET created_at=clock_timestamp()'))
+
+
+def test_database_rejects_answer_evidence_from_another_case(tenant,cases,case):
+    question=cases.add_question(tenant.token,case['id'],uuid4(),'Generated foreign-key question')
+    other=cases.create_case(tenant.token,'Other generated constraint case')
+    artifact=intake(tenant,cases,other)
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            conn.execute('''INSERT INTO gabriel_identity.case_question_answers
+                (organization_id,question_id,case_id,evidence_id,answer,answered_by) VALUES (%s,%s,%s,%s,%s,%s)''',
+                (tenant.org,question,case['id'],artifact['id'],'Rejected cross-case reference',tenant.owner))
 
 
 def test_v12_upgrade_and_interrupted_upgrade_preserve_cases(tenant,cases,case,monkeypatch):

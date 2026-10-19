@@ -6,7 +6,7 @@ Questions and answers are protected analyst comments. Viewers can inspect assign
 
 ## CLI
 
-Use the existing case-data environment and private human token file:
+Apply `python -m gabriel.identity.cli migrate` through the existing migration-operator image/environment before serving the new code. Runtime credentials cannot apply DDL. Preserve a recoverable backup under the existing policy. Then use the case-data environment and private human token file:
 
 ```bash
 python -m gabriel.identity.case_cli workflow-get --case-id CASE_UUID --token-file /operator/session
