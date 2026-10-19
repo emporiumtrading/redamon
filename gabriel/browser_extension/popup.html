@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Gabriel — The Defender</title><link rel="stylesheet" href="popup.css"></head>
+<body><main><h1>Gabriel — The Defender</h1>
+<p>Selected-page sharing. Sign in to external systems yourself. Page content is untrusted evidence.</p>
+<label>Browser <select id="browser"><option value="chrome">Chrome</option><option value="brave">Brave</option></select></label>
+<label>Account label (no secrets)<input id="account" maxlength="64" autocomplete="off"></label>
+<button id="select">Select current page</button>
+<label>Approved context for your Gabriel operator<textarea id="context" readonly rows="7"></textarea></label>
+<p id="extension-origin"></p>
+<label>Approved Gabriel HTTPS endpoint<input id="endpoint" type="url" placeholder="https://gabriel.example" autocomplete="off"></label>
+<button id="permission">Allow this Gabriel endpoint</button>
+<label>Single-use pairing ticket<input id="ticket" type="password" autocomplete="off"></label>
+<button id="pair">Pair</button><button id="status">Check scope / heartbeat</button>
+<button id="pause">Pause sharing</button><button id="resume">Resume and recheck</button>
+<button id="preview">Preview selected text</button>
+<p>Partial visibility: frames, images, covered content and unloaded rows are not verified. Review and remove sensitive text before sharing.</p>
+<label>Review and redact text<textarea id="preview-text" rows="7"></textarea></label>
+<label><input id="approved" type="checkbox">I reviewed this text and approve sharing it with Gabriel.</label>
+<button id="share">Share reviewed text</button><button id="receipts">Check capture receipts</button>
+<button id="stop" class="stop">Stop / Disconnect</button>
+<p id="message" role="status" aria-live="polite">Disconnected. Nothing is shared.</p>
+<p id="result"></p>
+</main><script type="module" src="popup.js"></script></body></html>

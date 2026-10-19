@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Browser client/gateway increment 16 — component verification pending
+
+Baseline: `41ed782a99d44334a12b9f8bb4bcb990b1bc94dd`. Requirements: GAB-003/GAB-005/GAB-007/GAB-009–GAB-013/GAB-016/GAB-018/GAB-019/GAB-038/GAB-040. Status **IMPLEMENTED_UNVERIFIED**, independent protocol/privacy/security review pending. See [operator flow and boundaries](README.GABRIEL_BROWSER_CLIENT.md), [all forty requirement gaps](GABRIEL_REQUIREMENT_STATUS.md), and the existing B0 candidate design.
+
+Adds native-TLS finite HTTP admission, private operator enrollment, exact endpoint/extension origin, a single-use short-lived claim, original-human session binding entirely on the trusted side, restart-proof bootstrap marker and bounded serialized requests. The real MV3 sources implement selected-document observation, minimization/preview, exact context, explicit sharing approval, session-only peer storage, uncertain-outcome cursor, receipts, Pause/Resume and Stop/Disconnect. Deterministic packaging rejects unreviewed files/permissions and never overwrites an existing output. No vendor login, query authoring, navigation, response operation or vendor API prerequisite is added.
+
+New matching-image tests use real TLS, PostgreSQL, encrypted custody, concurrent claim replay, invalid TLS trust, wrong origin/host/context/ticket, audit/session/task loss, restart denial and exact package contents. Source-specific counts and actual packaged Chrome/Brave outcomes remain pending; no host pytest or browser success is substituted. The full PRD still includes unimplemented workbench, correlation, specialists, model routes/evaluations, memory, selected tool/response and managed-operations work. Product acceptance requires real pilot/model/response decisions, independent review and human pre/post-release UAT.
+
 ## Browser privacy and recovery visibility increment 15 — component verified
 
 Baseline: observation repair source `5eedc4bce307598def820d2e0cabdf623f189091`, draft PR 15, whose full 534-case/recovery VM gate subsequently passed. Links: C05/B0/B1, GAB-003/GAB-005/GAB-006/GAB-014/GAB-015 and CV-06. Component VM checks **PASS**; real-browser/product acceptance **BLOCKED**.

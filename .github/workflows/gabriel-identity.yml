@@ -1,10 +1,12 @@
 name: Gabriel database identity
 on:
   push:
-    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity', 'feature/gabriel-provider-secrets', 'feature/gabriel-durable-tasks', 'feature/gabriel-case-evidence', 'feature/gabriel-action-approvals', 'feature/gabriel-retention-holds', 'feature/gabriel-custody-checkpoints', 'feature/gabriel-checkpoint-policy', 'feature/gabriel-evidence-key-lifecycle', 'feature/gabriel-browser-pairing', 'feature/gabriel-browser-observations', 'feature/gabriel-browser-privacy-guards']
+    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity', 'feature/gabriel-provider-secrets', 'feature/gabriel-durable-tasks', 'feature/gabriel-case-evidence', 'feature/gabriel-action-approvals', 'feature/gabriel-retention-holds', 'feature/gabriel-custody-checkpoints', 'feature/gabriel-checkpoint-policy', 'feature/gabriel-evidence-key-lifecycle', 'feature/gabriel-browser-pairing', 'feature/gabriel-browser-observations', 'feature/gabriel-browser-privacy-guards', 'feature/gabriel-browser-client']
     paths:
       - 'gabriel/capabilities.py'
       - 'gabriel/identity/**'
+      - 'gabriel/browser_extension/**'
+      - 'tooling/scripts/gabriel_extension_package.py'
       - 'testing/gabriel_identity/**'
       - 'tooling/scripts/gabriel_identity_*.py'
       - 'tooling/scripts/gabriel_provider_keys.py'
@@ -17,6 +19,8 @@ on:
     paths:
       - 'gabriel/capabilities.py'
       - 'gabriel/identity/**'
+      - 'gabriel/browser_extension/**'
+      - 'tooling/scripts/gabriel_extension_package.py'
       - 'testing/gabriel_identity/**'
       - 'tooling/scripts/gabriel_identity_*.py'
       - 'tooling/scripts/gabriel_provider_keys.py'
