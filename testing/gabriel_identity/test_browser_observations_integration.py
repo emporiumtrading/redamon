@@ -147,7 +147,9 @@ def test_invalid_envelope_rejected_without_durable_effects(tenant,browser,grant,
     assert not rows(tenant,'browser_observations') and not rows(tenant,'evidence_objects')
 
 
-@pytest.mark.parametrize('content',['password=generated-secret','Authorization: Bearer generated','cookie: generated','otp: 123456'])
+@pytest.mark.parametrize('content',['password=generated-secret','Authorization: Bearer generated','cookie: generated','otp: 123456',
+    '{"password": "generated-secret"}',"{'access_token': 'generated'}",'{"Authorization": "Bearer generated"}',
+    'api_key=generated','api-key: generated','client_secret=generated','secret_access_key=generated'])
 def test_secret_like_content_requires_privacy_review(tenant,browser,grant,payload,content):
     with pytest.raises(AccessDenied,match='privacy_review_required'): submit(tenant,browser,grant,dict(payload,content=content))
     assert not rows(tenant,'browser_observations')

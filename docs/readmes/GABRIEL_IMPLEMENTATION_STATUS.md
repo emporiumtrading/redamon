@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Browser privacy increment 15 — component verification pending
+
+Baseline: observation repair source `5eedc4bce307598def820d2e0cabdf623f189091`, draft PR 15, whose full VM gate is pending. Links: C05/B0/B1, GAB-003/GAB-005/GAB-006/GAB-014/GAB-015 and CV-06. Component **IMPLEMENTED_UNVERIFIED**; real-browser/product acceptance **BLOCKED**.
+
+Review found two concrete lexical bypasses before client integration: percent-encoded sign-in routes/token-like fragments were checked only in their raw representation, and quoted JSON secret keys were not recognized by the conservative content filter. URL admission now inspects up to four strict decoding layers for sensitive routes, query/fragment delimiters, controls and backslashes, rejecting deeper encoding. It retains the exact original URL for scope binding rather than silently normalizing it. Safe encoded Unicode routes remain supported. The content filter recognizes quoted keys plus common API/client secret assignments; it still cannot prove secret absence or minimization.
+
+Eleven new actual SQL pairing cases cover ten unsafe encoded routes/fragments and one exact-bound safe Unicode route. Seven additional real intake denial cases cover quoted keys and API/client secret forms. Existing tests/assertions remain intact. Matching-image full regression/recovery must pass before this component is marked verified. No migration, authority expansion, browser executor or external sign-in is added. Local AST/diff checks pass; independent review, packaged Chrome/Brave client, actual console UAT and release gates remain open. See the next client/gateway design for the subsequent loop.
+
 ## Browser observation increment 14 — component verification pending
 
 Baseline: pairing repair source `bed2632d84f587c962ac9ab9ac5df7eac9165a6c`; depends on draft PR 14. Links: C05/B1, GAB-003/GAB-005/GAB-006/GAB-013/GAB-014/GAB-015/GAB-037/GAB-038 and CV-06. Component **IMPLEMENTED_UNVERIFIED**; browser/product release **BLOCKED**. See [intake, privacy and recovery contract](README.GABRIEL_BROWSER_OBSERVATIONS.md).

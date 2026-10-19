@@ -76,6 +76,26 @@ def test_invalid_unsafe_or_unsupported_context_is_denied(context,field,value):
     with pytest.raises(InvalidIdentityInput): approved_context(context)
 
 
+@pytest.mark.parametrize('suffix',[
+    '/%6cogin','/%256cogin','/s%73o/callback','/security#token%3Dgenerated',
+    '/security#token%253Dgenerated','/security%3Faccess_token=generated','/security%250Aheader',
+    '/security%252525250Aheader','/security%5Cother','/security%C0%AF',
+])
+def test_encoded_sensitive_routes_and_fragment_secrets_cannot_bypass_scope_review(tenant,browser,case,task,context,suffix):
+    context['page_url']='https://generated-console.invalid'+suffix
+    with pytest.raises(InvalidIdentityInput): browser.issue_browser_lease(tenant.token,task['id'],case['id'],context)
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.browser_leases WHERE organization_id=%s',(tenant.org,)).fetchone()['n']==0
+
+
+def test_safe_encoded_unicode_route_keeps_exact_original_binding(tenant,browser,case,task,context):
+    context['page_url']='https://generated-console.invalid/caf%C3%A9/events'
+    grant = browser.issue_browser_lease(tenant.token,task['id'],case['id'],context)
+    assert browser.connect_browser(grant.token,context)['paired']
+    changed=dict(context,page_url='https://generated-console.invalid/caf%c3%a9/events')
+    with pytest.raises(AccessDenied): browser.heartbeat_browser(grant.token,changed)
+
+
 @pytest.mark.parametrize('field,value',[
     ('browser','brave'),('installation_id',None),('tab_id',8),('document_id',None),
     ('page_url','https://generated-console.invalid/other'),('page_url','https://generated-console.invalid:8443/security#events'),

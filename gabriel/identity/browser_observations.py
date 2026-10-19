@@ -12,7 +12,7 @@ from gabriel.identity.tasks import task_record,available
 
 SOURCE_LABEL = 'Browser approved observation'
 FIELDS = {'schema_version','operation','request_id','sequence','context','observed_at','visibility','client_minimized','content'}
-SECRET = re.compile(r'\b(?:authorization|set-cookie|cookie|password|passwd|otp|access_token|refresh_token)\s*[:=]\s*\S+',re.I)
+SECRET = re.compile(r'''\b(?:authorization|set-cookie|cookie|password|passwd|otp|access_token|refresh_token|api_key|api-key|client_secret|secret_access_key)["']?\s*[:=]\s*\S+''',re.I)
 
 
 def envelope(value):
