@@ -1,5 +1,7 @@
 # Scoped browser pairing foundation
 
+The later [approved observation increment](README.GABRIEL_BROWSER_OBSERVATIONS.md) extends this foundation only for newly issued explicit-sharing leases. Existing pairing-only leases remain unable to collect text. The descriptions below document the pairing-only boundary.
+
 Schema 11 and `BrowserSessionService` implement durable human-approved browser session contracts. This component pairs a credential to one exact HTTPS page, tab, document, declared account, browser/extension version, installation, case, task and originating Gabriel human session. It collects no page content, logs into no external system and provides no navigation, query, form, screenshot or response executor. Backend tests that name Chrome/Brave are typed contract tests, not packaged-browser compatibility passes.
 
 ## Authority and privacy
@@ -48,7 +50,7 @@ Every mutation requires transactional audit admission. Failed audit writes roll 
 
 ## Browser B0 review package and next boundary
 
-The planned extension permission set starts with `activeTab`, `scripting`, `storage` and a reviewed native-message transport if selected. No broad silent host grant, cookies, password collection, debugger attachment, remote executable code or external login capability is authorized. User-initiated page selection must occur in extension-owned UI, bind current document/account context, minimize content locally, and show Stop/Disconnect and incomplete visibility. Native transport host installation, exact supported OS, final permission manifest and distribution route require explicit B0 review before deployment. No transport is silently selected or installed by the pairing backend.
+The planned extension permission set starts with `activeTab`, `scripting`, `storage` and narrowly scoped permission for the selected authenticated Gabriel HTTPS endpoint. No broad silent host grant, cookies, password collection, debugger attachment, remote executable code or external login capability is authorized. User-initiated page selection must occur in extension-owned UI, bind current document/account context, minimize content locally, and show Stop/Disconnect and incomplete visibility. Native messaging remains excluded from the MVP by the conversion plan. Exact supported OS, HTTPS pairing protocol, final permission manifest and distribution route require explicit B0 review before deployment. No transport is silently selected or installed by the pairing backend.
 
 Next implementation work is the browser observation envelope and encrypted evidence linkage with exact scope, replay/order/budget controls and interruption recovery, followed by the packaged Chrome/Brave client and real browser lab. Observation intake must reuse case/evidence authorization and custody instead of introducing an unbounded text/upload endpoint. Content is untrusted evidence, never instructions, action approvals or an assertion of attack certainty. Human external login and vendor-agnostic scope remain mandatory. Later navigation/search/action authority is separate from pairing and needs reviewed adapters and exact consent.
 

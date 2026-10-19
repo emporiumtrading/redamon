@@ -9,6 +9,7 @@ RUN mkdir -p /var/lib/gabriel-evidence /intake && chown 10001:10001 /var/lib/gab
 COPY gabriel/identity/checkpoints.py gabriel/identity/checkpoint_service.py gabriel/identity/checkpoint_policy.py gabriel/identity/schema_v9.sql /app/gabriel/identity/
 COPY gabriel/identity/evidence_crypto.py gabriel/identity/evidence_keys.py gabriel/identity/key_retirement.py gabriel/identity/schema_v10.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_sessions.py gabriel/identity/browser_cli.py gabriel/identity/schema_v11.sql /app/gabriel/identity/
+COPY gabriel/identity/browser_observations.py gabriel/identity/schema_v12.sql /app/gabriel/identity/
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]
 

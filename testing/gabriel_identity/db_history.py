@@ -71,6 +71,7 @@ def remove_v10(conn):
 
 
 def remove_v11(conn):
+    remove_v12(conn)
     if conn.execute("SELECT to_regclass('gabriel_identity.browser_leases') AS t").fetchone()['t'] is not None:
         conn.execute('DROP TABLE gabriel_identity.browser_leases')
     conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_browser_lease_transition()')
@@ -81,3 +82,11 @@ def remove_v11(conn):
         conn.execute("ALTER TABLE gabriel_identity.investigation_tasks ADD CONSTRAINT investigation_tasks_resource_check CHECK (resource='local-inspection-v1')")
         conn.execute("ALTER TABLE gabriel_identity.investigation_tasks ADD CONSTRAINT investigation_tasks_operations_check CHECK (cardinality(operations) BETWEEN 1 AND 2 AND operations <@ ARRAY['capabilities.list','evidence.hash']::text[] AND array_position(operations,NULL) IS NULL)")
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=11')
+
+
+def remove_v12(conn):
+    if conn.execute("SELECT to_regclass('gabriel_identity.browser_observations') AS t").fetchone()['t'] is not None:
+        conn.execute('DROP TABLE gabriel_identity.browser_observation_receipts,gabriel_identity.browser_observations')
+        conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_browser_observation_receipt()')
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP COLUMN intake_enabled')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=12')

@@ -1,7 +1,7 @@
 name: Gabriel database identity
 on:
   push:
-    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity', 'feature/gabriel-provider-secrets', 'feature/gabriel-durable-tasks', 'feature/gabriel-case-evidence', 'feature/gabriel-action-approvals', 'feature/gabriel-retention-holds', 'feature/gabriel-custody-checkpoints', 'feature/gabriel-checkpoint-policy', 'feature/gabriel-evidence-key-lifecycle', 'feature/gabriel-browser-pairing']
+    branches: ['feature/gabriel-identity', 'feature/gabriel-service-identity', 'feature/gabriel-provider-secrets', 'feature/gabriel-durable-tasks', 'feature/gabriel-case-evidence', 'feature/gabriel-action-approvals', 'feature/gabriel-retention-holds', 'feature/gabriel-custody-checkpoints', 'feature/gabriel-checkpoint-policy', 'feature/gabriel-evidence-key-lifecycle', 'feature/gabriel-browser-pairing', 'feature/gabriel-browser-observations']
     paths:
       - 'gabriel/capabilities.py'
       - 'gabriel/identity/**'

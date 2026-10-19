@@ -76,9 +76,9 @@ class BrowserSessionService(EvidenceKeyService):
             _audit(conn,'browser.task_created',p,row['id'])
             return row
 
-    def issue_browser_lease(self,token,task_id,case_id,context,ttl_seconds=300):
+    def issue_browser_lease(self,token,task_id,case_id,context,ttl_seconds=300,*,share_observations=False):
         context = approved_context(context)
-        if type(ttl_seconds) is not int or not 60<=ttl_seconds<=300:
+        if type(ttl_seconds) is not int or not 60<=ttl_seconds<=300 or type(share_observations) is not bool:
             raise InvalidIdentityInput('invalid_browser_lifetime')
         secret = 'gbp1_'+secrets.token_urlsafe(32)
         with connection(self._dsn) as conn:
@@ -95,12 +95,12 @@ class BrowserSessionService(EvidenceKeyService):
             session = conn.execute('SELECT expires_at FROM gabriel_identity.sessions WHERE token_digest=%s',(_digest(token),)).fetchone()
             row = conn.execute('''INSERT INTO gabriel_identity.browser_leases
                 (organization_id,id,token_digest,issued_by,human_session_digest,task_id,case_id,browser,extension_version,
-                 installation_id,tab_id,document_id,page_url,account_label,created_at,expires_at)
-                SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,t,LEAST(t+%s*interval '1 second',%s,%s)
+                 installation_id,tab_id,document_id,page_url,account_label,intake_enabled,created_at,expires_at)
+                SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,t,LEAST(t+%s*interval '1 second',%s,%s)
                 FROM (SELECT clock_timestamp() AS t) admitted RETURNING *''',
                 (p.organization_id,uuid4(),browser_digest(secret),p.user_id,_digest(token),task['id'],case['id'],context['browser'],
                  context['extension_version'],context['installation_id'],context['tab_id'],context['document_id'],context['page_url'],
-                 context['account_label'],ttl_seconds,task['expires_at'],session['expires_at'])).fetchone()
+                 context['account_label'],share_observations,ttl_seconds,task['expires_at'],session['expires_at'])).fetchone()
             conn.execute('INSERT INTO gabriel_identity.case_tasks VALUES (%s,%s,%s) ON CONFLICT DO NOTHING',(p.organization_id,case['id'],task['id']))
             _audit(conn,'browser.lease_issued',p,row['id'])
             return BrowserCredential(row['id'],secret,row['expires_at'])

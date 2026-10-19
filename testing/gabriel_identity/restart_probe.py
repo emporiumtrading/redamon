@@ -22,9 +22,10 @@ from gabriel.identity.checkpoint_service import CheckpointService
 from gabriel.identity.checkpoint_policy import CheckpointPolicyService
 from gabriel.identity.evidence_keys import EvidenceKeyService
 from gabriel.identity.browser_sessions import BrowserSessionService
+from gabriel.identity.browser_observations import BrowserObservationService
 from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,public_fingerprint,read_document,seal,write_document
 from gabriel.identity.cases import custody_hash
-from datetime import timedelta
+from datetime import datetime,timedelta,timezone
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore
 from testing.gabriel_identity.test_retention_integration import historical_artifact
 
@@ -40,6 +41,7 @@ actions = ActionService(app_dsn,cases.store)
 retention = RetentionService(app_dsn,cases.store)
 checkpoints = CheckpointPolicyService(app_dsn,cases.store)
 browsers = BrowserSessionService(app_dsn,cases.store)
+observations = BrowserObservationService(app_dsn,cases.store)
 
 
 def counts():
@@ -49,7 +51,8 @@ def counts():
               'action_policies','action_policy_state','action_requests','action_approvals','action_decisions','action_executions',
               'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events',
               'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts',
-              'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases','migrations')
+              'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
+              'browser_observations','browser_observation_receipts','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -166,6 +169,32 @@ if sys.argv[1] == 'before':
     browser_task = browsers.create_browser_task(token,'Generated recovery browser task',3600,10)
     browser_grant = browsers.issue_browser_lease(token,browser_task['id'],case['id'],browser_context)
     browsers.connect_browser(browser_grant.token,browser_context)
+    observation_password = secrets.token_urlsafe(24)
+    observation_org,_ = provision_organization(owner_dsn,'Separate browser observation recovery fixture','observation-owner',observation_password)
+    observation_token = service.login(observation_org,'observation-owner',observation_password).token
+    observation_case = observations.create_case(observation_token,'Browser content recovery fixture')
+    observation_task = observations.create_browser_task(observation_token,'Generated observation recovery task',3600,10)
+    observation_grant = observations.issue_browser_lease(observation_token,observation_task['id'],observation_case['id'],browser_context,share_observations=True)
+    observations.connect_browser(observation_grant.token,browser_context)
+    observation_payload = dict(schema_version=1,operation='browser.observe',request_id=str(uuid4()),sequence=1,
+        context=browser_context,observed_at=datetime.now(timezone.utc).isoformat(),visibility='partial',
+        client_minimized=True,content='Generated browser recovery evidence')
+    observation_receipt = observations.observe_browser(observation_token,observation_grant.token,observation_payload)
+    pending_payload = dict(observation_payload,request_id=str(uuid4()),sequence=2,content='Generated interrupted browser recovery evidence')
+    with connection(owner_dsn,runtime=False) as conn:
+        conn.execute('REVOKE INSERT ON gabriel_identity.browser_observation_receipts FROM gabriel_identity_app')
+    try:
+        try:
+            observations.observe_browser(observation_token,observation_grant.token,pending_payload)
+        except IdentityUnavailable:
+            pass
+        else:
+            raise AssertionError('browser receipt failure did not block success')
+    finally:
+        with connection(owner_dsn,runtime=False) as conn:
+            conn.execute('GRANT INSERT ON gabriel_identity.browser_observation_receipts TO gabriel_identity_app')
+    with connection(app_dsn) as conn:
+        pending_observation = conn.execute("SELECT id FROM gabriel_identity.browser_observations WHERE organization_id=%s AND state='prepared'",(observation_org,)).fetchone()['id']
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
@@ -178,6 +207,8 @@ if sys.argv[1] == 'before':
         'completed_rewrap':str(completed_rewrap['id']),'pending_rewrap':str(pending_rewrap['id']),
         'key_token':key_token,'key_artifact':str(key_artifacts[1]['id']),'old_evidence_key':old_ring.active,
         'browser_token':browser_grant.token,'browser_lease':str(browser_grant.id),'browser_context':browser_context,
+        'observation_token':observation_token,'observation_peer':observation_grant.token,'observation_lease':str(observation_grant.id),
+        'observation_payload':observation_payload,'observation_receipt':json.loads(json.dumps(observation_receipt,default=str)),'pending_observation':str(pending_observation),
         'provider_digest':sha256(provider_value.encode()).hexdigest(),'counts':counts()}))
     state.chmod(0o600)
     print('PASS: real database checkpoint created without logging credentials')
@@ -185,6 +216,20 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
+    observations.heartbeat_browser(saved['observation_peer'],saved['browser_context'])
+    replay = observations.observe_browser(saved['observation_token'],saved['observation_peer'],saved['observation_payload'])
+    assert json.loads(json.dumps(replay,default=str))==saved['observation_receipt']
+    observations.revoke_browser_lease(saved['observation_token'],saved['observation_lease'])
+    recovered = observations.reconcile_browser_observation(saved['observation_token'],saved['pending_observation'])
+    assert recovered['mode']=='engineer_reconciled'
+    assert observations.read_evidence(saved['observation_token'],recovered['evidence_id']).reveal()==b'Generated interrupted browser recovery evidence'
+    assert observations.get_browser_lease(saved['observation_token'],saved['observation_lease'])['captured_observations']==2
+    try:
+        observations.observe_browser(saved['observation_token'],saved['observation_peer'],saved['observation_payload'])
+    except (AccessDenied,AuthenticationDenied):
+        pass
+    else:
+        raise AssertionError('revoked browser observation delegation survived recovery')
     assert browsers.heartbeat_browser(saved['browser_token'],saved['browser_context'])['page_content_received'] is False
     assert browsers.get_browser_lease(saved['token'],saved['browser_lease'])['authorization_current']
     rotated_store = LocalEvidenceStore(cases.store.root,EvidenceKeys.from_file('/checkpoint/evidence-rotated-keys.json'))
@@ -295,6 +340,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: checkpoint trust/policy/receipts and signer revocation survived recovery; pending closure required the retained external digest')
     print('PASS: encryption rollover and interrupted replacement survived recovery; target-only live ring read verified bytes with immutable custody')
     print('PASS: scoped browser pairing survived recovery with live human authority; original logout denied delegated heartbeat; no page content collected')
+    print('PASS: approved generated browser text and interrupted receipt survived recovery; revoked peer stayed denied while human reconciled authenticated ciphertext')
     if sys.argv[1] == 'restored':
         print('PASS: real pg_dump/pg_restore recovered matching row counts and encrypted values with separately retained keys')
 else:

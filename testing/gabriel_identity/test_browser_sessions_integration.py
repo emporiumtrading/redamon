@@ -124,7 +124,9 @@ def test_authority_loss_denies_current_browser_session(tenant,browser,context,gr
             elif change=='session_expiry':
                 conn.execute("UPDATE gabriel_identity.sessions SET created_at=clock_timestamp()-interval '2 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE organization_id=%s",(tenant.org,))
             else:
-                conn.execute("UPDATE gabriel_identity.investigation_tasks SET created_at=clock_timestamp()-interval '2 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE organization_id=%s AND id=%s",(tenant.org,row['task_id']))
+                conn.execute("UPDATE gabriel_identity.investigation_tasks SET created_at=statement_timestamp()-interval '2 hours',expires_at=statement_timestamp()-interval '90 minutes' WHERE organization_id=%s AND id=%s",(tenant.org,row['task_id']))
+                assert conn.execute('SELECT expires_at<clock_timestamp() AS expired FROM gabriel_identity.investigation_tasks WHERE organization_id=%s AND id=%s',
+                    (tenant.org,row['task_id'])).fetchone()['expired']
     with pytest.raises((AccessDenied,AuthenticationDenied)): browser.heartbeat_browser(grant.token,context)
     with pytest.raises((AccessDenied,AuthenticationDenied)): browser.connect_browser(grant.token,context)
 

@@ -50,15 +50,17 @@ def _invalid_number(value):
     raise ValueError('nonfinite_json_number')
 
 
-def read_document(path,*,private=False):
+def read_document(path,*,private=False,limit=MAX_DOCUMENT):
     try:
+        if type(limit) is not int or not 1<=limit<=262144:
+            raise ValueError
         fd = os.open(path,os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd,'rb') as stream:
             info = os.fstat(stream.fileno())
             if not stat.S_ISREG(info.st_mode) or info.st_mode & (0o077 if private else 0o022):
                 raise ValueError
-            raw = stream.read(MAX_DOCUMENT+1)
-        if not 1<=len(raw)<=MAX_DOCUMENT:
+            raw = stream.read(limit+1)
+        if not 1<=len(raw)<=limit:
             raise ValueError
         return json.loads(raw,object_pairs_hook=_unique,parse_constant=_invalid_number)
     except (OSError,ValueError,TypeError,UnicodeError,RecursionError):
