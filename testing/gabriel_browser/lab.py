@@ -15,6 +15,7 @@ import sys
 import tempfile
 from threading import Thread
 import time
+import traceback
 from urllib.parse import urlsplit
 from uuid import uuid4
 from wsgiref.simple_server import make_server,WSGIRequestHandler,WSGIServer
@@ -180,10 +181,12 @@ def run_browser(family,executable,output):
             cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint))
             click(cdp,popup,'permission')
             # The native browser permission prompt is deliberately exercised, not bypassed by test host grants.
-            time.sleep(0.5)
+            time.sleep(2)
             # Native Allow position observed in the retained 1280x1024 lab screenshot.
             # Keyboard focus traversal selected Deny; retain the real permission check below.
-            subprocess.run(['xdotool','mousemove','807','256','click','1'],check=True,timeout=5)
+            subprocess.run(['xdotool','mousemove','807','256'],check=True,timeout=5)
+            time.sleep(0.5)
+            subprocess.run(['xdotool','click','1'],check=True,timeout=5)
             time.sleep(0.25)
             existing=next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None)
             popup=cdp.attach(existing['targetId']) if existing else native_popup(cdp,target,origin)
@@ -287,7 +290,8 @@ def main():
         print('PASS: actual Chrome for Testing and Brave generated-console extension/TLS/evidence journeys')
         return 0
     except Exception as error:
-        (output/'failure.json').write_text(json.dumps({'status':'FAIL','stage':stage,'error_type':type(error).__name__}))
+        frames=[dict(file=Path(frame.filename).name,line=frame.lineno,function=frame.name) for frame in traceback.extract_tb(error.__traceback__)]
+        (output/'failure.json').write_text(json.dumps({'status':'FAIL','stage':stage,'error_type':type(error).__name__,'frames':frames}))
         print('FAIL: browser lab at '+stage+'; '+type(error).__name__)
         return 1
     finally:
