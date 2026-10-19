@@ -1,6 +1,6 @@
 # Gabriel PRD requirement reconciliation
 
-Baseline: draft PR 16 head `41ed782a99d44334a12b9f8bb4bcb990b1bc94dd`; next client/gateway work is in progress. This maps all 40 requirement IDs to actual implementation gaps. Component CI evidence is in the implementation ledger. None of the forty requirements has full post-release acceptance; a component pass does not accept a complete release requirement.
+Baseline: draft PR 16 head `41ed782a99d44334a12b9f8bb4bcb990b1bc94dd`; PR 17 server/package source `35d2d38da6241ad2e17a1c0a48c3aedb8936a4ca` passed the 579-case/recovery gate. Actual client lab is in progress. This maps all 40 requirement IDs to actual implementation gaps. Component CI evidence is in the implementation ledger. None of the forty requirements has full post-release acceptance; a component pass does not accept a complete release requirement.
 
 | Requirement | Implemented evidence / remaining work |
 | --- | --- |
@@ -15,7 +15,7 @@ Baseline: draft PR 16 head `41ed782a99d44334a12b9f8bb4bcb990b1bc94dd`; next clie
 | GAB-009 | MV3 client implementation in progress; actual Chrome/Brave package tests and reviewed distribution outstanding. |
 | GAB-010 | Backend exact page/tab/document/account scope tested; actual browser lifecycle/associated-tab acceptance outstanding. |
 | GAB-011 | Bounded envelope and conservative secret filter tested; actual rendered-text minimization, preview and browser privacy acceptance outstanding. |
-| GAB-012 | Single-use native-TLS gateway/client implementation in progress; network/browser abuse tests and independent protocol review outstanding. |
+| GAB-012 | Single-use native-TLS gateway network/component tests passed; actual browser abuse tests and independent protocol review outstanding. |
 | GAB-013 | Vendor-neutral backend contracts exist; selected real console investigation with no vendor API and human-only login outstanding. |
 | GAB-014 | No search executor admitted; reviewed existing-search/template adapters and side-effect tests outstanding. |
 | GAB-015 | No third-party draft entry admitted; Gabriel proposal workspace and draft/autosave acceptance outstanding. |
