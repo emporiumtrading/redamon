@@ -1,6 +1,6 @@
 # Gabriel PRD requirement reconciliation
 
-Baseline: final code source `012a877c616a5b2480fa0edb321a2a81cdf79813` passed 589 component/regression cases, actual report reconstruction after restart/dump-restore, and generated-console Chrome for Testing/Brave journeys (19 checks each). Component CI evidence is in the implementation ledger. This maps all 40 requirement IDs to actual implementation gaps. None of the forty requirements has full post-release acceptance; a component pass does not accept a complete release requirement.
+Verified baseline: source `012a877c616a5b2480fa0edb321a2a81cdf79813` passed 589 component/regression cases, actual report reconstruction after restart/dump-restore, and generated-console Chrome for Testing/Brave journeys (19 checks each). Later workbench source `b6e3c4a4b9888d6d4e28bccde304235cacfc6e8d` passed 615 component/regression cases and recovery, but its native-browser run failed. Origin repair, workflow and provenance candidates require their own verification. Source-specific evidence and failure/repair history are in the implementation ledger. This maps all 40 requirement IDs to actual implementation gaps. None of the forty requirements has full post-release acceptance; a component pass does not accept a complete release requirement.
 
 | Requirement | Implemented evidence / remaining work |
 | --- | --- |
