@@ -40,13 +40,23 @@ def approved_context(value):
         for key in ('installation_id','document_id'):
             result[key]=str(identifier(value[key]))
         url = urlsplit(value['page_url'])
+        decoded = value['page_url']
+        for _ in range(4):
+            following = unquote(decoded,errors='strict')
+            if following==decoded:
+                break
+            decoded = following
+        if unquote(decoded,errors='strict')!=decoded:
+            raise ValueError
         if (url.scheme!='https' or not url.hostname or url.username is not None or url.password is not None
-                or url.query or '?' in value['page_url'] or any(c in url.fragment for c in ('=','&'))
-                or any(ord(c)<33 or ord(c)==127 for c in unquote(value['page_url']))):
+                or url.query or '?' in decoded or '\\' in decoded
+                or any(c in unquote(url.fragment,errors='strict') for c in ('=','&'))
+                or ('#' in decoded and any(c in decoded.split('#',1)[1] for c in ('=','&')))
+                or any(ord(c)<33 or ord(c)==127 for c in decoded)):
             raise ValueError
         url.port
         expected = urlunsplit(('https',url.netloc.lower(),url.path or '/','',url.fragment))
-        if expected!=value['page_url'] or any(x in value['page_url'].lower() for x in ('/login','/signin','/sign-in','/oauth','/sso','/mfa','/password','/authorize')):
+        if expected!=value['page_url'] or any(x in decoded.lower() for x in ('/login','/signin','/sign-in','/oauth','/sso','/mfa','/password','/authorize')):
             raise ValueError
         return result
     except (ValueError,TypeError,KeyError,AttributeError):

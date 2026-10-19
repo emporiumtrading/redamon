@@ -12,7 +12,7 @@ from gabriel.identity.tasks import task_record,available
 
 SOURCE_LABEL = 'Browser approved observation'
 FIELDS = {'schema_version','operation','request_id','sequence','context','observed_at','visibility','client_minimized','content'}
-SECRET = re.compile(r'\b(?:authorization|set-cookie|cookie|password|passwd|otp|access_token|refresh_token)\s*[:=]\s*\S+',re.I)
+SECRET = re.compile(r'''\b(?:authorization|set-cookie|cookie|password|passwd|otp|access_token|refresh_token|api_key|api-key|client_secret|secret_access_key)["']?\s*[:=]\s*\S+''',re.I)
 
 
 def envelope(value):
@@ -167,6 +167,19 @@ class BrowserObservationService(BrowserSessionService):
         with connection(self._dsn) as conn:
             p = self._human(conn,human_token)
             return observation_metadata(self._observation(conn,p,observation_id))
+
+    def list_browser_observations(self,human_token,lease_id):
+        with connection(self._dsn) as conn:
+            p = self._human(conn,human_token)
+            lease_id = identifier(lease_id)
+            if not conn.execute('SELECT 1 FROM gabriel_identity.browser_leases WHERE organization_id=%s AND id=%s',
+                    (p.organization_id,lease_id)).fetchone():
+                raise AccessDenied('browser_lease_not_accessible')
+            # Unique sequences are constrained to 1..1000; this bound cannot hide additional rows.
+            rows = conn.execute('SELECT * FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s ORDER BY sequence LIMIT 1000',
+                (p.organization_id,lease_id)).fetchall()
+            return {'observations':[observation_metadata(row) for row in rows],'complete':True,
+                'current_page_visibility_verified':False}
 
     def connect_browser(self,token,context):
         result = super().connect_browser(token,context)
