@@ -181,6 +181,13 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])},session)
             loaded("Boolean(document.querySelector('a[href*=evidence]'))")
             assert 'unverified_client_clock' in cdp.evaluate(session,'document.body.innerText')
+            mark(family+':workbench-provenance')
+            cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/relationships'},session)
+            loaded("document.title==='Case provenance · Gabriel'")
+            content=cdp.evaluate(session,'document.body.innerText')
+            assert 'contains evidence' in content and 'received observation' in content and 'not prove causality' in content
+            cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])},session)
+            loaded("Boolean(document.querySelector('select[name=assigned_to]'))")
             mark(family+':workbench-handoff')
             owner=str(service.whoami(human).user_id)
             cdp.evaluate(session,"document.querySelector('select[name=assigned_to]').value="+json.dumps(owner)+";document.querySelector('form[action$=assign]').requestSubmit();true")
@@ -359,7 +366,7 @@ def run_browser(family,executable,output):
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
-                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_assignment','persisted_question','evidence_linked_answer','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
+                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','case_assignment','persisted_question','evidence_linked_answer','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
         except Exception:

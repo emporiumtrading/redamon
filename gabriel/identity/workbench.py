@@ -178,6 +178,19 @@ class Workbench:
                 self.service.answer_question(self._token,case_id,fields['question_id'],fields['evidence_id'],fields['answer'])
             else: raise AccessDenied('invalid_case_workflow_form')
             return '303 See Other',b'',[('Location','/cases/'+case_id)]
+        projection=re.fullmatch('/cases/('+ID+')/(relationships|graph)',path)
+        if projection:
+            if method!='GET': raise AccessDenied('workbench_route_denied')
+            case_id,view=projection.groups()
+            result=self.service.case_graph(self._token,case_id)
+            if view=='graph':
+                return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-graph-'+case_id+'.json"')]
+            graph=result['projection']
+            body='<p class="notice">Partial coverage. These are stored provenance links. Attack assessment has not been performed; links do not prove causality.</p><p><a href="/cases/'+case_id+'/graph">Download provenance graph</a></p>'
+            body+='<h2>Records</h2>'+table(['Record type','Identifier','Metadata'],[(e(row['kind'].replace('_',' ')),e(row['record_id']),e(json.dumps(row['properties'],ensure_ascii=False))) for row in graph['nodes']])
+            body+='<h2>Stored links</h2>'+table(['Relationship','From','To'],[(e(row['kind'].replace('_',' ')),e(row['source']),e(row['target'])) for row in graph['edges']])
+            body+='<p>Projection checksum '+e(result['digest'])+'</p>'
+            return '200 OK',self._page('Case provenance',body,principal),[]
         match=re.fullmatch('/cases/('+ID+')(?:/(report)|/evidence/('+ID+')(?:/(content))?)?',path)
         if not match: raise AccessDenied('workbench_route_denied')
         case_id,report,evidence_id,content=match.groups()
@@ -201,7 +214,7 @@ class Workbench:
         if report:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
-        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a></p>'
+        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
         body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'
