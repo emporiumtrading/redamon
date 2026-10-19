@@ -21,6 +21,7 @@ from gabriel.identity.retention import RetentionService
 from gabriel.identity.checkpoint_service import CheckpointService
 from gabriel.identity.checkpoint_policy import CheckpointPolicyService
 from gabriel.identity.evidence_keys import EvidenceKeyService
+from gabriel.identity.browser_sessions import BrowserSessionService
 from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,public_fingerprint,read_document,seal,write_document
 from gabriel.identity.cases import custody_hash
 from datetime import timedelta
@@ -38,6 +39,7 @@ state = Path('/checkpoint/state.json')
 actions = ActionService(app_dsn,cases.store)
 retention = RetentionService(app_dsn,cases.store)
 checkpoints = CheckpointPolicyService(app_dsn,cases.store)
+browsers = BrowserSessionService(app_dsn,cases.store)
 
 
 def counts():
@@ -47,7 +49,7 @@ def counts():
               'action_policies','action_policy_state','action_requests','action_approvals','action_decisions','action_executions',
               'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events',
               'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts',
-              'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','migrations')
+              'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -159,6 +161,11 @@ if sys.argv[1] == 'before':
             conn.execute('GRANT INSERT ON gabriel_identity.evidence_rewrap_results TO gabriel_identity_app')
     write_document('/checkpoint/evidence-rotated-keys.json',{'schema_version':1,'purpose':'evidence-v1',
         'generation':new_ring.generation,'active':new_ring.active,'keys':{k:base64.b64encode(v).decode() for k,v in new_ring._keys.items()}})
+    browser_context = {'browser':'chrome','extension_version':'0.1.0','installation_id':str(uuid4()),'tab_id':3,
+        'document_id':str(uuid4()),'page_url':'https://generated-recovery-console.invalid/security','account_label':'Generated recovery account'}
+    browser_task = browsers.create_browser_task(token,'Generated recovery browser task',3600,10)
+    browser_grant = browsers.issue_browser_lease(token,browser_task['id'],case['id'],browser_context)
+    browsers.connect_browser(browser_grant.token,browser_context)
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
@@ -170,6 +177,7 @@ if sys.argv[1] == 'before':
         'checkpoint_digests':checkpoint_digests,'retired_checkpoint_key':retired_pin,
         'completed_rewrap':str(completed_rewrap['id']),'pending_rewrap':str(pending_rewrap['id']),
         'key_token':key_token,'key_artifact':str(key_artifacts[1]['id']),'old_evidence_key':old_ring.active,
+        'browser_token':browser_grant.token,'browser_lease':str(browser_grant.id),'browser_context':browser_context,
         'provider_digest':sha256(provider_value.encode()).hexdigest(),'counts':counts()}))
     state.chmod(0o600)
     print('PASS: real database checkpoint created without logging credentials')
@@ -177,6 +185,8 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
+    assert browsers.heartbeat_browser(saved['browser_token'],saved['browser_context'])['page_content_received'] is False
+    assert browsers.get_browser_lease(saved['token'],saved['browser_lease'])['authorization_current']
     rotated_store = LocalEvidenceStore(cases.store.root,EvidenceKeys.from_file('/checkpoint/evidence-rotated-keys.json'))
     rekeys = EvidenceKeyService(app_dsn,rotated_store)
     assert rekeys.reconcile_rewrap(saved['key_token'],saved['completed_rewrap'])['state']=='completed'
@@ -265,6 +275,12 @@ elif sys.argv[1] in {'after','restored'}:
         print('PASS: independent signed checkpoint detected privileged valid rehash after restore')
     service.logout(saved['token'])
     try:
+        browsers.heartbeat_browser(saved['browser_token'],saved['browser_context'])
+    except (AccessDenied,AuthenticationDenied):
+        pass
+    else:
+        raise AssertionError('browser delegation survived original human logout')
+    try:
         service.whoami(saved['token'])
     except AuthenticationDenied:
         pass
@@ -278,6 +294,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: externally retained signed custody checkpoints matched active and purged evidence after recovery')
     print('PASS: checkpoint trust/policy/receipts and signer revocation survived recovery; pending closure required the retained external digest')
     print('PASS: encryption rollover and interrupted replacement survived recovery; target-only live ring read verified bytes with immutable custody')
+    print('PASS: scoped browser pairing survived recovery with live human authority; original logout denied delegated heartbeat; no page content collected')
     if sys.argv[1] == 'restored':
         print('PASS: real pg_dump/pg_restore recovered matching row counts and encrypted values with separately retained keys')
 else:

@@ -58,6 +58,7 @@ def remove_v9(conn):
 
 
 def remove_v10(conn):
+    remove_v11(conn)
     conn.execute('DROP TRIGGER IF EXISTS require_evidence_insert_epoch ON gabriel_identity.evidence_objects')
     conn.execute('DROP TRIGGER IF EXISTS require_evidence_update_epoch ON gabriel_identity.evidence_objects')
     conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_evidence_epoch()')
@@ -67,3 +68,16 @@ def remove_v10(conn):
     if conn.execute("SELECT to_regclass('gabriel_identity.evidence_key_epochs') AS t").fetchone()['t'] is not None:
         conn.execute('DROP TABLE gabriel_identity.evidence_rewrap_results,gabriel_identity.evidence_rewraps,gabriel_identity.evidence_key_epochs')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=10')
+
+
+def remove_v11(conn):
+    if conn.execute("SELECT to_regclass('gabriel_identity.browser_leases') AS t").fetchone()['t'] is not None:
+        conn.execute('DROP TABLE gabriel_identity.browser_leases')
+    conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_browser_lease_transition()')
+    if conn.execute("SELECT 1 FROM pg_constraint WHERE conname='investigation_tasks_browser_scope'").fetchone():
+        conn.execute("DELETE FROM gabriel_identity.case_tasks WHERE task_id IN (SELECT id FROM gabriel_identity.investigation_tasks WHERE resource='browser-observation-v1')")
+        conn.execute("DELETE FROM gabriel_identity.investigation_tasks WHERE resource='browser-observation-v1'")
+        conn.execute('ALTER TABLE gabriel_identity.investigation_tasks DROP CONSTRAINT investigation_tasks_browser_scope')
+        conn.execute("ALTER TABLE gabriel_identity.investigation_tasks ADD CONSTRAINT investigation_tasks_resource_check CHECK (resource='local-inspection-v1')")
+        conn.execute("ALTER TABLE gabriel_identity.investigation_tasks ADD CONSTRAINT investigation_tasks_operations_check CHECK (cardinality(operations) BETWEEN 1 AND 2 AND operations <@ ARRAY['capabilities.list','evidence.hash']::text[] AND array_position(operations,NULL) IS NULL)")
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=11')

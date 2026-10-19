@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Browser pairing increment 13 — component verification pending
+
+Baseline: `eecfc047c4497d8c3b021419d319b8c7ec94f913`. Links: C05/B0/B1, GAB-003/GAB-005/GAB-006/GAB-013/GAB-014/GAB-015/GAB-037/GAB-038; B-T01/B-T02/B-T03/B-T06/B-T07/B-T11/B-T12 and CV-06. Owner: Codex; independent reviewer acceptance pending. Component **IMPLEMENTED_UNVERIFIED**; browser/product lifecycle **BLOCKED**. See [scope, CLI and B0 review package](README.GABRIEL_BROWSER_PAIRING.md).
+
+Schema 11 adds a distinct browser task resource and immutable-scope pairing leases, human-session-bound digests, hard expiry, peer context confirmation/heartbeat and terminal disconnect/revoke. The backend admits session heartbeat/disconnect only: no page content, external login, navigation, queries or response action is collected/performed. Tests use generated context metadata and real SQL/CLI authority; Chrome/Brave labels do not establish actual browser compatibility. The continuing engineering loop adds this prerequisite while the earlier key-lifecycle recovery gate is repaired/reverified, without weakening either gate.
+
+Hypothesis: scope drift, expired/revoked/downgraded human authority, wrong token audiences, canceled/expired task, heartbeat gap/clock rollback and audit loss deny delegated session use. New real SQL/CLI/concurrency/migration and recovery checks await hosted execution; no host pytest substitutes for unavailable Docker. Exact source/count/artifact evidence pending. Encrypted observation intake, packaged extension, actual Chrome/Brave/console UAT, privacy review, distribution/transport decisions and independent release acceptance remain open. A pairing pass is not a browser visibility or attack-detection pass.
+
 ## Evidence-key lifecycle increment 12 — live rollover component verified
 
 Baseline: `630900b4101b2e036d7bf97c7450918dc0d046f1`. Links: C04, GAB-003/GAB-005/GAB-006/GAB-007/GAB-008/GAB-037/GAB-038, T06/T09/T10/T11/T12/T27 and CV-08. Owner: Codex; independent reviewer acceptance pending. Component VM checks **PASS**; lifecycle/release **BLOCKED**. See [key lifecycle guide](README.GABRIEL_EVIDENCE_KEYS.md).
