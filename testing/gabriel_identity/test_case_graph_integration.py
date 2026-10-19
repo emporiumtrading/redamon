@@ -50,7 +50,7 @@ def test_lineage_and_identical_bytes_preserve_separate_records(tenant,cases,case
     assert len([edge for edge in graph['edges'] if edge['kind']=='has_identical_bytes'])==2
 
 
-def test_actual_browser_lineage_and_task_links(tenant,browser,case,grant,payload):
+def test_actual_browser_lineage_and_task_links(tenant,browser,case,task,grant,payload):
     receipt=submit(tenant,browser,grant,payload)
     graph=browser.case_graph(tenant.token,case['id'])['projection']
     observation,=[node for node in graph['nodes'] if node['kind']=='browser_observation']
@@ -59,11 +59,21 @@ def test_actual_browser_lineage_and_task_links(tenant,browser,case,grant,payload
     assert {'has_browser_lease','received_observation','captured_as'}<={edge['kind'] for edge in graph['edges']}
     lease,=[node for node in graph['nodes'] if node['kind']=='browser_lease']
     assert lease['properties']['current_authority']=='not_assessed'
+    assert {node['record_id'] for node in graph['nodes'] if node['kind']=='task'}=={str(task['id'])}
+    assert len([edge for edge in graph['edges'] if edge['kind']=='linked_task'])==1
     service=ServiceIdentityService(tenant.db.app)
     task_id=service.create_task(tenant.token,'Generated graph task',['evidence.hash'])['id']
     browser.link_task(tenant.token,case['id'],task_id)
-    linked=browser.case_graph(tenant.token,case['id'])['projection']
-    assert len([edge for edge in linked['edges'] if edge['kind']=='linked_task'])==1
+    result=browser.case_graph(tenant.token,case['id'])
+    linked=result['projection']
+    expected={str(task['id']),str(task_id)}
+    task_nodes={node['id']:node['record_id'] for node in linked['nodes'] if node['kind']=='task'}
+    assert set(task_nodes.values())==expected
+    links=[edge for edge in linked['edges'] if edge['kind']=='linked_task']
+    assert len(links)==len(expected) and {task_nodes[edge['target']] for edge in links}==expected
+    assert all(edge['source'].endswith('/case/'+str(case['id'])) for edge in links)
+    browser.link_task(tenant.token,case['id'],task_id)
+    assert browser.case_graph(tenant.token,case['id'])['digest']==result['digest']
 
 
 def test_empty_graph_and_case_change_rebuild(tenant,cases,case):
