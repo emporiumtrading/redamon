@@ -12,6 +12,7 @@ import ssl
 from threading import Lock
 import time
 from urllib.parse import parse_qsl,urlsplit
+from uuid import uuid4
 
 from gabriel.identity.browser_gateway import endpoint
 from gabriel.identity.analyst_views import audit_history,source_health
@@ -93,8 +94,8 @@ class Workbench:
 
     def _fields(self,environ):
         length=environ.get('CONTENT_LENGTH','')
-        if (environ.get('CONTENT_TYPE')!='application/x-www-form-urlencoded' or not re.fullmatch('[0-9]{1,4}',length)
-                or not 1<=int(length)<=4096 or environ.get('HTTP_CONTENT_ENCODING') or environ.get('HTTP_TRANSFER_ENCODING')):
+        if (environ.get('CONTENT_TYPE')!='application/x-www-form-urlencoded' or not re.fullmatch('[0-9]{1,5}',length)
+                or not 1<=int(length)<=16384 or environ.get('HTTP_CONTENT_ENCODING') or environ.get('HTTP_TRANSFER_ENCODING')):
             raise AccessDenied('invalid_workbench_form')
         raw=environ['wsgi.input'].read(int(length))
         if len(raw)!=int(length): raise AccessDenied('invalid_workbench_form')
@@ -166,6 +167,17 @@ class Workbench:
             self._create=None
             case=self.service.create_case(self._token,fields['title'])
             return '303 See Other',b'',[('Location','/cases/'+str(case['id']))]
+        action=re.fullmatch('/cases/('+ID+')/(assign|question|answer)',path)
+        if method=='POST' and action:
+            case_id,operation=action.groups()
+            if operation=='assign' and set(fields)=={'csrf','request_id','assigned_to'}:
+                self.service.assign_case(self._token,case_id,fields['request_id'],fields['assigned_to'] or None)
+            elif operation=='question' and set(fields)=={'csrf','request_id','question'}:
+                self.service.add_question(self._token,case_id,fields['request_id'],fields['question'])
+            elif operation=='answer' and set(fields)=={'csrf','question_id','evidence_id','answer'}:
+                self.service.answer_question(self._token,case_id,fields['question_id'],fields['evidence_id'],fields['answer'])
+            else: raise AccessDenied('invalid_case_workflow_form')
+            return '303 See Other',b'',[('Location','/cases/'+case_id)]
         match=re.fullmatch('/cases/('+ID+')(?:/(report)|/evidence/('+ID+')(?:/(content))?)?',path)
         if not match: raise AccessDenied('workbench_route_denied')
         case_id,report,evidence_id,content=match.groups()
@@ -190,6 +202,29 @@ class Workbench:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
         body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a></p>'
+        workflow=self.service.case_workflow(self._token,case_id)
+        current=workflow['assignment']
+        body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'
+        writable=principal.role!='viewer' and snapshot['case']['state']=='open'
+        if writable and principal.role in {'owner','admin'}:
+            members=self.service.list_members(self._token)
+            options='<option value="">Unassigned</option>'+''.join('<option value="'+e(row['id'])+'">'+e(row['username'])+'</option>' for row in members if row['active'] and row['role']!='viewer')
+            body+=self._form(path+'/assign','Update assignment','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Assign to<select name="assigned_to">'+options+'</select></label>')
+        elif writable and (not current or current['assigned_to'] in {None,str(principal.user_id)}):
+            body+=self._form(path+'/assign','Assign to me','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><input type="hidden" name="assigned_to" value="'+e(principal.user_id)+'">')
+        body+='<h2>Investigation questions</h2><p>Answers are evidence-linked analyst comments. They do not validate source truth or enter learned memory. The metadata report covers evidence/custody; workflow comments are available here and through the workflow CLI.</p>'
+        if workflow['questions_restricted']: body+='<p>Analyst comments require an analyst, admin or owner role.</p>'
+        if writable:
+            body+=self._form(path+'/question','Add question','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Question<input name="question" maxlength="512" required></label>')
+        for question in workflow['questions']:
+            body+='<section><h3>'+e(question['question'])+'</h3><p>'+e(question['state'])+'</p>'
+            if question['answer'] is not None:
+                body+='<p>'+e(question['answer'])+'</p><p>Evidence <a href="'+path+'/evidence/'+e(question['evidence_id'])+'">'+e(question['evidence_id'])+'</a> · Source unverified</p>'
+            elif writable:
+                options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in snapshot['evidence'] if row['state']=='ready' and row['storage_state']=='active')
+                if options:
+                    body+=self._form(path+'/answer','Record analyst answer','<input type="hidden" name="question_id" value="'+e(question['id'])+'"><label>Supporting evidence<select name="evidence_id" required>'+options+'</select></label><label>Analyst answer<input name="answer" maxlength="1024" required></label>')
+            body+='</section>'
         body+='<h2>Evidence</h2>'+table(['Artifact','Source','Storage'],[(f'<a href="{path}/evidence/{e(row["id"])}">{e(row["id"])}</a>',e(row['source_label']),e(row['storage_state'])) for row in snapshot['evidence']])
         body+='<h2>Timeline</h2><p>Source and client clocks are unverified. Times do not establish causal ordering.</p>'+table(['Time','Time basis','Event','Evidence'],[(e(row['time']),e(row['time_basis']),e(row['kind']),e(row['evidence_id'] or '')) for row in snapshot['timeline']])
         body+='<h2>Browser observations</h2>'+table(['Observation','State','Visibility'],[(e(row['id']),e(row['state']),e(row['coverage'])) for row in snapshot['browser_observations']])

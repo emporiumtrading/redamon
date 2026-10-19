@@ -85,8 +85,15 @@ def remove_v11(conn):
 
 
 def remove_v12(conn):
+    remove_v13(conn)
     if conn.execute("SELECT to_regclass('gabriel_identity.browser_observations') AS t").fetchone()['t'] is not None:
         conn.execute('DROP TABLE gabriel_identity.browser_observation_receipts,gabriel_identity.browser_observations')
         conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.require_browser_observation_receipt()')
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP COLUMN intake_enabled')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=12')
+
+
+def remove_v13(conn):
+    if conn.execute("SELECT to_regclass('gabriel_identity.case_questions') AS t").fetchone()['t'] is not None:
+        conn.execute('DROP TABLE gabriel_identity.case_question_answers,gabriel_identity.case_questions,gabriel_identity.case_assignments')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=13')

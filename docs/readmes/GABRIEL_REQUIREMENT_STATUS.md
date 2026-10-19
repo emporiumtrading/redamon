@@ -9,7 +9,7 @@ Baseline: final code source `012a877c616a5b2480fa0edb321a2a81cdf79813` passed 58
 | GAB-003 | Database identities, tenant predicates and bounded worker/browser grants tested; new HTTPS gateway and all future interfaces require acceptance. |
 | GAB-004 | Hashed accounts and encrypted provider vault tested; enabled provider/connector and operational secret custody acceptance remain open. |
 | GAB-005 | Transactional audit admission tested for current mutations; new product interfaces need equivalent tests and review. |
-| GAB-006 | Cases/tasks/approval state persist; scoped memory, graph projection and workbench are outstanding. |
+| GAB-006 | Verified cases/tasks/approval state; workbench and append-only case workflow now implemented with hosted checks queued. Scoped memory and graph projection remain outstanding. |
 | GAB-007 | Encrypted evidence/custody and unverified observation lineage tested; actual client/source adapters and deduplication outstanding. |
 | GAB-008 | Fresh migrations, restart/dump/restore and interrupted evidence operations tested; integrated product and external-effect recovery outstanding. |
 | GAB-009 | Real MV3 package and Chrome for Testing/Brave generated-console journey verified; consumer Chrome/OS matrix, full human UAT and reviewed distribution outstanding. |
@@ -23,12 +23,12 @@ Baseline: final code source `012a877c616a5b2480fa0edb321a2a81cdf79813` passed 58
 | GAB-017 | Backend serialization exists; actual tab action leases, targets and postcondition checks outstanding. |
 | GAB-018 | Backend heartbeat/revocation/recovery and actual client Pause/Resume/Stop tested; suspension/restart, drift, authority-loss and human-handoff browser scenarios outstanding. |
 | GAB-019 | Lease versions, deterministic package hash and observed lab source/image/binary hashes recorded; full compatibility, distribution and managed upgrade recovery outstanding. |
-| GAB-020 | Environment/control profile with evidence states and freshness not implemented. |
+| GAB-020 | Browser source health/authority display implemented with checks queued; environment/control profile, ownership/recovery dependencies and discrepancies remain outstanding. |
 | GAB-021 | Proactive hunt selection/execution and benign alternatives not implemented or evaluated. |
-| GAB-022 | Persisted case/evidence metadata reports and distinct-clock/custody timelines tested; assignment/questions, entity/event correlation, event-level deduplication, report history and workbench outstanding. |
+| GAB-022 | Persisted case/evidence reports and distinct-clock/custody timelines verified; workbench, assignments and evidence-linked questions implemented with checks queued. Entity/event correlation, event-level deduplication and report history remain outstanding. |
 | GAB-023 | No model assessment engine admitted; evidence-linked revisions, abstention and escalation outstanding. |
-| GAB-024 | Shared queue, handoff and approval inbox not implemented as product screens. |
-| GAB-025 | Required R1 screen/control inventory and accessible integrated workbench outstanding. |
+| GAB-024 | Case queue and assignment/question handoff implemented with checks queued; prioritization, correlated bundles, routine batching, urgent escalation and approval inbox remain outstanding. |
+| GAB-025 | Initial real case/evidence/report/browser-health/audit screens and control inventory implemented with checks queued; remaining R1 screens, full states, accessibility and human UAT outstanding. |
 | GAB-026 | Product must separately present urgency, exposure, confidence and compliance; screens/evaluation outstanding. |
 | GAB-027 | Twelve specialist contracts and their real-tool/held-out evaluations outstanding. |
 | GAB-028 | Bounded local tasks tested; specialist coordinator, model budgets and duplicate/disagreement handling outstanding. |
