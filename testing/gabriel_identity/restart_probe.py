@@ -32,7 +32,7 @@ app_dsn = make_conninfo(app_dsn,dbname='gabriel_vault_restore' if sys.argv[1]=='
 service = ServiceIdentityService(app_dsn)
 vault = ProviderVault(app_dsn,
     ProviderKeyRing.from_file(os.environ['GABRIEL_PROVIDER_KEYRING_FILE']))
-evidence_key_file = os.environ['GABRIEL_EVIDENCE_KEYRING_FILE'] if sys.argv[1]=='before' else '/checkpoint/evidence-rotated-keys.json'
+evidence_key_file = os.environ['GABRIEL_EVIDENCE_KEYRING_FILE']
 cases = CaseService(app_dsn,LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT'],EvidenceKeys.from_file(evidence_key_file)))
 state = Path('/checkpoint/state.json')
 actions = ActionService(app_dsn,cases.store)
@@ -132,19 +132,24 @@ if sys.argv[1] == 'before':
         checkpoint_digests[label] = fingerprint(canonical(envelope))
         checkpoints.accept_checkpoint(token,target,envelope,checkpoint_digests[label])
     del signing_key
+    key_password = secrets.token_urlsafe(24)
+    key_org,_ = provision_organization(owner_dsn,'Separate key rollover recovery fixture','key-owner',key_password)
+    key_token = service.login(key_org,'key-owner',key_password).token
+    key_case = cases.create_case(key_token,'Encryption rollover recovery fixture')
+    key_artifacts = [cases.acquire(key_token,key_case['id'],uuid4(),'generated key recovery artifact','Key recovery fixture',approved=True) for _ in range(2)]
     old_ring = cases.store.keys
     target = 'k_'+uuid4().hex
     new_ring = EvidenceKeys(target,dict(old_ring._keys,**{target:secrets.token_bytes(32)}),old_ring.generation+1)
     rekeys = EvidenceKeyService(app_dsn,LocalEvidenceStore(cases.store.root,new_ring))
-    rekeys.activate_evidence_key(token)
-    completed_rewrap = rekeys.prepare_rewrap(token,evidence['id'])
-    rekeys.execute_rewrap(token,completed_rewrap['id'])
-    pending_rewrap = rekeys.prepare_rewrap(token,completed_artifact['id'])
+    rekeys.activate_evidence_key(key_token)
+    completed_rewrap = rekeys.prepare_rewrap(key_token,key_artifacts[0]['id'])
+    rekeys.execute_rewrap(key_token,completed_rewrap['id'])
+    pending_rewrap = rekeys.prepare_rewrap(key_token,key_artifacts[1]['id'])
     with connection(owner_dsn,runtime=False) as conn:
         conn.execute('REVOKE INSERT ON gabriel_identity.evidence_rewrap_results FROM gabriel_identity_app')
     try:
         try:
-            rekeys.execute_rewrap(token,pending_rewrap['id'])
+            rekeys.execute_rewrap(key_token,pending_rewrap['id'])
         except IdentityUnavailable:
             pass
         else:
@@ -164,7 +169,7 @@ if sys.argv[1] == 'before':
         'purged_evidence':[str(artifact['id']) for artifact in artifacts],
         'checkpoint_digests':checkpoint_digests,'retired_checkpoint_key':retired_pin,
         'completed_rewrap':str(completed_rewrap['id']),'pending_rewrap':str(pending_rewrap['id']),
-        'completed_artifact':str(completed_artifact['id']),'old_evidence_key':old_ring.active,
+        'key_token':key_token,'key_artifact':str(key_artifacts[1]['id']),'old_evidence_key':old_ring.active,
         'provider_digest':sha256(provider_value.encode()).hexdigest(),'counts':counts()}))
     state.chmod(0o600)
     print('PASS: real database checkpoint created without logging credentials')
@@ -172,14 +177,15 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
-    rekeys = EvidenceKeyService(app_dsn,cases.store)
-    assert rekeys.reconcile_rewrap(saved['token'],saved['completed_rewrap'])['state']=='completed'
-    assert rekeys.reconcile_rewrap(saved['token'],saved['pending_rewrap'])['state']=='completed'
-    active = cases.store.keys.active
-    minimal = EvidenceKeys(active,{active:cases.store.keys._key(active)},cases.store.keys.generation)
+    rotated_store = LocalEvidenceStore(cases.store.root,EvidenceKeys.from_file('/checkpoint/evidence-rotated-keys.json'))
+    rekeys = EvidenceKeyService(app_dsn,rotated_store)
+    assert rekeys.reconcile_rewrap(saved['key_token'],saved['completed_rewrap'])['state']=='completed'
+    assert rekeys.reconcile_rewrap(saved['key_token'],saved['pending_rewrap'])['state']=='completed'
+    active = rotated_store.keys.active
+    minimal = EvidenceKeys(active,{active:rotated_store.keys._key(active)},rotated_store.keys.generation)
     reduced = EvidenceKeyService(app_dsn,LocalEvidenceStore(cases.store.root,minimal))
-    assert reduced.read_evidence(saved['token'],saved['completed_artifact']).reveal()==b'completed recovery artifact'
-    assert rekeys.key_retirement_check(saved['token'],saved['old_evidence_key'])['tenant_live_ready']
+    assert reduced.read_evidence(saved['key_token'],saved['key_artifact']).reveal()==b'generated key recovery artifact'
+    assert rekeys.key_retirement_check(saved['key_token'],saved['old_evidence_key'])['tenant_live_ready']
     trusted_key = read_document('/checkpoint/custody-public.json')
     for label,target in [('active',saved['case_id']),('purged',saved['purge_case_id'])]:
         assert checkpoints.check_checkpoint_policy(saved['token'],target,saved['checkpoint_digests'][label])['full_current_evidence_coverage']
