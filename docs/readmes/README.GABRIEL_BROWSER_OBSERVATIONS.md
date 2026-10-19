@@ -48,9 +48,12 @@ Use the existing private case-data image, evidence volume and identity secrets, 
 
 ```bash
 observe --token-file /operator/human-session --credential-file /operator/browser-pair.json --payload-file /operator/approved-observation.json
+observation-list --token-file /operator/human-session --lease-id LEASE_UUID
 observation-get --token-file /operator/human-session --observation-id OBSERVATION_UUID
 observation-reconcile --token-file /operator/human-session --observation-id OBSERVATION_UUID
 ```
+
+`observation-list` enumerates metadata for the known lease, including prepared observations and their request/observation IDs after a failed submission. This gives the engineer a recovery path without database-owner access or a still-valid peer. It returns no body or credential; tenant/human authorization still applies. At most 1,000 unique sequences exist per lease, so the bounded result is complete.
 
 The CLI is an operator tool, not a transport design that distributes the human session to the browser. Protect payload files as sensitive evidence and remove them under the retention policy. JSON input is bounded at 256 KiB to accommodate the content envelope; the text itself remains capped at 64 KiB. Existing checkpoint-document limits remain unchanged by default.
 

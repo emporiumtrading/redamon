@@ -13,7 +13,7 @@ from gabriel.identity.service import IdentityError
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel scoped browser pairing contract')
-    parser.add_argument('command',choices=('task-create','lease-issue','lease-get','lease-revoke','connect','heartbeat','disconnect','observe','observation-get','observation-reconcile'))
+    parser.add_argument('command',choices=('task-create','lease-issue','lease-get','lease-revoke','connect','heartbeat','disconnect','observe','observation-get','observation-list','observation-reconcile'))
     parser.add_argument('--token-file')
     parser.add_argument('--credential-file')
     parser.add_argument('--context-file')
@@ -64,6 +64,8 @@ def main():
                 result = service.get_browser_lease(token,args.lease_id)
             elif args.command=='observation-get':
                 result = service.get_browser_observation(token,args.observation_id)
+            elif args.command=='observation-list':
+                result = service.list_browser_observations(token,args.lease_id)
             elif args.command=='observation-reconcile':
                 result = service.reconcile_browser_observation(token,args.observation_id)
             else:

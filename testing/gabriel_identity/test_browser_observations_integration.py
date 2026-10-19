@@ -167,7 +167,9 @@ def test_receipt_failure_keeps_real_evidence_reconcilable_after_peer_revocation(
     try:
         with pytest.raises(IdentityUnavailable): submit(tenant,browser,grant,payload)
     finally: receipt_permission(tenant,True)
-    observation = rows(tenant,'browser_observations')[0]
+    listing = browser.list_browser_observations(tenant.token,grant.id)
+    assert listing['complete'] and len(listing['observations'])==1
+    observation = listing['observations'][0]
     assert observation['state']=='prepared' and rows(tenant,'evidence_objects')[0]['state']=='ready'
     assert not rows(tenant,'browser_observation_receipts')
     with pytest.raises(AccessDenied,match='order_or_pending'):
@@ -188,6 +190,17 @@ def test_audit_failure_rolls_back_intent_and_budget(tenant,browser,grant,payload
     finally: audit_permission(tenant,True)
     assert not rows(tenant,'browser_observations') and not rows(tenant,'evidence_objects')
     assert rows(tenant,'investigation_tasks')[0]['used_steps']==0
+
+
+def test_foreign_tenant_and_peer_cannot_enumerate_observation_recovery(tenant,browser,grant,payload):
+    submit(tenant,browser,grant,payload)
+    password=secrets.token_urlsafe(24)
+    org,_=provision_organization(tenant.db.owner,'Foreign observation metadata','owner',password)
+    foreign=browser.login(org,'owner',password).token
+    with pytest.raises(AccessDenied): browser.list_browser_observations(foreign,grant.id)
+    with pytest.raises(AuthenticationDenied): browser.list_browser_observations(grant.token,grant.id)
+    result=browser.list_browser_observations(tenant.token,grant.id)
+    assert CONTENT not in json.dumps(result,default=str) and result['observations'][0]['sequence']==1
 
 
 def test_missing_ciphertext_cannot_be_reconciled(tenant,browser,grant,payload):
@@ -244,3 +257,15 @@ def test_real_cli_observation_requires_two_credentials_and_never_prints_content(
     observation_id = result['result']['observation_id']
     assert cli('observation-get','--token-file',str(human),'--observation-id',observation_id)[1]['result']['state']=='captured'
     assert cli('observation-reconcile','--token-file',str(human),'--observation-id',observation_id)[1]['result']['evidence_id']==result['result']['evidence_id']
+    body.write_text(json.dumps(dict(payload,request_id=str(uuid4()),sequence=2)))
+    receipt_permission(tenant,False)
+    try:
+        assert cli('observe','--token-file',str(human),'--credential-file',str(peer),'--payload-file',str(body))[0]==1
+    finally: receipt_permission(tenant,True)
+    lease_id=json.loads(peer.read_text())['lease_id']
+    assert cli('lease-revoke','--token-file',str(human),'--lease-id',lease_id)[0]==0
+    code,listing=cli('observation-list','--token-file',str(human),'--lease-id',lease_id)
+    assert code==0 and listing['result']['complete']
+    observations=listing['result']['observations']
+    assert [row['state'] for row in observations]==['captured','prepared']
+    assert cli('observation-reconcile','--token-file',str(human),'--observation-id',observations[1]['id'])[1]['result']['mode']=='engineer_reconciled'

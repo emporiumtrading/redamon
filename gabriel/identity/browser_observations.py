@@ -168,6 +168,19 @@ class BrowserObservationService(BrowserSessionService):
             p = self._human(conn,human_token)
             return observation_metadata(self._observation(conn,p,observation_id))
 
+    def list_browser_observations(self,human_token,lease_id):
+        with connection(self._dsn) as conn:
+            p = self._human(conn,human_token)
+            lease_id = identifier(lease_id)
+            if not conn.execute('SELECT 1 FROM gabriel_identity.browser_leases WHERE organization_id=%s AND id=%s',
+                    (p.organization_id,lease_id)).fetchone():
+                raise AccessDenied('browser_lease_not_accessible')
+            # Unique sequences are constrained to 1..1000; this bound cannot hide additional rows.
+            rows = conn.execute('SELECT * FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s ORDER BY sequence LIMIT 1000',
+                (p.organization_id,lease_id)).fetchall()
+            return {'observations':[observation_metadata(row) for row in rows],'complete':True,
+                'current_page_visibility_verified':False}
+
     def connect_browser(self,token,context):
         result = super().connect_browser(token,context)
         with connection(self._dsn) as conn:
