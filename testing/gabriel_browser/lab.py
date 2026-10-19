@@ -15,6 +15,7 @@ import sys
 import tempfile
 from threading import Thread
 import time
+import traceback
 from urllib.parse import urlsplit
 from uuid import uuid4
 from wsgiref.simple_server import make_server,WSGIRequestHandler,WSGIServer
@@ -180,10 +181,12 @@ def run_browser(family,executable,output):
             cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint))
             click(cdp,popup,'permission')
             # The native browser permission prompt is deliberately exercised, not bypassed by test host grants.
-            time.sleep(0.5)
+            time.sleep(2)
             # Native Allow position observed in the retained 1280x1024 lab screenshot.
             # Keyboard focus traversal selected Deny; retain the real permission check below.
-            subprocess.run(['xdotool','mousemove','807','256','click','1'],check=True,timeout=5)
+            subprocess.run(['xdotool','mousemove','807','256'],check=True,timeout=5)
+            time.sleep(0.5)
+            subprocess.run(['xdotool','click','1'],check=True,timeout=5)
             time.sleep(0.25)
             existing=next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None)
             popup=cdp.attach(existing['targetId']) if existing else native_popup(cdp,target,origin)
@@ -224,8 +227,14 @@ def run_browser(family,executable,output):
             assert 'unusual sign-in' in preview and 'Hostile evidence' in preview
             assert all(secret not in preview for secret in ('GENERATED_PASSWORD_MUST_NOT_LEAVE','GENERATED_FORM_MUST_NOT_LEAVE','GENERATED_HIDDEN_MUST_NOT_LEAVE','GENERATED_STYLE_HIDDEN_MUST_NOT_LEAVE'))
             assert not service.list_browser_observations(human,prepared['lease_id'])['observations']
+            click(cdp,popup,'share')
+            wait_for(lambda:'Explicit sharing approval' in (text(cdp,popup,'message') or ''))
+            assert not service.list_browser_observations(human,prepared['lease_id'])['observations']
             click(cdp,popup,'pause')
             wait_for(lambda:'Paused locally' in (text(cdp,popup,'message') or ''))
+            assert not cdp.evaluate(popup,'document.getElementById("preview-text").value')
+            click(cdp,popup,'preview')
+            wait_for(lambda:'Sharing is paused' in (text(cdp,popup,'message') or ''))
             assert not cdp.evaluate(popup,'document.getElementById("preview-text").value')
             click(cdp,popup,'resume')
             wait_for(lambda:'Sharing resumed' in (text(cdp,popup,'message') or ''))
@@ -239,6 +248,8 @@ def run_browser(family,executable,output):
             assert len(observations)==1 and observations[0]['state']=='captured'
             data=service.read_evidence(human,observations[0]['evidence_id']).reveal().decode()
             assert data==preview and all(secret not in data for secret in ('GENERATED_PASSWORD_MUST_NOT_LEAVE','GENERATED_FORM_MUST_NOT_LEAVE','GENERATED_HIDDEN_MUST_NOT_LEAVE'))
+            click(cdp,popup,'receipts')
+            wait_for(lambda:'Receipts checked. 1 captured observations.' in (text(cdp,popup,'message') or ''))
             mark(family+':stop')
             click(cdp,popup,'stop')
             wait_for(lambda:'stopped' in (text(cdp,popup,'message') or '').lower())
@@ -248,9 +259,12 @@ def run_browser(family,executable,output):
             assert not cdp.evaluate(console,'Boolean(window.chrome?.runtime?.sendMessage)')
             log.flush(); gateway_log.flush()
             assert all(secret not in (root/'browser.log').read_text()+(root/'gateway.log').read_text() for secret in (human,peer,ticket))
-            report={'status':'PASS','browser_family':family,'browser_product':version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
+            executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
+            assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
+            report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
                 'extension_version':'0.1.0','extension_origin':origin,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
+                'unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
@@ -287,7 +301,8 @@ def main():
         print('PASS: actual Chrome for Testing and Brave generated-console extension/TLS/evidence journeys')
         return 0
     except Exception as error:
-        (output/'failure.json').write_text(json.dumps({'status':'FAIL','stage':stage,'error_type':type(error).__name__}))
+        frames=[dict(file=Path(frame.filename).name,line=frame.lineno,function=frame.name) for frame in traceback.extract_tb(error.__traceback__)]
+        (output/'failure.json').write_text(json.dumps({'status':'FAIL','stage':stage,'error_type':type(error).__name__,'frames':frames}))
         print('FAIL: browser lab at '+stage+'; '+type(error).__name__)
         return 1
     finally:

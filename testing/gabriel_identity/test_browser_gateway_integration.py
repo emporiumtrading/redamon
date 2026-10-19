@@ -103,6 +103,16 @@ def test_tls_rejects_untrusted_certificate(server,context):
         call(server,'claim',{'ticket':server['ticket'],'context':context},trust=False)
 
 
+def test_compact_native_document_id_claim_returns_canonical_wire_context(tenant,browser,server,context,payload):
+    native=dict(context,document_id=context['document_id'].replace('-','').upper())
+    code,response,_=claim(server,native)
+    assert code==200 and response['result']['context']==context
+    canonical_payload=dict(payload,context=response['result']['context'])
+    code,response,_=call(server,'observe',canonical_payload,server['peer'])
+    assert code==200
+    assert browser.read_evidence(tenant.token,response['result']['evidence_id']).reveal()==CONTENT.encode()
+
+
 def test_concurrent_claim_consumes_exactly_once(server,context):
     with ThreadPoolExecutor(max_workers=2) as pool:
         results=list(pool.map(lambda _:claim(server,context),range(2)))
