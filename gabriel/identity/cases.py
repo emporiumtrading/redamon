@@ -9,6 +9,7 @@ from gabriel.identity.service import (AccessDenied,IdentityError,IdentityService
 from gabriel.identity.tasks import task_record
 from gabriel.identity.evidence_store import (EvidenceContent,EvidenceError,LocalEvidenceStore,
     MAX_BYTES,canonical)
+from gabriel.identity.evidence_crypto import admit_epoch,available,epoch,register_key,storage_row,verified_read
 
 ZERO_HASH = '0'*64
 
@@ -60,6 +61,8 @@ class CaseService(IdentityService):
         principal = self._principal(conn,token,lock=True)
         if (write or content) and principal.role not in {'owner','admin','analyst'}:
             raise AccessDenied('operation_not_permitted')
+        if write:
+            admit_epoch(conn,principal.organization_id,self.store.keys)
         return principal
 
     def _case(self,conn,principal,case_id,*,open_only=False):
@@ -115,21 +118,15 @@ class CaseService(IdentityService):
             (row['organization_id'],row['id'])).fetchone()
 
     def _verify(self,conn,row,*,ready=True,allow_disposition=False):
+        admit_epoch(conn,row['organization_id'],self.store.keys)
         disposition = self._disposition(conn,row)
         if disposition and not allow_disposition:
             raise EvidenceError('evidence_purged' if disposition['state']=='completed' else 'evidence_disposition_pending')
         chain = self._chain(conn,row)
         if ready and row['state']!='ready':
             raise EvidenceError('evidence_not_ready')
-        try:
-            key = self.store.keys._key(row['key_id'])
-        except IdentityError:
-            raise EvidenceError('evidence_key_unavailable') from None
-        registered = conn.execute('SELECT fingerprint FROM gabriel_identity.evidence_key_registry WHERE key_id=%s',
-            (row['key_id'],)).fetchone()
-        if not registered or registered['fingerprint']!=sha256(key).hexdigest():
-            raise EvidenceError('evidence_key_identity_mismatch')
-        return self.store.read(row,object_aad(row))
+        aad = object_aad(row)
+        return verified_read(self.store,conn,storage_row(conn,row,aad),aad)
 
     def create_case(self,token,title):
         if not isinstance(title,str) or not 1<=len(title.strip())<=160 or any(ord(c)<32 or ord(c)==127 for c in title):
@@ -225,6 +222,11 @@ class CaseService(IdentityService):
                 actual = conn.execute('SELECT fingerprint FROM gabriel_identity.evidence_key_registry WHERE key_id=%s',(key_id,)).fetchone()['fingerprint']
                 if actual!=fingerprint:
                     raise EvidenceError('evidence_key_identity_mismatch')
+                if available(conn) and not epoch(conn,principal.organization_id):
+                    conn.execute('''INSERT INTO gabriel_identity.evidence_key_epochs
+                        (organization_id,generation,active_key_id,created_by) VALUES (%s,%s,%s,%s)''',
+                        (principal.organization_id,self.store.keys.generation,key_id,principal.user_id))
+                admit_epoch(conn,principal.organization_id,self.store.keys)
                 observed = conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
                 evidence_id = uuid4()
                 acquisition_hash = custody_hash(principal.organization_id,evidence_id,1,principal.user_id,'acquisition_intent',ZERO_HASH,observed)

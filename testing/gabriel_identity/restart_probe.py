@@ -1,5 +1,6 @@
 """Real database restart checkpoint; secret state never enters CI artifacts."""
 import json
+import base64
 from hashlib import sha256
 import os
 from pathlib import Path
@@ -19,6 +20,7 @@ from gabriel.identity.actions import ActionService
 from gabriel.identity.retention import RetentionService
 from gabriel.identity.checkpoint_service import CheckpointService
 from gabriel.identity.checkpoint_policy import CheckpointPolicyService
+from gabriel.identity.evidence_keys import EvidenceKeyService
 from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,public_fingerprint,read_document,seal,write_document
 from gabriel.identity.cases import custody_hash
 from datetime import timedelta
@@ -30,8 +32,8 @@ app_dsn = make_conninfo(app_dsn,dbname='gabriel_vault_restore' if sys.argv[1]=='
 service = ServiceIdentityService(app_dsn)
 vault = ProviderVault(app_dsn,
     ProviderKeyRing.from_file(os.environ['GABRIEL_PROVIDER_KEYRING_FILE']))
-cases = CaseService(app_dsn,LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT'],
-    EvidenceKeys.from_file(os.environ['GABRIEL_EVIDENCE_KEYRING_FILE'])))
+evidence_key_file = os.environ['GABRIEL_EVIDENCE_KEYRING_FILE']
+cases = CaseService(app_dsn,LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT'],EvidenceKeys.from_file(evidence_key_file)))
 state = Path('/checkpoint/state.json')
 actions = ActionService(app_dsn,cases.store)
 retention = RetentionService(app_dsn,cases.store)
@@ -44,7 +46,8 @@ def counts():
               'cases','case_tasks','evidence_objects','custody_events','evidence_exports','evidence_key_registry',
               'action_policies','action_policy_state','action_requests','action_approvals','action_decisions','action_executions',
               'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events',
-              'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts','migrations')
+              'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts',
+              'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -73,7 +76,7 @@ if sys.argv[1] == 'before':
     actions.submit(token,action['id'])
     actions.approve(token,action['id'],action['digest'])
     completed_case = cases.create_case(token,'Completed recovery fixture')
-    cases.acquire(token,completed_case['id'],uuid4(),'completed recovery artifact','Recovery fixture',approved=True)
+    completed_artifact = cases.acquire(token,completed_case['id'],uuid4(),'completed recovery artifact','Recovery fixture',approved=True)
     completed_action = actions.propose_close(token,completed_case['id'],uuid4(),'Reviewed completed fixture',ttl=3600)
     actions.submit(token,completed_action['id'])
     actions.approve(token,completed_action['id'],completed_action['digest'])
@@ -129,6 +132,33 @@ if sys.argv[1] == 'before':
         checkpoint_digests[label] = fingerprint(canonical(envelope))
         checkpoints.accept_checkpoint(token,target,envelope,checkpoint_digests[label])
     del signing_key
+    key_password = secrets.token_urlsafe(24)
+    key_org,_ = provision_organization(owner_dsn,'Separate key rollover recovery fixture','key-owner',key_password)
+    key_token = service.login(key_org,'key-owner',key_password).token
+    key_case = cases.create_case(key_token,'Encryption rollover recovery fixture')
+    key_artifacts = [cases.acquire(key_token,key_case['id'],uuid4(),'generated key recovery artifact','Key recovery fixture',approved=True) for _ in range(2)]
+    old_ring = cases.store.keys
+    target = 'k_'+uuid4().hex
+    new_ring = EvidenceKeys(target,dict(old_ring._keys,**{target:secrets.token_bytes(32)}),old_ring.generation+1)
+    rekeys = EvidenceKeyService(app_dsn,LocalEvidenceStore(cases.store.root,new_ring))
+    rekeys.activate_evidence_key(key_token)
+    completed_rewrap = rekeys.prepare_rewrap(key_token,key_artifacts[0]['id'])
+    rekeys.execute_rewrap(key_token,completed_rewrap['id'])
+    pending_rewrap = rekeys.prepare_rewrap(key_token,key_artifacts[1]['id'])
+    with connection(owner_dsn,runtime=False) as conn:
+        conn.execute('REVOKE INSERT ON gabriel_identity.evidence_rewrap_results FROM gabriel_identity_app')
+    try:
+        try:
+            rekeys.execute_rewrap(key_token,pending_rewrap['id'])
+        except IdentityUnavailable:
+            pass
+        else:
+            raise AssertionError('rewrap receipt failure did not block success')
+    finally:
+        with connection(owner_dsn,runtime=False) as conn:
+            conn.execute('GRANT INSERT ON gabriel_identity.evidence_rewrap_results TO gabriel_identity_app')
+    write_document('/checkpoint/evidence-rotated-keys.json',{'schema_version':1,'purpose':'evidence-v1',
+        'generation':new_ring.generation,'active':new_ring.active,'keys':{k:base64.b64encode(v).decode() for k,v in new_ring._keys.items()}})
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
@@ -138,6 +168,8 @@ if sys.argv[1] == 'before':
         'completed_purge':str(attempts[0]),'pending_purge':str(attempts[1]),
         'purged_evidence':[str(artifact['id']) for artifact in artifacts],
         'checkpoint_digests':checkpoint_digests,'retired_checkpoint_key':retired_pin,
+        'completed_rewrap':str(completed_rewrap['id']),'pending_rewrap':str(pending_rewrap['id']),
+        'key_token':key_token,'key_artifact':str(key_artifacts[1]['id']),'old_evidence_key':old_ring.active,
         'provider_digest':sha256(provider_value.encode()).hexdigest(),'counts':counts()}))
     state.chmod(0o600)
     print('PASS: real database checkpoint created without logging credentials')
@@ -145,6 +177,15 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
+    rotated_store = LocalEvidenceStore(cases.store.root,EvidenceKeys.from_file('/checkpoint/evidence-rotated-keys.json'))
+    rekeys = EvidenceKeyService(app_dsn,rotated_store)
+    assert rekeys.reconcile_rewrap(saved['key_token'],saved['completed_rewrap'])['state']=='completed'
+    assert rekeys.reconcile_rewrap(saved['key_token'],saved['pending_rewrap'])['state']=='completed'
+    active = rotated_store.keys.active
+    minimal = EvidenceKeys(active,{active:rotated_store.keys._key(active)},rotated_store.keys.generation)
+    reduced = EvidenceKeyService(app_dsn,LocalEvidenceStore(cases.store.root,minimal))
+    assert reduced.read_evidence(saved['key_token'],saved['key_artifact']).reveal()==b'generated key recovery artifact'
+    assert rekeys.key_retirement_check(saved['key_token'],saved['old_evidence_key'])['tenant_live_ready']
     trusted_key = read_document('/checkpoint/custody-public.json')
     for label,target in [('active',saved['case_id']),('purged',saved['purge_case_id'])]:
         assert checkpoints.check_checkpoint_policy(saved['token'],target,saved['checkpoint_digests'][label])['full_current_evidence_coverage']
@@ -236,6 +277,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: legal hold and retention survived recovery; completed purge retained and interrupted unlink reconciled without another deletion')
     print('PASS: externally retained signed custody checkpoints matched active and purged evidence after recovery')
     print('PASS: checkpoint trust/policy/receipts and signer revocation survived recovery; pending closure required the retained external digest')
+    print('PASS: encryption rollover and interrupted replacement survived recovery; target-only live ring read verified bytes with immutable custody')
     if sys.argv[1] == 'restored':
         print('PASS: real pg_dump/pg_restore recovered matching row counts and encrypted values with separately retained keys')
 else:

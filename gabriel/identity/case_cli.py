@@ -14,6 +14,7 @@ from gabriel.identity.actions import ActionService
 from gabriel.identity.retention import RetentionService
 from gabriel.identity.checkpoint_service import CheckpointService
 from gabriel.identity.checkpoint_policy import CheckpointPolicyService
+from gabriel.identity.evidence_keys import EvidenceKeyService
 from gabriel.identity.checkpoints import read_document,write_document,canonical,fingerprint
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore,MAX_BYTES
 
@@ -91,7 +92,8 @@ def main():
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
-        'checkpoint-key-trust','checkpoint-key-revoke','checkpoint-policy-set','checkpoint-policy-get','checkpoint-accept','checkpoint-check'))
+        'checkpoint-key-trust','checkpoint-key-revoke','checkpoint-policy-set','checkpoint-policy-get','checkpoint-accept','checkpoint-check',
+        'evidence-key-activate','evidence-rewrap-prepare','evidence-rewrap-execute','evidence-rewrap-reconcile','evidence-rewrap-get','evidence-key-retirement-check'))
     parser.add_argument('--token-file')
     parser.add_argument('--title')
     parser.add_argument('--case-id')
@@ -120,13 +122,26 @@ def main():
     parser.add_argument('--key-fingerprint')
     parser.add_argument('--max-age-seconds',type=int)
     parser.add_argument('--checkpoint-digest')
+    parser.add_argument('--key-id')
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
         store = LocalEvidenceStore(os.environ.get('GABRIEL_EVIDENCE_ROOT'),keys)
-        service = CheckpointPolicyService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
+        service = EvidenceKeyService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
         token = read_secret(args.token_file,128) if args.token_file else getpass.getpass('Gabriel session: ')
-        if args.command=='checkpoint-key-trust':
+        if args.command=='evidence-key-activate':
+            result = service.activate_evidence_key(token)
+        elif args.command=='evidence-rewrap-prepare':
+            result = service.prepare_rewrap(token,args.evidence_id)
+        elif args.command=='evidence-rewrap-execute':
+            result = service.execute_rewrap(token,args.attempt_id)
+        elif args.command=='evidence-rewrap-reconcile':
+            result = service.reconcile_rewrap(token,args.attempt_id)
+        elif args.command=='evidence-rewrap-get':
+            result = service.get_rewrap(token,args.attempt_id)
+        elif args.command=='evidence-key-retirement-check':
+            result = service.key_retirement_check(token,args.key_id)
+        elif args.command=='checkpoint-key-trust':
             result = service.trust_checkpoint_key(token,read_document(args.trusted_public_key),args.key_fingerprint)
         elif args.command=='checkpoint-key-revoke':
             service.revoke_checkpoint_key(token,args.key_fingerprint,args.rationale)

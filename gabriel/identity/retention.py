@@ -7,6 +7,7 @@ from uuid import uuid4
 from gabriel.identity.actions import ActionService,digest
 from gabriel.identity.cases import object_aad,iso
 from gabriel.identity.evidence_store import EvidenceError,canonical
+from gabriel.identity.evidence_crypto import storage_row
 from gabriel.identity.service import AccessDenied,InvalidIdentityInput,_audit,_digest,connection,identifier
 
 
@@ -311,7 +312,9 @@ class RetentionService(ActionService):
                 if min(request['expires_at'],consent['expires_at'])<=now:
                     raise AccessDenied('purge_approval_invalid_or_expired')
                 _audit(conn,'retention.unlink_admitted',p,attempt['id'])
-            outcome = self.store.remove(row,object_aad(row),admit=admit)
+            aad = object_aad(row)
+            physical = storage_row(conn,row,aad)
+            outcome = self.store.remove(physical,aad,admit=admit)
             if not self.store.absent(row,sync=True):
                 raise EvidenceError('purge_absence_unconfirmed')
             return self._complete(conn,p,attempt,outcome,'purge_completed')
