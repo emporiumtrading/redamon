@@ -1,6 +1,6 @@
 # Browser Companion control and UAT inventory
 
-Candidate: extension `0.1.0`, six reviewed package files. Automated native-browser lab is in progress; human UAT is **NOT_RUN** throughout this inventory. Server/package source `35d2d38da6241ad2e17a1c0a48c3aedb8936a4ca` passed 579 component/regression cases. That does not establish the outcomes below in a real browser or a real security console.
+Candidate: extension `0.1.0`, six reviewed package files. Native-browser lab at source `cfef1ffe37477c76d5be34bd0c8e817cfc03855e` passed the 15-check subset per browser in hosted run `39217905170`; expanded checks are pending. Human UAT is **NOT_RUN** throughout this inventory. Server/package source `35d2d38da6241ad2e17a1c0a48c3aedb8936a4ca` passed 579 component/regression cases. Neither result accepts all scenarios below or establishes real security-console compatibility.
 
 | Control / selector | Expected normal result | Required denial, gap or failure result |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ Candidate: extension `0.1.0`, six reviewed package files. Automated native-brows
 | Stop / `#stop` | Local credentials/cursors clear immediately; server disconnect attempted. | Outage clearly reports unconfirmed server disconnect; backend expiry/revocation still govern admitted work. |
 | Status text / `#message` | Visible and live-announced working, denied, gap, paused, paired and stopped states. | No raw exception/secret or misleading success after denied/unknown outcome. |
 | Receipt/scope / `#result` | Receipt IDs, expiry and relevant tenant/case/task context are readable. | No evidence body, token or false source-authenticity/attack-certainty assertion. |
+| Paired scope / `#scope` | Organization/case/task remain present across preview, approval and receipt operations; state/heartbeat refresh their bound values. | Selection/disconnect clears the paired scope; an error message never implies confirmed live visibility. |
 
 ## Required persona and lifecycle scenarios
 

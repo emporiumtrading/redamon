@@ -5,14 +5,22 @@ const field = (id) => byId(id).value;
 async function run(operation, extra = {}) {
   byId("message").textContent = operation === "stop" ? "Stopping locally…" : "Working…";
   try {
+    if (["select","stop"].includes(operation)) byId("scope").textContent = "No paired organization, case or task.";
     if (["stop","pause","select"].includes(operation)) paired = false;
     if (["stop","pause"].includes(operation)) { byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null; }
     const value = await chrome.runtime.sendMessage({operation, ...extra});
     if (!value?.ok) throw new Error(value?.error || "Connection lost. Nothing is confirmed.");
     const result = value.result;
+    if (operation === "state" && !result.stored_pairing) byId("scope").textContent = "No paired organization, case or task.";
+    if (result.organization_id) byId("scope").textContent = "Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id;
     if (["pair","resume"].includes(operation)) paired = true;
     if (operation === "state") paired = result.stored_pairing && !result.paused;
-    if (result.context) { byId("context").value = JSON.stringify(result.context, null, 2); byId("extension-origin").textContent = result.extension_origin; }
+    if (result.context) {
+      byId("context").value = JSON.stringify(result.context, null, 2);
+      byId("extension-origin").textContent = result.extension_origin;
+      byId("browser").value = result.context.browser;
+      byId("account").value = result.context.account_label;
+    }
     if (result.content) { byId("preview-text").value = result.content; observedAt = result.observed_at; byId("approved").checked = false; }
     if (operation === "share" || operation === "stop") { byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null; }
     byId("message").textContent = result.message || (operation === "preview" ? "Partial preview ready. Review before sharing." : "Page selected. Give this context to your Gabriel operator.");

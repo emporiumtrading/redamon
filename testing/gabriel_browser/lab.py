@@ -113,10 +113,12 @@ def console_app(environ,start_response):
 
 
 def native_popup(cdp,console_target,origin):
-    cdp.send('Target.activateTarget',{'targetId':console_target})
-    windows=subprocess.run(['xdotool','search','--onlyvisible','--name','Generated Gabriel Lab Console'],capture_output=True,text=True,timeout=5)
-    if not windows.stdout.strip(): raise AssertionError('browser_window_missing')
-    subprocess.run(['xdotool','windowactivate','--sync',windows.stdout.splitlines()[0]],check=True,timeout=5)
+    def visible_window():
+        cdp.send('Target.activateTarget',{'targetId':console_target})
+        windows=subprocess.run(['xdotool','search','--onlyvisible','--name','Generated Gabriel Lab Console'],capture_output=True,text=True,timeout=5)
+        return windows.stdout.splitlines()[0] if windows.stdout.strip() else None
+    window=wait_for(visible_window,15)
+    subprocess.run(['xdotool','windowactivate','--sync',window],check=True,timeout=5)
     subprocess.run(['xdotool','key','--clearmodifiers','ctrl+shift+y'],check=True,timeout=5)
     target=wait_for(lambda:next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None))
     session=cdp.attach(target['targetId'])
@@ -221,10 +223,12 @@ def run_browser(family,executable,output):
             cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint)+';document.getElementById("ticket").value='+json.dumps(ticket))
             click(cdp,popup,'pair')
             wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
+            assert all(str(identifier) in text(cdp,popup,'scope') for identifier in (org,case['id'],task['id']))
             mark(family+':preview')
             click(cdp,popup,'preview')
             preview=wait_for(lambda:cdp.evaluate(popup,'document.getElementById("preview-text").value') or None)
             assert 'unusual sign-in' in preview and 'Hostile evidence' in preview
+            assert all(str(identifier) in text(cdp,popup,'scope') for identifier in (org,case['id'],task['id']))
             assert all(secret not in preview for secret in ('GENERATED_PASSWORD_MUST_NOT_LEAVE','GENERATED_FORM_MUST_NOT_LEAVE','GENERATED_HIDDEN_MUST_NOT_LEAVE','GENERATED_STYLE_HIDDEN_MUST_NOT_LEAVE'))
             assert not service.list_browser_observations(human,prepared['lease_id'])['observations']
             click(cdp,popup,'share')
@@ -255,6 +259,7 @@ def run_browser(family,executable,output):
             wait_for(lambda:'stopped' in (text(cdp,popup,'message') or '').lower())
             assert service.get_browser_lease(human,prepared['lease_id'])['state']=='disconnected'
             assert not cdp.evaluate(popup,'document.getElementById("preview-text").value')
+            assert text(cdp,popup,'scope')=='No paired organization, case or task.'
             peer=read_document(bootstrap/'peer.json',private=True)['token']
             assert not cdp.evaluate(console,'Boolean(window.chrome?.runtime?.sendMessage)')
             log.flush(); gateway_log.flush()
@@ -264,7 +269,7 @@ def run_browser(family,executable,output):
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
                 'extension_version':'0.1.0','extension_origin':origin,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
-                'unchecked_consent_denial','paused_collection_denial','receipt_inspection',
+                'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
