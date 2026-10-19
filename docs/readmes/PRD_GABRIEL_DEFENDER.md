@@ -257,6 +257,10 @@ Decompose the requirement; identify upstream dependencies, user outcome, abuse c
 
 After three unsuccessful repairs of the same cause, stop automated changes to that slice and escalate with the evidence, attempted fixes and precise missing input. Other independent authorized work may continue. Do not weaken tests, lower thresholds, remove an approval check or fabricate data to reach a green result. Additional attempts require a reviewed new hypothesis, not repetition until the model reports confidence 1.0.
 
+### 10.2.1 Continue through ready dependencies
+
+An implementation checkpoint is not a request for the engineer to say “continue.” Within the authorized conversion scope, advance from a verified slice to the next ready dependency, and use CI waiting time for independent implementation or review work. Give progress updates with findings and the next verification target. Record a real blocker when no authorized ready work remains; identify the missing evidence or decision rather than repeatedly asking permission for routine development. Independent review and human UAT may block release while other safe implementation work continues. A running CI job is not a passing gate, and ending an interactive session does not imply a persistent background engineering service exists.
+
 ### 10.3 L2: integrated release loop
 
 Combine accepted slices into a versioned candidate. Run G1 and G2, including staging UAT and complete critical-path regression. Fix failures through L1. Review the exact artifact manifest at G3. Deploy that accepted artifact, run G4 post-release UAT/regression and complete G5 observation before closing the release.

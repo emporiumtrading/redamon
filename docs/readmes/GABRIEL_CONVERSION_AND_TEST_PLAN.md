@@ -219,6 +219,8 @@ Use NIST SSDF 1.1 as the final published reference baseline verified for this pl
 
 This is a bounded engineering process, not an indefinitely running self-modification service. Autonomous repair cannot change tests to conceal defects, weaken approval rules, invent telemetry, delete evidence or mark an unrun check as passed.
 
+Continue automatically into the next authorized ready dependency after each verified slice; do not require a new “proceed” message for ordinary implementation, regression or repair. While hosted checks run, advance independent ready work. A pending independent review or human UAT blocks the relevant release gate, not every development task. Stop only at an actual dependency, access, review or decision boundary and record its evidence. This does not create a persistent worker after an interactive session ends.
+
 ### Required engineering records
 
 For each work item record ID, dependencies, owner, requirement, threat/abuse cases, acceptance tests, affected files, source SHA, build/image digest, schema/config/model versions, test counts, failures/skips, evidence location, reviewer, confidence, unresolved issues and rollback decision.
