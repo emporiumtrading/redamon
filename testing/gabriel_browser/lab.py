@@ -113,10 +113,12 @@ def console_app(environ,start_response):
 
 
 def native_popup(cdp,console_target,origin):
-    cdp.send('Target.activateTarget',{'targetId':console_target})
-    windows=subprocess.run(['xdotool','search','--onlyvisible','--name','Generated Gabriel Lab Console'],capture_output=True,text=True,timeout=5)
-    if not windows.stdout.strip(): raise AssertionError('browser_window_missing')
-    subprocess.run(['xdotool','windowactivate','--sync',windows.stdout.splitlines()[0]],check=True,timeout=5)
+    def visible_window():
+        cdp.send('Target.activateTarget',{'targetId':console_target})
+        windows=subprocess.run(['xdotool','search','--onlyvisible','--name','Generated Gabriel Lab Console'],capture_output=True,text=True,timeout=5)
+        return windows.stdout.splitlines()[0] if windows.stdout.strip() else None
+    window=wait_for(visible_window,15)
+    subprocess.run(['xdotool','windowactivate','--sync',window],check=True,timeout=5)
     subprocess.run(['xdotool','key','--clearmodifiers','ctrl+shift+y'],check=True,timeout=5)
     target=wait_for(lambda:next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None))
     session=cdp.attach(target['targetId'])
