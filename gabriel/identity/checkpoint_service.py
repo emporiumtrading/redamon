@@ -13,6 +13,28 @@ def case_digest(row):
     return fingerprint(canonical([str(row['organization_id']),str(row['id']),row['title'],str(row['created_by']),iso(row['created_at'])]))
 
 
+def compare_checkpoint(service,conn,p,case,snapshot,*,require_all=False):
+    if snapshot['organization_id']!=str(p.organization_id) or snapshot['case_id']!=str(case['id']):
+        raise AccessDenied('checkpoint_scope_mismatch')
+    if snapshot['case_digest']!=case_digest(case):
+        raise EvidenceError('checkpoint_case_changed')
+    if require_all:
+        current = conn.execute('SELECT id FROM gabriel_identity.evidence_objects WHERE organization_id=%s AND case_id=%s ORDER BY id',
+            (p.organization_id,case['id'])).fetchall()
+        if [str(r['id']) for r in current]!=[b['evidence_id'] for b in snapshot['evidence']]:
+            raise EvidenceError('checkpoint_coverage_incomplete')
+    for bound in snapshot['evidence']:
+        row = conn.execute('SELECT * FROM gabriel_identity.evidence_objects WHERE organization_id=%s AND case_id=%s AND id=%s',
+            (p.organization_id,case['id'],bound['evidence_id'])).fetchone()
+        if not row:
+            raise EvidenceError('checkpoint_evidence_missing')
+        if sha256(object_aad(row)).hexdigest()!=bound['context_digest']:
+            raise EvidenceError('checkpoint_context_changed')
+        chain = service._chain(conn,row)
+        if len(chain)<bound['sequence'] or chain[bound['sequence']-1]['event_hash']!=bound['head']:
+            raise EvidenceError('checkpoint_custody_changed')
+
+
 class CheckpointService(RetentionService):
     def capture_checkpoint(self,token,case_id):
         with connection(self._dsn) as conn:
@@ -31,6 +53,13 @@ class CheckpointService(RetentionService):
             snapshot = {'schema_version':1,'purpose':PURPOSE,'organization_id':str(p.organization_id),'case_id':str(case['id']),
                 'case_digest':case_digest(case),'captured_at':iso(now),'nonce':str(uuid4()),'evidence':entries}
             validate_snapshot(snapshot)
+            count = conn.execute('SELECT count(*) AS n FROM gabriel_identity.checkpoint_captures WHERE organization_id=%s AND case_id=%s',
+                (p.organization_id,case['id'])).fetchone()['n']
+            if count>=4096:
+                raise AccessDenied('checkpoint_capture_limit')
+            conn.execute('''INSERT INTO gabriel_identity.checkpoint_captures
+                (organization_id,case_id,nonce,snapshot_digest,captured_at,created_by) VALUES (%s,%s,%s,%s,%s,%s)''',
+                (p.organization_id,case['id'],snapshot['nonce'],fingerprint(canonical(snapshot)),now,p.user_id))
             self._principal(conn,token,lock=True)
             _audit(conn,'checkpoint.captured',p,case['id'])
             return snapshot
@@ -43,20 +72,7 @@ class CheckpointService(RetentionService):
         with connection(self._dsn) as conn:
             p = self._human(conn,token)
             case = self._case(conn,p,case_id)
-            if snapshot['organization_id']!=str(p.organization_id) or snapshot['case_id']!=str(case['id']):
-                raise AccessDenied('checkpoint_scope_mismatch')
-            if snapshot['case_digest']!=case_digest(case):
-                raise EvidenceError('checkpoint_case_changed')
-            for bound in snapshot['evidence']:
-                row = conn.execute('SELECT * FROM gabriel_identity.evidence_objects WHERE organization_id=%s AND case_id=%s AND id=%s',
-                    (p.organization_id,case['id'],bound['evidence_id'])).fetchone()
-                if not row:
-                    raise EvidenceError('checkpoint_evidence_missing')
-                if sha256(object_aad(row)).hexdigest()!=bound['context_digest']:
-                    raise EvidenceError('checkpoint_context_changed')
-                chain = self._chain(conn,row)
-                if len(chain)<bound['sequence'] or chain[bound['sequence']-1]['event_hash']!=bound['head']:
-                    raise EvidenceError('checkpoint_custody_changed')
+            compare_checkpoint(self,conn,p,case,snapshot)
             self._principal(conn,token,lock=True)
             _audit(conn,'checkpoint.verified',p,case['id'])
             return {'checkpoint_digest':expected_digest,'case_id':str(case['id']),

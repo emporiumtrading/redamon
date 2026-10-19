@@ -13,6 +13,7 @@ from gabriel.identity.cases import CaseService
 from gabriel.identity.actions import ActionService
 from gabriel.identity.retention import RetentionService
 from gabriel.identity.checkpoint_service import CheckpointService
+from gabriel.identity.checkpoint_policy import CheckpointPolicyService
 from gabriel.identity.checkpoints import read_document,write_document,canonical,fingerprint
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore,MAX_BYTES
 
@@ -89,7 +90,8 @@ def main():
     parser.add_argument('command',choices=('create','list','get','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
-        'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify'))
+        'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
+        'checkpoint-key-trust','checkpoint-key-revoke','checkpoint-policy-set','checkpoint-policy-get','checkpoint-accept','checkpoint-check'))
     parser.add_argument('--token-file')
     parser.add_argument('--title')
     parser.add_argument('--case-id')
@@ -115,13 +117,29 @@ def main():
     parser.add_argument('--attempt-id')
     parser.add_argument('--checkpoint-file')
     parser.add_argument('--trusted-public-key')
+    parser.add_argument('--key-fingerprint')
+    parser.add_argument('--max-age-seconds',type=int)
+    parser.add_argument('--checkpoint-digest')
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
         store = LocalEvidenceStore(os.environ.get('GABRIEL_EVIDENCE_ROOT'),keys)
-        service = CheckpointService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
+        service = CheckpointPolicyService(read_secret(os.environ.get('GABRIEL_IDENTITY_DSN_FILE')),store)
         token = read_secret(args.token_file,128) if args.token_file else getpass.getpass('Gabriel session: ')
-        if args.command=='checkpoint-capture':
+        if args.command=='checkpoint-key-trust':
+            result = service.trust_checkpoint_key(token,read_document(args.trusted_public_key),args.key_fingerprint)
+        elif args.command=='checkpoint-key-revoke':
+            service.revoke_checkpoint_key(token,args.key_fingerprint,args.rationale)
+            result = {'revoked':True}
+        elif args.command=='checkpoint-policy-set':
+            result = service.set_checkpoint_policy(token,args.key_fingerprint,args.max_age_seconds)
+        elif args.command=='checkpoint-policy-get':
+            result = service.get_checkpoint_policy(token)
+        elif args.command=='checkpoint-accept':
+            result = service.accept_checkpoint(token,args.case_id,read_document(args.checkpoint_file),args.expected_digest)
+        elif args.command=='checkpoint-check':
+            result = service.check_checkpoint_policy(token,args.case_id,args.expected_digest)
+        elif args.command=='checkpoint-capture':
             snapshot = service.capture_checkpoint(token,args.case_id)
             write_document(args.output,snapshot)
             result = {'snapshot_digest':fingerprint(canonical(snapshot)),'case_id':str(args.case_id),'sealed':False}
@@ -173,7 +191,7 @@ def main():
             service.end(token,args.approval_id,'rejected' if args.command=='action-reject' else 'cancelled')
             result = {'ended':True}
         elif args.command=='action-execute':
-            result = service.execute(token,args.approval_id)
+            result = service.execute(token,args.approval_id,checkpoint_digest=args.checkpoint_digest)
         elif args.command=='create':
             result = service.create_case(token,args.title)
         elif args.command=='list':
@@ -194,7 +212,7 @@ def main():
         elif args.command=='verify':
             result = service.verify_case(token,args.case_id)
         elif args.command=='close':
-            result = service.close_case(token,args.case_id,approval_id=args.approval_id)
+            result = service.close_case(token,args.case_id,approval_id=args.approval_id,checkpoint_digest=args.checkpoint_digest)
         elif args.command=='exports':
             result = service.list_exports(token)
         else:

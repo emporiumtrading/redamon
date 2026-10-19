@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Checkpoint trust-policy increment 11 — component verification pending
+
+Baseline: `051e4357698ac5dab6cc39260e7d4374d3abdf98`. Links: GAB-003/GAB-005/GAB-006/GAB-007/GAB-008/GAB-037/GAB-038, C04, T06/T07/T08/T09/T11/T12/T27 and CV-04. Owner: Codex; independent reviewer acceptance pending. Component **IMPLEMENTED_UNVERIFIED**; lifecycle/release **BLOCKED**. Existing C00–C04 gates remain open.
+
+Schema 9 adds append-only trusted public keys, revocations, policy history, capture registrations and accepted receipts. Strict checks use the configured key, an independently retained expected digest, full current evidence coverage and database-clock age from exact capture registration. Replays do not refresh age; older captures, new policy revisions and key revocation deny stale authority. Configured tenants require this gate plus exact existing action consent before local closure; a new database trigger denies older runtime bypass and checks age at mutation. Existing tenants receive no invented policy and earlier migration checksums remain unchanged. See [operator workflow and limits](README.GABRIEL_CHECKPOINT_POLICY.md).
+
+Hypothesis: untrusted/stale/future/incomplete/rolled-back receipts cannot admit closure; key/policy changes invalidate authority; audit failure and expired dispatch roll back all closure state; trust/receipts/revocation survive restart/restore. Real SQL/signature/CLI/adversarial and recovery checks await hosted VM execution. Local AST/shell/diff checks are required; no host pytest substitutes for missing Docker. Counts/source/artifact evidence pending. Rollback preserves schema 9 and independent trust material while disabling dispatch. Scheduled renewal, trusted clock operations, independently anchored policy/governance history, external custody acceptance, evidence-key rewrap, broader action admission, review and human UAT remain open.
+
 ## Custody checkpoint increment 10 — operator component verified
 
 Baseline: `8f9f1f9a9b4ea5f06a9d920a8ba29c033e274220`. Links: GAB-005/GAB-006/GAB-007/GAB-008/GAB-037/GAB-038, C04, T06/T11/T12/T27 and CV-04. Owner: Codex; independent reviewer acceptance pending. Component VM checks **PASS**; lifecycle/release **BLOCKED**. Existing C00–C04 acceptance gaps remain open.

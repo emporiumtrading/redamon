@@ -227,9 +227,9 @@ class ActionService(CaseService):
                 (p.organization_id,row['id'])).fetchone()
             return {k:v for k,v in row.items() if k!='requester_session'}
 
-    def execute(self,token,request_id):
+    def execute(self,token,request_id,*,checkpoint_digest=None):
         row = self.get_action(token,request_id)
-        return self.close_case(token,row['case_id'],approval_id=row['id'])
+        return self.close_case(token,row['case_id'],approval_id=row['id'],checkpoint_digest=checkpoint_digest)
 
     def _approval_current(self,conn,p,row,approval,policy,now):
         if not approval or approval['digest']!=row['digest'] or approval['expires_at']<=now:
@@ -244,7 +244,7 @@ class ActionService(CaseService):
                 or policy['distinct_approver'] and approval['approved_by']==row['requested_by']):
             raise AccessDenied('action_approver_revoked')
 
-    def _execute_close(self,conn,p,case,request_id,token):
+    def _execute_close(self,conn,p,case,request_id,token,*,checkpoint_digest=None):
         if p.role not in {'owner','admin'}:
             raise AccessDenied('operation_not_permitted')
         row = self._request(conn,p,request_id)
@@ -264,6 +264,8 @@ class ActionService(CaseService):
             _audit(conn,'action.execution_replayed',p,row['id'])
             return receipt['result']
         self._unchanged(conn,p,row,case)
+        from gabriel.identity.checkpoint_policy import admit_close
+        admit_close(self,conn,p,case,checkpoint_digest)
         self._principal(conn,token,lock=True)
         policy,dispatch_time = self._context(conn,p,row)
         self._approval_current(conn,p,row,approval,policy,dispatch_time)

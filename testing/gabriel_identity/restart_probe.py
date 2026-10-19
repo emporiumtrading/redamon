@@ -18,7 +18,8 @@ from gabriel.identity.cases import CaseService
 from gabriel.identity.actions import ActionService
 from gabriel.identity.retention import RetentionService
 from gabriel.identity.checkpoint_service import CheckpointService
-from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,read_document,seal,write_document
+from gabriel.identity.checkpoint_policy import CheckpointPolicyService
+from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,public_fingerprint,read_document,seal,write_document
 from gabriel.identity.cases import custody_hash
 from datetime import timedelta
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore
@@ -34,7 +35,7 @@ cases = CaseService(app_dsn,LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT
 state = Path('/checkpoint/state.json')
 actions = ActionService(app_dsn,cases.store)
 retention = RetentionService(app_dsn,cases.store)
-checkpoints = CheckpointService(app_dsn,cases.store)
+checkpoints = CheckpointPolicyService(app_dsn,cases.store)
 
 
 def counts():
@@ -42,7 +43,8 @@ def counts():
               'provider_secrets','provider_key_registry','provider_key_state','investigation_tasks','task_executions',
               'cases','case_tasks','evidence_objects','custody_events','evidence_exports','evidence_key_registry',
               'action_policies','action_policy_state','action_requests','action_approvals','action_decisions','action_executions',
-              'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events','migrations')
+              'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events',
+              'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -112,12 +114,20 @@ if sys.argv[1] == 'before':
                 with connection(owner_dsn,runtime=False) as conn:
                     conn.execute('GRANT INSERT ON gabriel_identity.retention_events TO gabriel_identity_app')
     signing_key,public_key = new_keypair()
+    pin = public_fingerprint(public_key)
+    checkpoints.trust_checkpoint_key(token,public_key,pin)
+    checkpoints.set_checkpoint_policy(token,pin,3600)
+    _,retired_public = new_keypair()
+    retired_pin = public_fingerprint(retired_public)
+    checkpoints.trust_checkpoint_key(token,retired_public,retired_pin)
+    checkpoints.revoke_checkpoint_key(token,retired_pin,'Generated recovery key retirement')
     write_document('/checkpoint/custody-public.json',public_key)
     checkpoint_digests = {}
     for label,target in [('active',case['id']),('purged',purge_case['id'])]:
         envelope = seal(checkpoints.capture_checkpoint(token,target),signing_key)
         write_document('/checkpoint/custody-'+label+'.json',envelope)
         checkpoint_digests[label] = fingerprint(canonical(envelope))
+        checkpoints.accept_checkpoint(token,target,envelope,checkpoint_digests[label])
     del signing_key
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
@@ -127,7 +137,7 @@ if sys.argv[1] == 'before':
         'hold_id':str(hold['id']),'purge_case_id':str(purge_case['id']),
         'completed_purge':str(attempts[0]),'pending_purge':str(attempts[1]),
         'purged_evidence':[str(artifact['id']) for artifact in artifacts],
-        'checkpoint_digests':checkpoint_digests,
+        'checkpoint_digests':checkpoint_digests,'retired_checkpoint_key':retired_pin,
         'provider_digest':sha256(provider_value.encode()).hexdigest(),'counts':counts()}))
     state.chmod(0o600)
     print('PASS: real database checkpoint created without logging credentials')
@@ -137,8 +147,15 @@ elif sys.argv[1] in {'after','restored'}:
         assert counts()==saved['counts']
     trusted_key = read_document('/checkpoint/custody-public.json')
     for label,target in [('active',saved['case_id']),('purged',saved['purge_case_id'])]:
+        assert checkpoints.check_checkpoint_policy(saved['token'],target,saved['checkpoint_digests'][label])['full_current_evidence_coverage']
         assert checkpoints.verify_checkpoint(saved['token'],target,read_document('/checkpoint/custody-'+label+'.json'),
             trusted_key,saved['checkpoint_digests'][label])['custody_prefixes_match']
+    try:
+        checkpoints.set_checkpoint_policy(saved['token'],saved['retired_checkpoint_key'],3600)
+    except AccessDenied:
+        pass
+    else:
+        raise AssertionError('retired checkpoint signer regained authority after recovery')
     principal = service.whoami(saved['token'])
     assert str(principal.organization_id) == saved['org']
     assert str(principal.user_id) == saved['user'] and principal.role == 'owner'
@@ -157,7 +174,7 @@ elif sys.argv[1] in {'after','restored'}:
     assert service.get_task(saved['token'],saved['task'])['id'] in cases.get_case(saved['token'],saved['case_id'])['task_ids']
     assert actions.get_action(saved['token'],saved['action_id'])['state']=='approved'
     assert actions.execute(saved['token'],saved['completed_action_id'])==saved['action_receipt']
-    actions.execute(saved['token'],saved['action_id'])
+    actions.execute(saved['token'],saved['action_id'],checkpoint_digest=saved['checkpoint_digests']['active'])
     assert cases.get_case(saved['token'],saved['case_id'])['case']['state']=='closed'
     assert sha256(vault.resolve_for_backend(saved['token'],'model_restart').reveal().encode()).hexdigest()==saved['provider_digest']
     vault.revoke(saved['token'],'model_restart')
@@ -218,6 +235,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: exact policy/approval survived recovery; pending local closure executed and completed receipt replayed')
     print('PASS: legal hold and retention survived recovery; completed purge retained and interrupted unlink reconciled without another deletion')
     print('PASS: externally retained signed custody checkpoints matched active and purged evidence after recovery')
+    print('PASS: checkpoint trust/policy/receipts and signer revocation survived recovery; pending closure required the retained external digest')
     if sys.argv[1] == 'restored':
         print('PASS: real pg_dump/pg_restore recovered matching row counts and encrypted values with separately retained keys')
 else:
