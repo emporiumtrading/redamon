@@ -52,7 +52,7 @@ def counts():
               'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events',
               'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts',
               'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
-              'browser_observations','browser_observation_receipts','migrations')
+              'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -195,9 +195,13 @@ if sys.argv[1] == 'before':
             conn.execute('GRANT INSERT ON gabriel_identity.browser_observation_receipts TO gabriel_identity_app')
     with connection(app_dsn) as conn:
         pending_observation = conn.execute("SELECT id FROM gabriel_identity.browser_observations WHERE organization_id=%s AND state='prepared'",(observation_org,)).fetchone()['id']
+    assignment=cases.assign_case(token,case['id'],uuid4(),user)
+    question=cases.add_question(token,case['id'],uuid4(),'Generated recovery investigation question')
+    cases.answer_question(token,case['id'],question,evidence['id'],'Generated recovery analyst explanation')
     report_snapshot = cases.case_report(token,case['id'])['snapshot']
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
+        'workflow_assignment':assignment['id'],'workflow_question':question,
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
         'case_id':str(case['id']),'evidence_id':str(evidence['id']),
@@ -273,6 +277,10 @@ elif sys.argv[1] in {'after','restored'}:
     assert report_snapshot['evidence']==saved['report_evidence']
     assert all(event in report_snapshot['timeline'] for event in saved['report_timeline'])
     assert report_snapshot['assessment']=='not_performed' and report_snapshot['content_integrity']=='not_checked'
+    workflow=cases.case_workflow(saved['token'],saved['case_id'])
+    assert workflow['assignment']['id']==saved['workflow_assignment'] and workflow['assignment']['assignee_active']
+    assert workflow['questions'][0]['id']==saved['workflow_question'] and workflow['questions'][0]['state']=='human_answer_supplied'
+    assert not workflow['questions'][0]['source_verified'] and not workflow['assignment_grants_authority']
     assert service.get_task(saved['token'],saved['task'])['id'] in cases.get_case(saved['token'],saved['case_id'])['task_ids']
     assert actions.get_action(saved['token'],saved['action_id'])['state']=='approved'
     assert actions.execute(saved['token'],saved['completed_action_id'])==saved['action_receipt']
@@ -342,6 +350,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: durable task/receipt replay survived recovery without another step; task cancellation enforced')
     print('PASS: case linkage and encrypted evidence/custody survived recovery; integrity-checked closure enforced')
     print('PASS: metadata report reconstructed evidence and prior timeline after recovery without inventing source truth or content-integrity verification')
+    print('PASS: append-only case assignment and evidence-linked analyst answer survived recovery without granting authority or learned truth')
     print('PASS: exact policy/approval survived recovery; pending local closure executed and completed receipt replayed')
     print('PASS: legal hold and retention survived recovery; completed purge retained and interrupted unlink reconciled without another deletion')
     print('PASS: externally retained signed custody checkpoints matched active and purged evidence after recovery')

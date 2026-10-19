@@ -51,6 +51,22 @@ def metadata(row):
 
 
 class CaseService(IdentityService):
+    def assign_case(self,token,case_id,request_id,assigned_to):
+        from gabriel.identity.case_workflow import assign_case
+        return assign_case(self,token,case_id,request_id,assigned_to)
+
+    def add_question(self,token,case_id,request_id,question):
+        from gabriel.identity.case_workflow import add_question
+        return add_question(self,token,case_id,request_id,question)
+
+    def answer_question(self,token,case_id,question_id,evidence_id,answer):
+        from gabriel.identity.case_workflow import answer_question
+        return answer_question(self,token,case_id,question_id,evidence_id,answer)
+
+    def case_workflow(self,token,case_id):
+        from gabriel.identity.case_workflow import case_workflow
+        return case_workflow(self,token,case_id)
+
     def __init__(self,dsn,store):
         super().__init__(dsn)
         if not isinstance(store,LocalEvidenceStore):

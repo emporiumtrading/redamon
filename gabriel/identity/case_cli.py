@@ -88,7 +88,7 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('create','list','get','report','link-task','acquire','custody','verify','close','export','exports',
+    parser.add_argument('command',choices=('create','list','get','report','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
@@ -123,6 +123,10 @@ def main():
     parser.add_argument('--max-age-seconds',type=int)
     parser.add_argument('--checkpoint-digest')
     parser.add_argument('--key-id')
+    parser.add_argument('--member-id')
+    parser.add_argument('--question-id')
+    parser.add_argument('--question')
+    parser.add_argument('--answer')
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
@@ -215,6 +219,14 @@ def main():
             result = service.get_case(token,args.case_id)
         elif args.command=='report':
             result = service.case_report(token,args.case_id)
+        elif args.command=='workflow-get':
+            result = service.case_workflow(token,args.case_id)
+        elif args.command=='assign':
+            result = service.assign_case(token,args.case_id,args.request_id,args.member_id)
+        elif args.command=='question-add':
+            result = {'question_id':service.add_question(token,args.case_id,args.request_id,args.question)}
+        elif args.command=='question-answer':
+            result = service.answer_question(token,args.case_id,args.question_id,args.evidence_id,args.answer)
         elif args.command=='link-task':
             service.link_task(token,args.case_id,args.task_id)
             result = {'linked':True}
