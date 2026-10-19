@@ -58,6 +58,6 @@ COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
 ENV PYTHONPATH=/app:/repo
 WORKDIR /repo
 USER browserlab
-ENTRYPOINT ["xvfb-run", "-a", "python", "testing/gabriel_browser/lab.py"]
+ENTRYPOINT ["xvfb-run", "-a", "timeout", "240", "python", "testing/gabriel_browser/lab.py"]
 
 FROM runtime AS production

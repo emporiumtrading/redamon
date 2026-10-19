@@ -1,6 +1,6 @@
 # Browser client and native-TLS gateway
 
-Status: implemented candidate undergoing verification. This adds a real Manifest V3 extension and a finite HTTPS gateway to the existing observation service. It does not establish accepted B0 review, actual console compatibility, autonomous hunting or release readiness. The [requirement reconciliation](GABRIEL_REQUIREMENT_STATUS.md) tracks all forty PRD requirements.
+Status: server/package component verified; actual browser lab and independent acceptance pending. Source `35d2d38da6241ad2e17a1c0a48c3aedb8936a4ca` passed 579 tests plus actual restart/restore, including 22 real TLS/gateway and four packaging cases. See the ledger for source-specific run/artifact evidence. This adds a real Manifest V3 extension and a finite HTTPS gateway to the existing observation service. It does not establish accepted B0 review, actual console compatibility, autonomous hunting or release readiness. The [requirement reconciliation](GABRIEL_REQUIREMENT_STATUS.md) tracks all forty PRD requirements.
 
 ## Operator workflow
 

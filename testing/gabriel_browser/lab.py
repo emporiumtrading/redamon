@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import secrets
 import socket
+from socketserver import ThreadingMixIn
 import ssl
 import subprocess
 import sys
@@ -16,7 +17,7 @@ from threading import Thread
 import time
 from urllib.parse import urlsplit
 from uuid import uuid4
-from wsgiref.simple_server import make_server,WSGIRequestHandler
+from wsgiref.simple_server import make_server,WSGIRequestHandler,WSGIServer
 
 import websocket
 
@@ -31,6 +32,12 @@ from tooling.scripts.gabriel_extension_package import package
 
 SOURCE=Path('/repo/gabriel/browser_extension')
 stage='initialization'
+
+
+def mark(value):
+    global stage
+    stage=value
+    print('LAB: '+value,flush=True)
 
 
 def wait_for(check,seconds=15):
@@ -83,6 +90,15 @@ class QuietHandler(WSGIRequestHandler):
     def log_message(self,*args): pass
 
 
+class ConsoleServer(ThreadingMixIn,WSGIServer):
+    daemon_threads=True
+    block_on_close=False
+    def get_request(self):
+        client,address=super().get_request()
+        client.settimeout(5)
+        return client,address
+
+
 def console_app(environ,start_response):
     content=b'''<!doctype html><html><head><title>Generated Gabriel Lab Console</title></head><body>
 <h1>Generated security event lab</h1><p>Generated event: unusual sign-in from a lab identity.</p>
@@ -124,7 +140,7 @@ def run_browser(family,executable,output):
         nss.mkdir(mode=0o700,parents=True,exist_ok=True)
         if not (nss/'cert9.db').exists(): subprocess.run(['certutil','-N','-d','sql:'+str(nss),'--empty-password'],check=True,capture_output=True)
         subprocess.run(['certutil','-A','-d','sql:'+str(nss),'-n','gabriel-'+family,'-t','C,,','-i',str(tls['ca.pem'])],check=True,capture_output=True)
-        server=make_server('127.0.0.1',0,console_app,handler_class=QuietHandler)
+        server=make_server('127.0.0.1',0,console_app,server_class=ConsoleServer,handler_class=QuietHandler)
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(str(tls['server.pem']),str(tls['server.key']))
         server.socket=context.wrap_socket(server.socket,server_side=True)
@@ -139,7 +155,7 @@ def run_browser(family,executable,output):
         gateway=None
         cdp=None
         try:
-            stage=family+':browser-start'
+            mark(family+':browser-start')
             cdp=CDP(port)
             version=cdp.send('Browser.getVersion')['product']
             worker=wait_for(lambda:next((t for t in cdp.targets() if t.get('type')=='service_worker' and t.get('url','').endswith('/worker.js')),None),30)
@@ -147,7 +163,7 @@ def run_browser(family,executable,output):
             target=cdp.send('Target.createTarget',{'url':'https://localhost:'+str(server.server_port)+'/security'})['targetId']
             console=cdp.attach(target)
             wait_for(lambda:cdp.evaluate(console,'document.title')=='Generated Gabriel Lab Console')
-            stage=family+':native-popup'
+            mark(family+':native-popup')
             popup=native_popup(cdp,target,origin)
             cdp.evaluate(popup,"document.getElementById('account').value='Generated lab account'; document.getElementById('browser').value="+json.dumps(family))
             click(cdp,popup,'select')
@@ -155,7 +171,7 @@ def run_browser(family,executable,output):
             scope=json.loads(cdp.evaluate(popup,"document.getElementById('context').value"))
             assert scope['page_url']=='https://localhost:'+str(server.server_port)+'/security'
             assert scope['document_id'] and scope['browser']==family
-            stage=family+':endpoint-permission'
+            mark(family+':endpoint-permission')
             gateway_port=free_port()
             endpoint='https://localhost:'+str(gateway_port)
             cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint))
@@ -193,12 +209,12 @@ def run_browser(family,executable,output):
                     with socket.create_connection(('127.0.0.1',gateway_port),timeout=0.2): return True
                 except OSError: return False
             wait_for(ready,12)
-            stage=family+':claim'
+            mark(family+':claim')
             ticket=read_document(bootstrap/'claim.json',private=True)['ticket']
             cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint)+';document.getElementById("ticket").value='+json.dumps(ticket))
             click(cdp,popup,'pair')
             wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
-            stage=family+':preview'
+            mark(family+':preview')
             click(cdp,popup,'preview')
             preview=wait_for(lambda:cdp.evaluate(popup,'document.getElementById("preview-text").value') or None)
             assert 'unusual sign-in' in preview and 'Hostile evidence' in preview
@@ -212,14 +228,14 @@ def run_browser(family,executable,output):
             click(cdp,popup,'preview')
             wait_for(lambda:cdp.evaluate(popup,'document.getElementById("preview-text").value') or None)
             cdp.evaluate(popup,'document.getElementById("approved").checked=true')
-            stage=family+':share'
+            mark(family+':share')
             click(cdp,popup,'share')
             wait_for(lambda:'receipt confirmed' in (text(cdp,popup,'message') or ''))
             observations=service.list_browser_observations(human,prepared['lease_id'])['observations']
             assert len(observations)==1 and observations[0]['state']=='captured'
             data=service.read_evidence(human,observations[0]['evidence_id']).reveal().decode()
             assert data==preview and all(secret not in data for secret in ('GENERATED_PASSWORD_MUST_NOT_LEAVE','GENERATED_FORM_MUST_NOT_LEAVE','GENERATED_HIDDEN_MUST_NOT_LEAVE'))
-            stage=family+':stop'
+            mark(family+':stop')
             click(cdp,popup,'stop')
             wait_for(lambda:'stopped' in (text(cdp,popup,'message') or '').lower())
             assert service.get_browser_lease(human,prepared['lease_id'])['state']=='disconnected'
