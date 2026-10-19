@@ -181,8 +181,9 @@ def run_browser(family,executable,output):
             click(cdp,popup,'permission')
             # The native browser permission prompt is deliberately exercised, not bypassed by test host grants.
             time.sleep(0.5)
-            # Chromium focuses Deny by default; tab to Allow rather than accepting the default.
-            subprocess.run(['xdotool','key','--clearmodifiers','Tab','Return'],check=True,timeout=5)
+            # Native Allow position observed in the retained 1280x1024 lab screenshot.
+            # Keyboard focus traversal selected Deny; retain the real permission check below.
+            subprocess.run(['xdotool','mousemove','807','256','click','1'],check=True,timeout=5)
             time.sleep(0.25)
             existing=next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None)
             popup=cdp.attach(existing['targetId']) if existing else native_popup(cdp,target,origin)
