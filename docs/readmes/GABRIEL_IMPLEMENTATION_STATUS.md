@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## Browser observation increment 14 — component verification pending
+
+Baseline: pairing repair source `bed2632d84f587c962ac9ab9ac5df7eac9165a6c`; depends on draft PR 14. Links: C05/B1, GAB-003/GAB-005/GAB-006/GAB-013/GAB-014/GAB-015/GAB-037/GAB-038 and CV-06. Component **IMPLEMENTED_UNVERIFIED**; browser/product release **BLOCKED**. See [intake, privacy and recovery contract](README.GABRIEL_BROWSER_OBSERVATIONS.md).
+
+Schema 12 adds immutable explicit sharing opt-in, bounded text envelopes, durable ordered intents, one task charge per new observation, existing encrypted evidence/custody linkage and append-only completion receipts. Admission requires the original live Gabriel human session plus its exact scoped peer; the browser must never receive that human credential. Source authenticity, complete visibility and applied client minimization are not proven. No browser executor, external authentication, vendor API, model inference or attack-detection claim is added.
+
+Loop hypothesis: only freshly approved scoped content enters evidence; exact concurrent retries converge; authority loss prevents new admission; receipt failure remains visible and reconciles authenticated existing bytes without another capture or charge. Matching-image real SQL/crypto/CLI/migration/restart/restore tests are added. Local AST/diff checks pass; hosted execution is pending. Parent pairing VM verification is also pending at this checkpoint. No host pytest or simulated success is substituted. Independent review, packaged Chrome/Brave client, actual console lab, human UAT and release acceptance remain open.
+
 ## Browser pairing increment 13 — component verification pending
 
 Baseline: `eecfc047c4497d8c3b021419d319b8c7ec94f913`. Links: C05/B0/B1, GAB-003/GAB-005/GAB-006/GAB-013/GAB-014/GAB-015/GAB-037/GAB-038; B-T01/B-T02/B-T03/B-T06/B-T07/B-T11/B-T12 and CV-06. Owner: Codex; independent reviewer acceptance pending. Component **IMPLEMENTED_UNVERIFIED**; browser/product lifecycle **BLOCKED**. See [scope, CLI and B0 review package](README.GABRIEL_BROWSER_PAIRING.md).

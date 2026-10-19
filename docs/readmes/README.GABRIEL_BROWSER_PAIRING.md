@@ -1,5 +1,7 @@
 # Scoped browser pairing foundation
 
+The later [approved observation increment](README.GABRIEL_BROWSER_OBSERVATIONS.md) extends this foundation only for newly issued explicit-sharing leases. Existing pairing-only leases remain unable to collect text. The descriptions below document the pairing-only boundary.
+
 Schema 11 and `BrowserSessionService` implement durable human-approved browser session contracts. This component pairs a credential to one exact HTTPS page, tab, document, declared account, browser/extension version, installation, case, task and originating Gabriel human session. It collects no page content, logs into no external system and provides no navigation, query, form, screenshot or response executor. Backend tests that name Chrome/Brave are typed contract tests, not packaged-browser compatibility passes.
 
 ## Authority and privacy
