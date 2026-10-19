@@ -149,7 +149,7 @@ def test_boundary_denials_do_not_create_case(tenant,cases,server,attack):
     kwargs=dict(cookie=cookie)
     if attack=='missing_csrf': fields.pop('csrf')
     elif attack=='wrong_origin': kwargs['origin']='https://generated-hostile.invalid'
-    elif attack=='duplicate_field': kwargs['raw']='csrf='+token+'&csrf='+token
+    elif attack=='duplicate_field': kwargs['raw']=urlencode(fields)+'&csrf='+token
     elif attack=='forwarding': kwargs['headers']={'X-Forwarded-Proto':'https'}
     elif attack=='wrong_host': kwargs['headers']={'Host':'generated-hostile.invalid'}
     elif attack=='query': path+='?ticket=blocked'
