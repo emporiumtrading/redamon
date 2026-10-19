@@ -128,7 +128,8 @@ async function handle(message) {
       await persist({session: {endpoint: target, token: result.token, context: selected, expires_at: result.expires_at,
         lease_id: result.lease_id, organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id,
         sharing_approved: result.sharing_approved, sequence: 0}}, revision);
-      return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at};
+      return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at,
+        organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id};
     }
     if (!session || Date.parse(session.expires_at) <= Date.now()) throw new Error("Pairing is missing or expired. Obtain fresh approval.");
     if (paused && ["preview","share"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
@@ -146,7 +147,8 @@ async function handle(message) {
     await request(session, "heartbeat", {context: wireContext(selected)});
     if (revision !== generation) throw new Error("Sharing was stopped.");
     if (message.operation === "resume") { await persist({paused: false}, revision); return {message: "Live scope checked. Sharing resumed; a new reviewed preview is required."}; }
-    if (message.operation === "status") return {message: "Current scope and heartbeat confirmed.", scope: selected, expires_at: session.expires_at};
+    if (message.operation === "status") return {message: "Current scope and heartbeat confirmed.", scope: selected, expires_at: session.expires_at,
+      organization_id: session.organization_id, case_id: session.case_id, task_id: session.task_id};
     if (message.operation === "preview") {
       if (pending) throw new Error("Previous capture outcome is unconfirmed. Inspect receipts first.");
       const view = await current(selected, true);

@@ -24,6 +24,7 @@ Candidate: extension `0.1.0`, six reviewed package files. Native-browser lab at 
 | Stop / `#stop` | Local credentials/cursors clear immediately; server disconnect attempted. | Outage clearly reports unconfirmed server disconnect; backend expiry/revocation still govern admitted work. |
 | Status text / `#message` | Visible and live-announced working, denied, gap, paused, paired and stopped states. | No raw exception/secret or misleading success after denied/unknown outcome. |
 | Receipt/scope / `#result` | Receipt IDs, expiry and relevant tenant/case/task context are readable. | No evidence body, token or false source-authenticity/attack-certainty assertion. |
+| Paired scope / `#scope` | Organization/case/task remain present across preview, approval and receipt operations; state/heartbeat refresh their bound values. | Selection/disconnect clears the paired scope; an error message never implies confirmed live visibility. |
 
 ## Required persona and lifecycle scenarios
 
