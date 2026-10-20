@@ -64,12 +64,12 @@ jobs:
           persist-credentials: false
       - name: Build probe without any credentials
         run: docker build -f gabriel/provider_probe/Dockerfile --target runtime -t gabriel-provider-probe .
-      - name: Two-call generated-lab probe with preflight budget and privacy constraints
+      - name: Single-call generated Azure comparison with preflight budget and privacy constraints
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           status=0
-          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 -e OPENROUTER_API_KEY gabriel-provider-probe > "$RUNNER_TEMP/gabriel-provider-probe.json" || status=$?
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 -e OPENROUTER_API_KEY gabriel-provider-probe --azure-comparison > "$RUNNER_TEMP/gabriel-provider-probe.json" || status=$?
           cat "$RUNNER_TEMP/gabriel-provider-probe.json"
           exit "$status"
       - name: Retain generated-only probe result, never credentials

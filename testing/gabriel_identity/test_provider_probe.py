@@ -8,7 +8,7 @@ from unittest.mock import patch,Mock
 
 from gabriel.identity.model_evaluation import load_json,packets
 from gabriel.identity.provider_probe import (
-    HOST,MODELS,OpenRouterProbe,ProbeError,budget_check,decode,request_body,response_record,run_probe,route_check,
+    HOST,MODELS,COMPARISON_MODEL,ROUTES,OpenRouterProbe,ProbeError,budget_check,decode,request_body,response_record,run_probe,route_check,
 )
 
 SECRET='generated-unit-credential-not-a-live-key'
@@ -31,7 +31,7 @@ def answer(model=MODELS[0]):
     decision=dict(disposition='escalate',claims=[dict(id='c1',statement='Investigate correlated suspicious access',references=['auth-1','auth-2'])],
         alternatives=['An authorized change should be checked.'],contradictions=['No matching change is supplied.'],
         uncertainty=['Identity attribution remains unverified.'],reported_gaps=[],requested_actions=[])
-    return dict(id='generated-protocol-fixture',model=model,provider='Google Vertex',
+    return dict(id='generated-protocol-fixture',model=model,provider=ROUTES[model][0],
                 choices=[dict(finish_reason='stop',message=dict(content=json.dumps(decision)))],
                 usage=dict(prompt_tokens=400,completion_tokens=160,cost=0.00012))
 
@@ -48,8 +48,9 @@ class FixtureClient:
             raise ProbeError('fixture_transport_failure')
         if method=='GET':
             if path.endswith('/endpoints'):
-                return {'data':dict(id=path.removeprefix('/api/v1/models/').removesuffix('/endpoints'),
-                    endpoints=[dict(provider_name='Google Vertex',tag='google-vertex',status=0)])}
+                model=path.removeprefix('/api/v1/models/').removesuffix('/endpoints')
+                provider,slug,_=ROUTES[model]
+                return {'data':dict(id=model,endpoints=[dict(provider_name=provider,tag=slug,status=0)])}
             return {'data':key_data()}
         result=answer(payload['model'])
         result['id']='fixture-'+str(len(self.requests))
@@ -57,6 +58,40 @@ class FixtureClient:
 
 
 class ProviderProbeTests(unittest.TestCase):
+    def test_comparison_is_one_explicit_fixed_route_without_relaxed_privacy(self):
+        client=FixtureClient()
+        result=run_probe(client,corpus(),models=(COMPARISON_MODEL,))
+        self.assertEqual(result['status'],'probe_complete')
+        self.assertEqual(result['completed_calls'],1)
+        self.assertEqual(result['attempted_calls'],1)
+        self.assertFalse(result['production_admission'])
+        body=client.requests[-1][2]
+        self.assertEqual(body['provider']['only'],['azure'])
+        self.assertTrue(body['provider']['zdr'])
+        self.assertEqual(body['provider']['data_collection'],'deny')
+        self.assertFalse(body['provider']['allow_fallbacks'])
+        self.assertTrue(body['provider']['require_parameters'])
+        self.assertEqual(body['max_completion_tokens'],768)
+        self.assertNotIn('reasoning',body)
+        self.assertNotIn('max_tokens',body)
+        self.assertEqual(result['results'][0]['configuration']['endpoint_policy'],'generated-lab-zdr-azure-v1')
+
+    def test_arbitrary_schedule_never_reads_key_or_calls_provider(self):
+        for schedule in ((COMPARISON_MODEL,COMPARISON_MODEL),MODELS+(COMPARISON_MODEL,),('unapproved/model',)):
+            client=FixtureClient()
+            with self.assertRaises(ProbeError): run_probe(client,corpus(),models=schedule)
+            self.assertFalse(client.requests)
+
+    def test_comparison_never_uses_first_party_openai_instead_of_azure(self):
+        packet=packets(corpus(),'development')[0]
+        body=request_body(COMPARISON_MODEL,packet)
+        reply=answer(COMPARISON_MODEL)
+        reply['provider']='OpenAI'
+        with self.assertRaises(ProbeError): response_record(reply,COMPARISON_MODEL,packet,body,10)
+        with self.assertRaises(ProbeError):
+            route_check({'data':dict(id=COMPARISON_MODEL,endpoints=[dict(
+                provider_name='OpenAI',tag='openai',status=0)])},COMPARISON_MODEL)
+
     def test_key_preflight_requires_explicit_small_monthly_inference_key(self):
         self.assertEqual(budget_check(key_data())['monthly_limit_usd'],'18')
         changes=[('limit',None),('limit',19),('limit',True),('limit_reset',None),
