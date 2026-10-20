@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlencode
+from uuid import uuid4
 
 import pytest
 
@@ -158,6 +159,25 @@ def test_case_form_persists_one_case_under_concurrent_replay(tenant,cases,server
     assert len(rows)==1 and rows[0]['title']==fields['title']
     code,html,_=call(server,'/cases/'+str(rows[0]['id']),cookie=cookie)
     assert code==200 and '<script>alert(1)</script>' not in html and '&lt;script&gt;' in html
+
+
+def test_telemetry_specialist_forms_persist_history_with_csrf_and_role_checks(tenant,cases,case,server):
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/specialists'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'No telemetry assessments recorded' in html
+    request=re.search(r'name="request_id" value="([0-9a-f-]+)"',html)[1]
+    fields=dict(csrf=token,request_id=request,role='telemetry_health')
+    assert call(server,path,dict(fields,csrf='bad'),cookie=cookie)[0]==403
+    assert not cases.list_specialist_runs(tenant.token,case['id'])['runs']
+    code,_,headers=call(server,path,fields,cookie=cookie)
+    assert code==303
+    code,html,_=call(server,headers['Location'],cookie=cookie)
+    assert code==200 and 'Attacker status: unknown' in html and 'No model was called' in html
+    assert CONTENT not in html and tenant.token not in html
+    assert call(server,path,fields,cookie=cookie)[0]==303
+    assert len(cases.list_specialist_runs(tenant.token,case['id'])['runs'])==1
+    assert call(server,path,dict(fields,request_id=str(uuid4()),role='threat_hunting'),cookie=cookie)[0]==403
 
 
 @pytest.mark.parametrize('attack',['missing_csrf','wrong_origin','null_origin','duplicate_field','forwarding','wrong_host','query','cross_site','duplicate_cookie','get_body','json','unknown_route'])

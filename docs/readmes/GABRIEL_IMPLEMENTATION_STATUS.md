@@ -1,5 +1,11 @@
 # Gabriel implementation ledger
 
+## C07 increment 22 — specialist contracts and local telemetry health implemented, verification pending
+
+Schema 14 and the actual service/CLI/workbench paths persist bounded, audited, immutable telemetry-health assessments from case-scoped browser authority records. Versioned contracts enumerate all twelve PRD roles; only the local telemetry engine is executable. Eleven contract-only roles deny execution. Strict scoped references, partial/historical labels, alternatives/uncertainty, zero model cost with no model called, replay/concurrency admission, live role/session checks, append-only grants and explicit quotas protect the implemented path. No attacker assessment, model result, external action or learned memory is invented. [Operation, UAT inventory, limits and rollback](README.GABRIEL_SPECIALISTS.md).
+
+Real PostgreSQL tests and actual CLI/TLS/browser/restart/dump-restore assertions are added. Status **IMPLEMENTED_UNVERIFIED** until matching-image exact-source outcomes are observed. Local compilation/diff checks are not runtime passes. Full C07/PRD acceptance, memory, real models/role quality, independent review and human pre/post-release UAT remain open.
+
 ## Case-provenance repair — component and recovery verified
 
 Final code source `dcaaaf2ecffb840e281ca7141cf2fbe649991991` passed [database/recovery/regression 39301447373](https://github.com/emporiumtrading/redamon/actions/runs/39301447373): **574 component + 49 runtime/inventory + 21 foundation = 644 passed, zero failures/errors/skips**. All nine provenance tests and the exact browser/local task identity and repeated-link assertions passed. Real PostgreSQL restart and fresh `pg_dump`/`pg_restore` both rebuilt the same case-provenance checksum and retained assignments/evidence-linked analyst answers. Earlier crypto/custody/revocation/checkpoint/recovery and 80 inherited-name denial checks passed. No runtime or authorization change was required for this repair; the initial failed result remains below.

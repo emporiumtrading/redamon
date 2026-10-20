@@ -16,6 +16,7 @@ COPY gabriel/identity/workbench.py gabriel/identity/workbench_cli.py /app/gabrie
 COPY gabriel/identity/analyst_views.py /app/gabriel/identity/
 COPY gabriel/identity/case_workflow.py gabriel/identity/schema_v13.sql /app/gabriel/identity/
 COPY gabriel/identity/case_graph.py /app/gabriel/identity/
+COPY gabriel/identity/specialists.py gabriel/identity/specialist_contracts.py gabriel/identity/schema_v14.sql /app/gabriel/identity/
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]
 

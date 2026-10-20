@@ -2,6 +2,7 @@
 from gabriel.identity.browser_sessions import BrowserSessionService
 from gabriel.identity.cases import iso
 from gabriel.identity.service import AccessDenied,connection
+from datetime import datetime,timezone
 
 
 def audit_history(service,token):
@@ -15,11 +16,16 @@ def audit_history(service,token):
             truncated=len(rows)>200,limit=200)
 
 
-def source_health(service,token):
+def source_health(service,token,case_id=None):
     with connection(service._dsn) as conn:
         p=service._human(conn,token)
-        rows=conn.execute('''SELECT id FROM gabriel_identity.browser_leases
-            WHERE organization_id=%s ORDER BY created_at DESC,id DESC LIMIT 33''',(p.organization_id,)).fetchall()
+        if case_id is None:
+            rows=conn.execute('''SELECT id FROM gabriel_identity.browser_leases
+                WHERE organization_id=%s ORDER BY created_at DESC,id DESC LIMIT 33''',(p.organization_id,)).fetchall()
+        else:
+            case=service._case(conn,p,case_id)
+            rows=conn.execute('''SELECT id FROM gabriel_identity.browser_leases
+                WHERE organization_id=%s AND case_id=%s ORDER BY created_at DESC,id DESC LIMIT 33''',(p.organization_id,case['id'])).fetchall()
     browser=BrowserSessionService(service._dsn,service.store)
     sources=[]
     # Reuse authoritative live task/session/role checks; each sample has its own transaction.
@@ -29,5 +35,6 @@ def source_health(service,token):
             else 'awaiting_connection' if lease['state']=='pending' else 'recent_heartbeat' if lease['heartbeat_fresh'] else 'coverage_gap')
         sources.append(dict(id=str(lease['id']),case_id=str(lease['case_id']),browser=lease['browser'],health=health,
             state=lease['state'],expires_at=iso(lease['expires_at']),last_seen=iso(lease['last_seen']),
-            authorization_current=lease['authorization_current'],heartbeat_fresh=lease['heartbeat_fresh'],page_visibility='unverified'))
+            authorization_current=lease['authorization_current'],heartbeat_fresh=lease['heartbeat_fresh'],page_visibility='unverified',
+            sampled_at=iso(datetime.now(timezone.utc))))
     return dict(sources=sources,truncated=len(rows)>32,limit=32,sampling='individual_live_checks',coverage='partial')

@@ -410,6 +410,10 @@ def test_real_cli_intake_verify_export_and_close(tenant,tmp_path):
     assert code==0 and projected['result']['projection']['case_id']==case_id
     assert {node['kind'] for node in projected['result']['projection']['nodes']}=={'case','evidence'}
     assert projected['result']['projection']['assessment']=='not_performed'
+    code,assessed=cli('specialist-run','--case-id',case_id,'--request-id',str(uuid4()))
+    assert code==0 and assessed['result']['result']['attack_status']=='unknown'
+    assert cli('specialist-get','--case-id',case_id,'--run-id',assessed['result']['id'])[1]['result']['result_digest']==assessed['result']['result_digest']
+    assert len(cli('specialist-list','--case-id',case_id)[1]['result']['runs'])==1
     assert cli('custody','--evidence-id',evidence_id)[0]==0
     assert cli('verify','--case-id',case_id)[1]['result']['complete']
     assert cli('assign','--case-id',case_id,'--request-id',str(uuid4()),'--member-id',str(tenant.owner))[0]==0

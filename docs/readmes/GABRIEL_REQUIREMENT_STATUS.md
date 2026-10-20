@@ -30,7 +30,7 @@ Verified code baseline: `dcaaaf2ecffb840e281ca7141cf2fbe649991991` passed **644 
 | GAB-024 | Case queue and assignment/question handoff passed component/native-browser checks; prioritization, correlated bundles, routine batching, urgent escalation and approval inbox remain outstanding. |
 | GAB-025 | Initial real case/evidence/report/provenance/browser-health/audit screens passed component/native-browser checks; remaining R1 screens, full states, accessibility and human UAT outstanding. |
 | GAB-026 | Product must separately present urgency, exposure, confidence and compliance; screens/evaluation outstanding. |
-| GAB-027 | Twelve specialist contracts and their real-tool/held-out evaluations outstanding. |
+| GAB-027 | Twelve role identifiers and metadata contracts plus an actual local telemetry-health specialist implemented with verification pending; eleven engines, model/tool and held-out quality evaluations remain outstanding. |
 | GAB-028 | Bounded local tasks tested; specialist coordinator, model budgets and duplicate/disagreement handling outstanding. |
 | GAB-029 | Provider vault exists; approved NVIDIA/OpenRouter routing, actual model evaluations and policy-preserving fallback outstanding. |
 | GAB-030 | Reviewed defensive hunt playbooks, versioning, alternatives and escalation evaluation outstanding. |

@@ -51,6 +51,18 @@ def metadata(row):
 
 
 class CaseService(IdentityService):
+    def run_specialist(self,token,case_id,request_id,role):
+        from gabriel.identity.specialists import run_specialist
+        return run_specialist(self,token,case_id,request_id,role)
+
+    def get_specialist_run(self,token,case_id,run_id):
+        from gabriel.identity.specialists import get_run
+        return get_run(self,token,case_id,run_id)
+
+    def list_specialist_runs(self,token,case_id):
+        from gabriel.identity.specialists import list_runs
+        return list_runs(self,token,case_id)
+
     def assign_case(self,token,case_id,request_id,assigned_to):
         from gabriel.identity.case_workflow import assign_case
         return assign_case(self,token,case_id,request_id,assigned_to)
