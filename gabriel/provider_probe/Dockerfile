@@ -16,5 +16,7 @@ WORKDIR /repo
 COPY conftest.py pytest.ini /repo/
 COPY tooling/scripts/pytest_isolated.py /repo/tooling/scripts/
 COPY testing/gabriel_identity/test_provider_probe.py /repo/testing/gabriel_identity/
+COPY gabriel/identity/model_input.py /app/gabriel/identity/
+COPY testing/gabriel_identity/test_model_input.py /repo/testing/gabriel_identity/
 USER 10001:10001
-ENTRYPOINT ["python","tooling/scripts/pytest_isolated.py","unit","testing/gabriel_identity/test_provider_probe.py","--strict","--parallel","1"]
+ENTRYPOINT ["python","tooling/scripts/pytest_isolated.py","unit","testing/gabriel_identity","--strict","--parallel","1"]

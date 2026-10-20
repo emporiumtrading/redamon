@@ -3,8 +3,10 @@ on:
   pull_request:
     paths:
       - 'gabriel/identity/provider_probe.py'
+      - 'gabriel/identity/model_input.py'
       - 'gabriel/provider_probe/**'
       - 'testing/gabriel_identity/test_provider_probe.py'
+      - 'testing/gabriel_identity/test_model_input.py'
       - '.github/workflows/gabriel-provider-probe.yml'
   workflow_dispatch:
 permissions:
