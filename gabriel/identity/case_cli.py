@@ -88,7 +88,7 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('create','list','get','report','graph','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
+    parser.add_argument('command',choices=('create','list','get','report','graph','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
@@ -127,6 +127,8 @@ def main():
     parser.add_argument('--question-id')
     parser.add_argument('--question')
     parser.add_argument('--answer')
+    parser.add_argument('--specialist-role',default='telemetry_health')
+    parser.add_argument('--run-id')
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
@@ -221,6 +223,12 @@ def main():
             result = service.case_report(token,args.case_id)
         elif args.command=='graph':
             result = service.case_graph(token,args.case_id)
+        elif args.command=='specialist-run':
+            result = service.run_specialist(token,args.case_id,args.request_id,args.specialist_role)
+        elif args.command=='specialist-get':
+            result = service.get_specialist_run(token,args.case_id,args.run_id)
+        elif args.command=='specialist-list':
+            result = service.list_specialist_runs(token,args.case_id)
         elif args.command=='workflow-get':
             result = service.case_workflow(token,args.case_id)
         elif args.command=='assign':

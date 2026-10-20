@@ -201,6 +201,15 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             loaded("document.body.innerText.includes('human_answer_supplied')")
             answer=service.case_workflow(human,case['id'])['questions'][0]
             assert answer['state']=='human_answer_supplied' and not answer['source_verified'] and answer['evidence_id']
+            mark(family+':workbench-specialist')
+            cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/specialists'},session)
+            loaded("document.title==='Telemetry assessments · Gabriel'")
+            cdp.evaluate(session,"document.querySelector('form[action$=specialists]').requestSubmit();true")
+            loaded("document.getElementById('specialist-attack-status')?.textContent==='Attacker status: unknown'")
+            runs=service.list_specialist_runs(human,case['id'])['runs']
+            assert len(runs)==1 and service.get_specialist_run(human,case['id'],runs[0]['id'])['result']['attack_status']=='unknown'
+            cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])},session)
+            loaded("Boolean(document.querySelector('a[href*=evidence]'))")
             link=cdp.evaluate(session,"document.querySelector('a[href*=evidence]').href")
             cdp.send('Page.navigate',{'url':link},session)
             loaded("Boolean(document.querySelector('form[action$=content]'))")
@@ -366,7 +375,7 @@ def run_browser(family,executable,output):
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
-                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','case_assignment','persisted_question','evidence_linked_answer','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
+                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
         except Exception:

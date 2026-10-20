@@ -178,6 +178,32 @@ class Workbench:
                 self.service.answer_question(self._token,case_id,fields['question_id'],fields['evidence_id'],fields['answer'])
             else: raise AccessDenied('invalid_case_workflow_form')
             return '303 See Other',b'',[('Location','/cases/'+case_id)]
+        specialist=re.fullmatch('/cases/('+ID+')/specialists(?:/('+ID+'))?',path)
+        if specialist:
+            case_id,run_id=specialist.groups()
+            path='/cases/'+case_id+'/specialists'
+            if method=='POST':
+                if run_id or set(fields)!={'csrf','request_id','role'}: raise AccessDenied('invalid_specialist_form')
+                run=self.service.run_specialist(self._token,case_id,fields['request_id'],fields['role'])
+                return '303 See Other',b'',[('Location',path+'/'+run['id'])]
+            if method!='GET': raise AccessDenied('workbench_route_denied')
+            body='<p class="notice">Telemetry coverage only. Attacker activity is not assessed. A heartbeat does not prove page visibility. Stored results are historical samples.</p>'
+            if run_id:
+                run=self.service.get_specialist_run(self._token,case_id,run_id)
+                result=run['result']
+                body+='<p id="specialist-attack-status">Attacker status: '+e(result['attack_status'])+'</p><p>Recorded '+e(run['created_at'])+' · No model was called.</p>'
+                body+='<h2>Observations</h2>'+table(['Observation','Recorded reference'],[(e(row['statement']),e(', '.join(row['references']))) for row in result['observations']])
+                body+='<h2>Alternative explanation</h2>'+''.join('<p>'+e(row['statement'])+'</p>' for row in result['alternatives'])
+                body+='<h2>Uncertainty</h2>'+''.join('<p>'+e(item)+'</p>' for item in result['uncertainty'])
+                body+='<p>Result checksum '+e(run['result_digest'])+'</p><p><a href="'+path+'">Assessment history</a></p>'
+            else:
+                history=self.service.list_specialist_runs(self._token,case_id)
+                case=self.service.get_case(self._token,case_id)['case']
+                if principal.role!='viewer' and case['state']=='open':
+                    body+=self._form(path,'Check telemetry coverage','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><input type="hidden" name="role" value="telemetry_health">')
+                body+=table(['Recorded','Specialty'],[(f'<a href="{path}/{e(row["id"])}">{e(row["created_at"])}</a>',e(row['role'].replace('_',' '))) for row in history['runs']]) if history['runs'] else '<p>No telemetry assessments recorded.</p>'
+                body+='<p>Showing up to 50 most recent assessments.'+(' Older records are omitted.' if history['truncated'] else '')+'</p>'
+            return '200 OK',self._page('Telemetry assessments',body,principal),[]
         projection=re.fullmatch('/cases/('+ID+')/(relationships|graph)',path)
         if projection:
             if method!='GET': raise AccessDenied('workbench_route_denied')
@@ -214,7 +240,7 @@ class Workbench:
         if report:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
-        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a></p>'
+        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/specialists">Telemetry assessments</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
         body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'

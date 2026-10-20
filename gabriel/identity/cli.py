@@ -9,7 +9,7 @@ import sys
 
 from gabriel.capabilities import CapabilityDenied, InvalidRequest
 from gabriel.identity.service import (IdentityError, IdentityConfigurationError,
-    InvalidIdentityInput, IdentityService, migrate, provision_organization)
+    InvalidIdentityInput, IdentityService, MIGRATION_FILES, migrate, provision_organization)
 from gabriel.identity.machine import ServiceIdentityService
 
 
@@ -93,7 +93,7 @@ def main():
             owner_dsn = read_secret(os.environ.get('GABRIEL_MIGRATION_DSN_FILE'))
             if args.command == 'migrate':
                 migrate(owner_dsn)
-                result = {'migration': 12}
+                result = {'migration': MIGRATION_FILES[-1][0]}
             else:
                 org, user = provision_organization(owner_dsn, args.organization_name,
                     args.username, _password(args, confirm=True))
