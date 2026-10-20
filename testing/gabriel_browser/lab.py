@@ -29,6 +29,7 @@ from gabriel.identity.cli import read_secret
 from gabriel.identity.evidence_store import EvidenceKeys,LocalEvidenceStore
 from gabriel.identity.service import migrate,provision_organization
 from gabriel.identity.workbench import prepare_workbench
+from gabriel.identity.model_budget import ModelBudgetService
 from testing.gabriel_identity.tls_lab import certificates
 from tooling.scripts.gabriel_extension_package import package
 
@@ -221,6 +222,15 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             cdp.evaluate(session,"document.querySelector('form[action$=forget]').requestSubmit();true")
             loaded("Boolean(document.querySelector('[data-memory-status=forgotten]'))")
             assert not service.retrieve_memory(human,case['id'])
+            mark(family+':workbench-spending')
+            cdp.send('Page.navigate',{'url':target+'/spending'},session)
+            loaded("document.title==='AI spending · Gabriel'")
+            assert 'Models are not active' in cdp.evaluate(session,'document.body.innerText')
+            cdp.evaluate(session,"document.querySelector('input[name=day]').value='0.25';document.querySelector('select[name=enabled]').value='no';document.querySelector('form[action=\"/spending/limits\"]').requestSubmit();true")
+            loaded("document.getElementById('spending-state')?.textContent==='New reservations paused'")
+            spending=ModelBudgetService(service._dsn).status(human)
+            assert spending['limits']['day_microusd']==250000 and not spending['limits']['enabled']
+            assert spending['usage']['held_slots']==0 and not spending['transport_enabled']
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])},session)
             loaded("Boolean(document.querySelector('a[href*=evidence]'))")
             link=cdp.evaluate(session,"document.querySelector('a[href*=evidence]').href")
@@ -388,7 +398,7 @@ def run_browser(family,executable,output):
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
-                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','memory_proposal','memory_review','memory_forget','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
+                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','memory_proposal','memory_review','memory_forget','spending_screen','persisted_spending_pause_and_limits','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
         except Exception:
