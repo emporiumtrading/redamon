@@ -414,6 +414,15 @@ def test_real_cli_intake_verify_export_and_close(tenant,tmp_path):
     assert code==0 and assessed['result']['result']['attack_status']=='unknown'
     assert cli('specialist-get','--case-id',case_id,'--run-id',assessed['result']['id'])[1]['result']['result_digest']==assessed['result']['result_digest']
     assert len(cli('specialist-list','--case-id',case_id)[1]['result']['runs'])==1
+    code,planned=cli('coordinator-begin','--case-id',case_id,'--request-id',str(uuid4()))
+    assert code==0 and planned['result']['max_steps']==2
+    coordinator_id=planned['result']['id']
+    code,advanced=cli('coordinator-next','--run-id',coordinator_id)
+    assert code==0 and advanced['result']['completed_steps']==1
+    assert not advanced['result']['model_enabled']
+    assert cli('coordinator-get','--run-id',coordinator_id)[1]['result']['id']==coordinator_id
+    assert cli('coordinator-stop','--run-id',coordinator_id)[1]['result']['status']=='stopped'
+    assert cli('coordinator-next','--run-id',coordinator_id)[0]==1
     code,remembered=cli('memory-propose','--case-id',case_id,'--evidence-id',evidence_id,'--request-id',str(uuid4()),'--topic','generated.cli-memory')
     assert code==0 and remembered['result']['status']=='proposed'
     memory=remembered['result']

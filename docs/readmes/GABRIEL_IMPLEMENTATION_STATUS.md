@@ -1,5 +1,11 @@
 # Gabriel implementation ledger
 
+## Bounded local coordinator — implemented, verification pending
+
+Schema 17 adds append-only plans, composite tenant/case/evidence bindings, fixed steps, claims, receipts and Stops. The admitted plan is evidence metadata inventory followed by the existing telemetry-health specialist, with at most two steps and fifteen minutes. Current source set and creator/caller authority are rechecked before and after local computation. Replays use the same specialist request UUID. No model, network/browser navigation or response action is enabled. [Acceptance, recovery, CLI and rollback](GABRIEL_LOCAL_COORDINATOR.md).
+
+New real-database assertions cover concurrent steps, duplicate creation, source changes, audit failure, revoked sessions/creator roles, expiry, Stop, wrong outputs, tenant/case isolation, append-only permissions and migration rollback. The actual CLI round trip and real PostgreSQL restart/fresh restore are extended to interrupted coordinator work and persisted Stop. All new tests and combined regressions are pending hosted execution; no host pytest substitutes for them. Source-specific historical 795-case component results remain historical. No production admission is claimed.
+
 ## Real generated Azure comparison — connectivity verified, model unqualified
 
 Code `f0bfd6c6e3c04dca10115ed72e255cca55e79cee` (tree `af2bd62d8f8474e3e222408e6d25974ac0f5ebf2`) passed the isolated eighteen-case software gate in [run 39464359345](https://github.com/emporiumtrading/redamon/actions/runs/39464359345). Its explicit single-call GPT-4.1 mini/Azure comparison completed in live job `118771945975`: 299 input tokens, 227 output tokens, measured latency 3,847 ms and reported cost **$0.0004828**. The response matched the strict decision/reference/usage contract and returned `urgent_inconclusive` on the fixed known generated development scenario. No tool or external response was authorized. `quality_qualified` and `production_admission` remain false. This is actual provider connectivity/contract evidence, not analyst-adjudicated held-out quality evidence, authenticated production billing or model activation.

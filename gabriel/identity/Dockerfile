@@ -20,6 +20,7 @@ COPY gabriel/identity/specialists.py gabriel/identity/specialist_contracts.py ga
 COPY gabriel/identity/memory.py gabriel/identity/schema_v15.sql /app/gabriel/identity/
 COPY gabriel/identity/model_evaluation.py /app/gabriel/identity/
 COPY gabriel/identity/model_input.py /app/gabriel/identity/
+COPY gabriel/identity/coordinator.py gabriel/identity/schema_v17.sql /app/gabriel/identity/
 COPY gabriel/identity/model_budget.py gabriel/identity/budget_cli.py gabriel/identity/schema_v16.sql /app/gabriel/identity/
 RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for p in pathlib.Path('/app/gabriel').rglob('*.py')]"
 USER 10001:10001
