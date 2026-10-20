@@ -1,6 +1,6 @@
 # Gabriel PRD requirement reconciliation
 
-Verified code baseline: `dcaaaf2ecffb840e281ca7141cf2fbe649991991` passed **644 component/regression cases**, actual PostgreSQL restart/dump-restore including identical provenance reconstruction, and generated-console Chrome for Testing/Brave journeys (**30 checks each**). This includes the repaired workbench origin behavior, assignments/questions and case-provenance projection. Source-specific artifacts, earlier failures and repair history remain in the implementation ledger. This maps all 40 requirement IDs to actual implementation gaps. None of the forty requirements has full post-release acceptance; a component pass does not accept a complete release requirement.
+Verified code baseline: `ac6513ba90870a666ee037f8f0ba3b5d7945ed60` passed **704 component/regression cases**, actual PostgreSQL restart/dump-restore including retained encrypted reference memory and forget/reset exclusion, and generated-console Chrome for Testing/Brave journeys (**34 checks each**). This includes earlier case/provenance/workbench paths, the local telemetry-health specialist and governed reference lifecycle. No model is activated. Source-specific artifacts, failures and repair history remain in the implementation ledger. This maps all 40 requirement IDs to implementation gaps. None has full post-release acceptance; a component pass does not accept a complete release requirement.
 
 | Requirement | Implemented evidence / remaining work |
 | --- | --- |
@@ -9,7 +9,7 @@ Verified code baseline: `dcaaaf2ecffb840e281ca7141cf2fbe649991991` passed **644 
 | GAB-003 | Database identities, tenant predicates and bounded worker/browser grants tested; new HTTPS gateway and all future interfaces require acceptance. |
 | GAB-004 | Hashed accounts and encrypted provider vault tested; enabled provider/connector and operational secret custody acceptance remain open. |
 | GAB-005 | Transactional audit admission tested for current mutations; new product interfaces need equivalent tests and review. |
-| GAB-006 | Cases/tasks/approval state, workbench, append-only case workflow and rebuildable case provenance passed component/recovery/native-browser checks at the cited baseline. Scoped memory and complete integrated acceptance remain outstanding. |
+| GAB-006 | Cases/tasks/approval state, workbench, case workflow/provenance and scoped reference-memory lifecycle passed component/recovery/native-browser checks. Complete AI/integrated acceptance remains outstanding. |
 | GAB-007 | Encrypted evidence/custody and unverified observation lineage tested; actual client/source adapters and deduplication outstanding. |
 | GAB-008 | Fresh migrations, restart/dump/restore and interrupted evidence operations tested; integrated product and external-effect recovery outstanding. |
 | GAB-009 | Real MV3 package and Chrome for Testing/Brave generated-console journey verified; consumer Chrome/OS matrix, full human UAT and reviewed distribution outstanding. |
@@ -30,12 +30,12 @@ Verified code baseline: `dcaaaf2ecffb840e281ca7141cf2fbe649991991` passed **644 
 | GAB-024 | Case queue and assignment/question handoff passed component/native-browser checks; prioritization, correlated bundles, routine batching, urgent escalation and approval inbox remain outstanding. |
 | GAB-025 | Initial real case/evidence/report/provenance/browser-health/audit screens passed component/native-browser checks; remaining R1 screens, full states, accessibility and human UAT outstanding. |
 | GAB-026 | Product must separately present urgency, exposure, confidence and compliance; screens/evaluation outstanding. |
-| GAB-027 | Twelve role identifiers and metadata contracts plus an actual local telemetry-health specialist implemented with verification pending; eleven engines, model/tool and held-out quality evaluations remain outstanding. |
+| GAB-027 | Twelve role identifiers/metadata contracts and actual local telemetry-health specialist passed component/recovery/native-browser checks; eleven engines, model/tool and held-out quality evaluations remain outstanding. |
 | GAB-028 | Bounded local tasks tested; specialist coordinator, model budgets and duplicate/disagreement handling outstanding. |
 | GAB-029 | Provider vault exists; approved NVIDIA/OpenRouter routing, actual model evaluations and policy-preserving fallback outstanding. |
 | GAB-030 | Reviewed defensive hunt playbooks, versioning, alternatives and escalation evaluation outstanding. |
-| GAB-031 | Evidence-backed reviewed memory, provenance, correction/expiry/supersession/forget/reset and fresh encrypted retrieval implemented with verification pending; AI reuse, source-erasure/backup/operational acceptance remain open. |
-| GAB-032 | Scope/role/source-authority exclusion, explicit review and correction/reset controls implemented with verification pending; poisoning, drift and prompt-injection effectiveness require adversarial evaluation before AI reuse. |
+| GAB-031 | Evidence-backed reviewed memory, correction/expiry/supersession/forget/reset and fresh encrypted retrieval passed component/recovery/native-browser checks; AI reuse, source-erasure/backup/operational acceptance remain open. |
+| GAB-032 | Scope/role/source-authority exclusion, explicit review and correction/reset controls passed component checks; poisoning, drift and prompt-injection effectiveness require adversarial evaluation before AI reuse. |
 | GAB-033 | Prompt/model/playbook/adapter promotion and rollback governance outstanding. |
 | GAB-034 | Open-source candidates are a catalog, not supported integrations; exact tool/version/license/owner and real lab acceptance required per enabled integration. |
 | GAB-035 | Detection/code changes and deployed-effect verification not admitted. |
