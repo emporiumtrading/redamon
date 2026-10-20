@@ -27,6 +27,7 @@ from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,publi
 from gabriel.identity.cases import custody_hash
 from datetime import datetime,timedelta,timezone
 from gabriel.identity.evidence_store import EvidenceError,EvidenceKeys,LocalEvidenceStore
+from gabriel.identity.model_budget import ModelBudgetService
 from testing.gabriel_identity.test_retention_integration import historical_artifact
 
 app_dsn = read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE'])
@@ -42,6 +43,7 @@ retention = RetentionService(app_dsn,cases.store)
 checkpoints = CheckpointPolicyService(app_dsn,cases.store)
 browsers = BrowserSessionService(app_dsn,cases.store)
 observations = BrowserObservationService(app_dsn,cases.store)
+budget = ModelBudgetService(app_dsn)
 
 
 def counts():
@@ -53,7 +55,9 @@ def counts():
               'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts',
               'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
               'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
-              'memory_records','memory_reviews','memory_invalidations','memory_resets','migrations')
+              'memory_records','memory_reviews','memory_invalidations','memory_resets',
+              'model_budget_policies','model_price_quotes','model_investigations','model_reservations',
+              'model_dispatch_claims','model_settlements','model_investigation_stops','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -207,11 +211,20 @@ if sys.argv[1] == 'before':
     cases.review_memory(token,memory['id'],'approved',memory['source_digest'],True)
     report_snapshot = cases.case_report(token,case['id'])['snapshot']
     specialist=cases.run_specialist(token,case['id'],uuid4(),'telemetry_health')
+    budget.configure(token)
+    price=budget.quote(token,'openrouter','google/gemini-2.5-flash-lite','a'*64,100000,400000,3600)
+    model_job=budget.begin(token,case['id'],uuid4())
+    claimed=budget.reserve(token,model_job['id'],uuid4(),price['id'],'b'*64)
+    budget.claim(token,claimed['id'])
+    budget.reserve(token,model_job['id'],uuid4(),price['id'],'c'*64)
+    budget.stop(token,model_job['id'])
+    assert budget.status(token)['usage']==dict(month_used=1400,day_used=1400,held_slots=1)
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
         'workflow_assignment':assignment['id'],'workflow_question':question,
         'specialist_id':specialist['id'],'specialist_digest':specialist['result_digest'],
         'memory_id':memory['id'],'memory_source_digest':memory['source_digest'],'old_memory_id':prior_memory['id'],
+        'model_reservation_id':str(claimed['id']),'model_job_id':str(model_job['id']),
         'provenance_digest':cases.case_graph(token,case['id'])['digest'],
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
@@ -233,6 +246,15 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
+    assert budget.status(saved['token'])['usage']==dict(month_used=1400,day_used=1400,held_slots=1)
+    try:
+        budget.claim(saved['token'],saved['model_reservation_id'])
+    except AccessDenied:
+        pass
+    else:
+        raise AssertionError('stopped model dispatch became claimable after recovery')
+    budget.settle(saved['token'],saved['model_reservation_id'],700,'d'*64)
+    assert budget.status(saved['token'])['usage']==dict(month_used=700,day_used=700,held_slots=0)
     observations.heartbeat_browser(saved['observation_peer'],saved['browser_context'])
     replay = observations.observe_browser(saved['observation_token'],saved['observation_peer'],saved['observation_payload'])
     assert json.loads(json.dumps(replay,default=str))==saved['observation_receipt']
