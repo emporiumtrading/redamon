@@ -17,6 +17,8 @@ Updated 20 October 2026 following the product owner's twelve answers. Product ch
 
 Independent authorized engineering can proceed with these defaults. Remaining deployment/account/human inputs gate only their dependent paths; they are not reasons to ask routine permission to continue. No chat checkpoint creates an unattended background service.
 
+20 October host/account checkpoint: the owner confirmed saving `OPENROUTER_API_KEY` as a GitHub Actions secret and using an Apple Silicon Mac with Docker Desktop and 18 GB memory. The restricted probe authenticated its read-only key-metadata request but stopped before paid calls because the key did not meet the combined requirement of a nonzero cap at most $18 and monthly reset. Exact missing field is not inferred. Update those settings on the existing key; a replacement secret is unnecessary if the key value is unchanged. Native Linux ARM64 core build/import and thirteen probe software tests passed; this is not macOS UAT or model qualification. See the implementation ledger for exact-source outcomes.
+
 Browser sign-in remains human-only. Direct vendor APIs remain optional. Do not place passwords, MFA codes, cookies, model keys or sensitive live telemetry in chat, public issues, code or PRs. Use normal private configuration channels.
 
 Choices recorded in documents are not working integrations, corpus artifacts, tests, human UAT or release approval. The established component evidence remains valid only for its recorded source and scope. New PD scenarios are planned until executable implementation and results exist.
