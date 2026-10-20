@@ -1,5 +1,11 @@
 # Gabriel implementation ledger
 
+## Local coordinator workbench — implemented, hosted verification pending
+
+Case navigation now includes local plan history, create, one-step advancement, stored receipts and telemetry links, and Stop. A step-bound form prevents retrying the same form from executing a following step. Exact route case/run binding, existing live-session/cookie/CSRF/origin boundaries and backend authority/source checks govern changes; viewer controls remain read-only. A changed evidence set returns recovery guidance. No AI/network worker or external action is enabled. New HTTPS, real PostgreSQL and Chrome/Brave assertions require exact-source hosted acceptance; syntax/diff checks alone are not runtime validation. [Scope and limits](GABRIEL_LOCAL_COORDINATOR.md).
+
+Parent corpus source `b46f266f73578004c400364acb45e9d856a8efa7` passed **824 tests per architecture** (754 component + 49 runtime + 21 foundation), zero failures/errors/skips, in x86 run 39482852690 and native ARM64 run 39482852702, with actual restart/fresh restore. Browser 39482852670 and runtime 39482852639 passed. The isolated gate passed 43. All 60 fictional corpus labels remain unreviewed and candidate holdout unsealed; no model is quality-qualified and production admission remains false.
+
 ## Bounded local coordinator — automated component acceptance passed
 
 Schema 17 adds append-only plans, composite tenant/case/evidence bindings, fixed steps, claims, receipts and Stops. The admitted plan is evidence metadata inventory followed by the existing telemetry-health specialist, with at most two steps and fifteen minutes. Current source set and creator/caller authority are rechecked before and after local computation. Replays use the same specialist request UUID. No model, network/browser navigation or response action is enabled. [Acceptance, recovery, CLI and rollback](GABRIEL_LOCAL_COORDINATOR.md).

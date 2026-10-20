@@ -262,6 +262,67 @@ class Workbench:
                 body+=self._form(path+'/reset','Reset all organization memory retrieval','<input type="hidden" name="epoch" value="'+str(history['current_epoch'])+'"><p>This removes all current reference retrieval for the organization; source evidence is retained.</p>')
             body+='<p>Showing up to 128 latest applicable records.'+(' Older records are omitted.' if history['truncated'] else '')+'</p>'
             return '200 OK',self._page('Memory review',body,principal),[]
+        coordinator=re.fullmatch('/cases/('+ID+')/coordinator(?:/(new|'+ID+')(?:/(next|stop))?)?',path)
+        if coordinator:
+            case_id,run_id,operation=coordinator.groups()
+            path='/cases/'+case_id+'/coordinator'
+            case=self.service.get_case(self._token,case_id)['case']
+            if run_id=='new':
+                if method!='POST' or operation or set(fields)!={'csrf','request_id'}:
+                    raise AccessDenied('invalid_coordinator_form')
+                run=self.service.begin_coordinator(self._token,case_id,fields['request_id'])
+                return '303 See Other',b'',[('Location',path+'/'+run['id'])]
+            run=None
+            if run_id:
+                run=self.service.get_coordinator(self._token,run_id)
+                if run['case_id']!=case_id: raise AccessDenied('coordinator_case_mismatch')
+            if method=='POST':
+                expected={'csrf','sequence'} if operation=='next' else {'csrf'}
+                if not run or operation not in {'next','stop'} or set(fields)!=expected:
+                    raise AccessDenied('invalid_coordinator_form')
+                if operation=='next':
+                    if fields['sequence'] not in {'1','2'}: raise AccessDenied('invalid_coordinator_form')
+                    try:
+                        self.service.advance_coordinator(self._token,run_id,expected_sequence=int(fields['sequence']))
+                    except AccessDenied as error:
+                        if str(error)!='coordinator_source_scope_changed': raise
+                        body='<p>The evidence set changed. This plan cannot continue. Stop it and create a new plan for the current evidence.</p><p><a href="'+path+'/'+run_id+'">Review this plan</a> · <a href="'+path+'">Local plan history</a></p>'
+                        return '409 Conflict',self._page('Evidence changed',body,principal),[]
+                else: self.service.stop_coordinator(self._token,run_id)
+                return '303 See Other',b'',[('Location',path+'/'+run_id)]
+            if method!='GET' or operation: raise AccessDenied('workbench_route_denied')
+            labels={'pending_local_steps':'Waiting for the next local step','local_plan_complete':'Local checks complete',
+                'stopped':'Stopped','expired':'Expired','authority_lost':'Creator access changed'}
+            body='<p class="notice">This plan only lists evidence records and checks telemetry coverage. It does not assess an attack or call an AI model. No external action is taken.</p>'
+            if run:
+                body+='<p id="coordinator-status">'+e(labels[run['status']])+'</p><p id="coordinator-progress">'+e(run['completed_steps'])+' of '+e(run['max_steps'])+' local steps complete</p><p>Created '+e(run['created_at'])+' · Expires '+e(run['expires_at'])+'</p>'
+                body+='<p>Stored results are historical. Current source availability and access have not been checked by viewing this page. They are checked again when a step runs. A changed evidence set requires a new plan.</p>'
+                controllable=principal.role in {'owner','admin'} or (principal.role=='analyst' and str(principal.user_id)==run['requested_by'])
+                if controllable and run['status']!='stopped':
+                    body+=self._form(path+'/'+run_id+'/stop','Stop this plan')
+                if controllable and case['state']=='open' and run['status']=='pending_local_steps':
+                    body+=self._form(path+'/'+run_id+'/next','Run next local step','<input type="hidden" name="sequence" value="'+str(run['completed_steps']+1)+'">')
+                for step in run['steps']:
+                    name={'evidence_inventory':'Evidence record inventory','telemetry_health':'Telemetry coverage check'}[step['operation']]
+                    state='Complete' if step['completed_at'] else 'Interrupted or in progress; safe to retry' if step['claimed_at'] else 'Waiting'
+                    body+='<section><h2>'+e(name)+'</h2><p>'+e(state)+'</p>'
+                    if step['result'] is not None:
+                        body+='<p>Completed '+e(step['completed_at'])+' · Receipt checksum '+e(step['result_digest'])+'</p>'
+                        if step['operation']=='evidence_inventory':
+                            body+='<p>Content integrity was not checked. Source authenticity and independent corroboration remain unverified.</p>'
+                            body+=table(['Evidence record','Stored checksum'],[('<a href="/cases/'+case_id+'/evidence/'+e(item['evidence_id'])+'">'+e(item['evidence_id'])+'</a>',e(item['digest'])) for item in step['result']['sources']])
+                        else:
+                            body+='<p><a href="/cases/'+case_id+'/specialists/'+e(step['result']['specialist_id'])+'">Review telemetry assessment</a></p>'
+                    body+='</section>'
+                body+='<p>Evidence set checksum '+e(run['source_digest'])+'</p><p><a href="'+path+'">Local plan history</a></p>'
+            else:
+                if principal.role!='viewer' and case['state']=='open':
+                    body+=self._form(path+'/new','Create local plan','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><p>Two steps maximum. Expires after fifteen minutes. Each step runs only when you request it.</p>')
+                history=self.service.list_coordinator_runs(self._token,case_id)
+                body+=table(['Created','Status','Progress'],[('<a href="'+path+'/'+e(row['id'])+'">'+e(row['created_at'])+'</a>',e(labels[row['status']]),e(str(row['completed_steps'])+' of '+str(row['max_steps']))) for row in history['runs']]) if history['runs'] else '<p>No local plans recorded.</p>'
+                body+='<p>Showing up to 32 most recent plans.'+(' Older plans are omitted.' if history['truncated'] else '')+'</p>'
+            body+='<p><a href="/cases/'+case_id+'">Back to case</a></p>'
+            return '200 OK',self._page('Local investigation plan',body,principal),[]
         specialist=re.fullmatch('/cases/('+ID+')/specialists(?:/('+ID+'))?',path)
         if specialist:
             case_id,run_id=specialist.groups()
@@ -324,7 +385,7 @@ class Workbench:
         if report:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
-        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/specialists">Telemetry assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
+        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Telemetry assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
         body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'
