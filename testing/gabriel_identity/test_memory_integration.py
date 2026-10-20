@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import json
 import secrets
+import time
 from uuid import uuid4
 
 import psycopg
@@ -76,6 +77,24 @@ def test_expired_reference_never_reaches_retrieval(tenant,cases,case,evidence):
         conn.execute("UPDATE gabriel_identity.memory_records SET created_at=created_at-interval '1 hour',expires_at=expires_at-interval '1 hour' WHERE id=%s",(record['id'],))
     assert not cases.retrieve_memory(tenant.token,case['id'])
     assert cases.list_memory(tenant.token,case['id'])['records'][0]['status']=='expired'
+
+
+def test_reference_expiring_during_actual_content_read_is_not_returned(tenant,cases,case,evidence,monkeypatch):
+    import gabriel.identity.memory as module
+    record=propose(tenant,cases,case,evidence)
+    approve(tenant,cases,record)
+    with owner_connection(tenant.db) as conn:
+        conn.execute("UPDATE gabriel_identity.memory_records SET created_at=clock_timestamp()-interval '1 hour',expires_at=clock_timestamp()+interval '3 seconds' WHERE id=%s",(record['id'],))
+    original=module._read_source
+    reads=[]
+    def delayed(*args,**kwargs):
+        value=original(*args,**kwargs)
+        reads.append(True)
+        time.sleep(3.1)
+        return value
+    monkeypatch.setattr(module,'_read_source',delayed)
+    assert not cases.retrieve_memory(tenant.token,case['id'])
+    assert reads==[True]
 
 
 def test_organization_reference_scope_and_viewer_content_denial(tenant,cases,case,evidence):

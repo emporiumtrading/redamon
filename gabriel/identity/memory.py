@@ -2,7 +2,7 @@
 import re
 from uuid import uuid4
 
-from gabriel.identity.cases import iso
+from gabriel.identity.cases import iso,timestamp
 from gabriel.identity.evidence_store import EvidenceContent
 from gabriel.identity.service import AccessDenied,InvalidIdentityInput,_audit,connection,identifier
 
@@ -134,6 +134,9 @@ def review(service,token,memory_id,decision,expected_digest,acknowledged=False):
             return _metadata(row,status)
         if status!='proposed': raise AccessDenied('memory_not_reviewable')
         if decision=='approved': _read_source(service,conn,p,row)
+        service._human(conn,token,write=True)
+        if row['expires_at']<=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']:
+            raise AccessDenied('memory_expired_during_review')
         conn.execute('INSERT INTO gabriel_identity.memory_reviews (organization_id,memory_id,reviewed_by,decision,source_digest) VALUES (%s,%s,%s,%s,%s)',
             (p.organization_id,row['id'],p.user_id,decision,row['source_digest']))
         _audit(conn,'memory.reviewed',p,row['id'])
@@ -173,6 +176,9 @@ def retrieve(service,token,case_id):
             metadata=_metadata(row,'analyst_validated_reference')
             metadata['content_integrity']='verified_on_this_read'
             values.append(EvidenceContent(metadata,content))
+        service._human(conn,token,content=True)
+        cutoff=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
+        values=[value for value in values if timestamp(value.metadata['expires_at'])>cutoff]
         _audit(conn,'memory.retrieved',p,case['id'])
         return values
 
