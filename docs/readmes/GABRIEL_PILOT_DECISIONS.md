@@ -9,6 +9,8 @@ Start with an isolated local lab using Docker Compose. Support the same stack on
 
 Browser clients target Chrome and Brave on supported Windows, macOS and Linux versions. The engineer's workstation and Gabriel host can be different machines. Pair the extension to the authenticated HTTPS endpoint, validate certificate trust and scope grants, and document local-host versus guest-VM addressing. Never expose the database or pair through an unauthenticated public listener. Start with Linux amd64 images; native arm64 image support requires an actual build and test before advertising it. Establish measured CPU/RAM/disk minimums during packaging; do not invent sizing guarantees.
 
+Owner host confirmed 20 October: Apple Silicon Mac with Docker Desktop and 18 GB unified memory. Target a lean local pilot with provisional Desktop allocation of 6 GB RAM and 4 CPUs, cloud inference and optional lab tools on separate hosts/profiles. Native Linux ARM64 build/import verification is now provided by the dedicated probe workflow; macOS Docker Desktop/volume/TLS/pairing and measured workload UAT remain required. This does not narrow the product's Windows/macOS/Linux target matrix.
+
 Install flow: deploy stack; create initial owner through the local bootstrap process; configure retention, model routes and budget; pair browser; engineer signs into consoles manually; engineer grants selected tabs/accounts/tasks; Gabriel displays source health and begins admitted investigation. Test fresh install, volume persistence, migrations, upgrade/rollback, backup/restore and key recovery.
 
 ## 2. Console-agnostic understanding

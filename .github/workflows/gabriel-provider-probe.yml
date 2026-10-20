@@ -23,7 +23,7 @@ jobs:
         run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m gabriel-probe-tests
   arm64:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -33,6 +33,23 @@ jobs:
       - name: Verify architecture and core imports without a network or credentials
         run: |
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --memory 512m --cpus 1 --entrypoint python gabriel-core-arm64 -c "import platform; from gabriel.identity.model_budget import ModelBudgetService; assert platform.machine()=='aarch64'; print('PASS: Linux ARM64 core image and dependencies; macOS UAT remains pending')"
+      - name: Native ARM64 database, restart and fresh restore verification
+        run: bash tooling/scripts/gabriel_identity_check.sh "$RUNNER_TEMP/gabriel-arm64-evidence"
+      - name: ARM64 runtime and foundation regression
+        run: |
+          bash tooling/scripts/gabriel_runtime_check.sh "$RUNNER_TEMP/gabriel-arm64-runtime"
+          bash tooling/scripts/gabriel_foundation_check.sh "$RUNNER_TEMP/gabriel-arm64-foundation"
+      - name: Retain sanitized native ARM64 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-arm64-evidence
+          path: |
+            ${{ runner.temp }}/gabriel-arm64-evidence
+            ${{ runner.temp }}/gabriel-arm64-runtime
+            ${{ runner.temp }}/gabriel-arm64-foundation
+          if-no-files-found: error
+          retention-days: 14
   live-generated-probe:
     needs: software
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/gabriel-provider-probe'

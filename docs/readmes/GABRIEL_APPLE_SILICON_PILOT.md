@@ -2,7 +2,7 @@
 
 Owner-supplied host: macOS, Apple Silicon, Docker Desktop installed, 18 GB unified memory. Use a lean core pilot: provisional Docker allocation 6 GB RAM and 4 CPUs, leaving memory for macOS and the browser. Use cloud inference, not a local model. Optional Wazuh/IR tools are separate profiles or separate lab hosts; do not start all ten on this machine. These are initial resource targets, not measured sizing guarantees. Watch memory pressure, swap, disk and latency during pilot UAT and tune from evidence.
 
-Build/run Linux ARM64 containers natively. The new ARM64 CI job builds/import-checks the core image on a Linux ARM64 runner. That does not accept macOS Docker Desktop pairing, certificate trust, volume permissions, startup, backup/restore or consumer Chrome/Brave. Actual Mac UAT and complete Docker onboarding remain release gates. No appliance or separate manually managed Ubuntu VM is required for the intended Desktop path.
+Build/run Linux ARM64 containers natively. The ARM64 CI job first builds/import-checks the core image on a Linux ARM64 runner, then runs the matching-image PostgreSQL/restart/restore and runtime/foundation gates. Record exact-source results before accepting those later checks. Linux ARM64 tests do not accept macOS Docker Desktop pairing, certificate trust, volume permissions, startup or consumer Chrome/Brave. Actual Mac UAT and complete Docker onboarding remain release gates. No appliance or separate manually managed Ubuntu VM is required for the intended Desktop path.
 
 ## Saved OpenRouter key
 
@@ -17,3 +17,7 @@ The probe submits only the fixed authored development question and observations.
 This is connection/contract evidence on one known example, not the 60-family expert-held-out evaluation, poisoning/privacy effectiveness proof, full coordinator or production worker. Actual model quality, qualified analyst adjudication, secure production transport, confidentiality policy admission and Mac pilot/release acceptance remain open. GitHub secret existence or successful model connectivity does not close those requirements.
 
 References checked 20 October 2026: https://openrouter.ai/docs/guides/routing/provider-selection and https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key .
+
+## First verification outcome
+
+Source `448a9d43cb52542bc6d827ccc237b08a86c781b7` passed thirteen container-isolated probe software tests and a real native Linux ARM64 core-image build/import check in workflow `39458006340`. ARM64 image: `sha256:4c2edf421bc2b988d3c2702003c8a842356949790df6a5242636d91edb44e772`. The live job reached authenticated key metadata and returned `key_requires_monthly_limit_at_most_18_usd`, with zero attempted/completed paid calls and no unknown cost. This means the cap and/or reset setting needs correction; it does not identify which setting is absent, and it does not qualify either Gemini model. Full regression/source artifacts remain subject to the ledger's recorded results. Once the existing key has a cap at most $18 and monthly reset, the failed live job can be rerun without replacing the secret if its value is unchanged.
