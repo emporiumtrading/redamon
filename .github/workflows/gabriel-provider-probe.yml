@@ -4,6 +4,7 @@ on:
     paths:
       - 'gabriel/identity/**'
       - 'testing/gabriel_identity/**'
+      - 'testing/gabriel_model_lab/**'
       - 'gabriel/identity/provider_probe.py'
       - 'gabriel/identity/model_input.py'
       - 'gabriel/provider_probe/**'
