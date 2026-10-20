@@ -8,7 +8,7 @@ from unittest.mock import patch,Mock
 
 from gabriel.identity.model_evaluation import load_json,packets
 from gabriel.identity.provider_probe import (
-    HOST,MODELS,OpenRouterProbe,ProbeError,budget_check,decode,request_body,response_record,run_probe,
+    HOST,MODELS,OpenRouterProbe,ProbeError,budget_check,decode,request_body,response_record,run_probe,route_check,
 )
 
 SECRET='generated-unit-credential-not-a-live-key'
@@ -47,6 +47,9 @@ class FixtureClient:
         if len(self.requests)==self.fail_at:
             raise ProbeError('fixture_transport_failure')
         if method=='GET':
+            if path.endswith('/endpoints'):
+                return {'data':dict(id=path.removeprefix('/api/v1/models/').removesuffix('/endpoints'),
+                    endpoints=[dict(provider_name='Google Vertex',tag='google-vertex',status=0)])}
             return {'data':key_data()}
         result=answer(payload['model'])
         result['id']='fixture-'+str(len(self.requests))
@@ -91,14 +94,15 @@ class ProviderProbeTests(unittest.TestCase):
         self.assertEqual(result['status'],'probe_complete')
         self.assertEqual(result['attempted_calls'],2)
         self.assertEqual(result['completed_calls'],2)
-        self.assertEqual([r[0] for r in client.requests],['GET','POST','GET','POST'])
+        self.assertEqual([r[0] for r in client.requests],['GET','GET','POST','GET','GET','POST'])
+        self.assertEqual(len(result['route_preflights']),2)
         self.assertFalse(result['quality_qualified'])
         self.assertFalse(result['production_admission'])
         self.assertFalse(result['unknown_cost_possible'])
         self.assertEqual(result['results'][0]['cost_microusd'],120)
 
     def test_failed_first_or_second_call_has_no_retry_and_retains_partial_results(self):
-        for at,attempted,completed in [(1,0,0),(2,1,0),(3,1,1),(4,2,1)]:
+        for at,attempted,completed in [(1,0,0),(2,0,0),(3,1,0),(4,1,1),(5,1,1),(6,2,1)]:
             with self.subTest(at=at):
                 client=FixtureClient(at)
                 result=run_probe(client,corpus())
@@ -107,6 +111,32 @@ class ProviderProbeTests(unittest.TestCase):
                 self.assertEqual(result['attempted_calls'],attempted)
                 self.assertEqual(result['completed_calls'],completed)
                 self.assertEqual(result['unknown_cost_possible'],attempted>completed)
+
+    def test_missing_approved_provider_prevents_paid_call(self):
+        client=FixtureClient()
+        original=client.request
+        def no_vertex(method,path,payload=None):
+            reply=original(method,path,payload)
+            if path.endswith('/endpoints'):
+                reply['data']['endpoints']=[dict(provider_name='Google AI Studio',tag='google-ai-studio',status=0)]
+            return reply
+        client.request=no_vertex
+        result=run_probe(client,corpus())
+        self.assertEqual(result['reason'],'approved_vertex_route_unavailable')
+        self.assertEqual(result['attempted_calls'],0)
+        self.assertFalse(result['unknown_cost_possible'])
+        self.assertEqual([r[0] for r in client.requests],['GET','GET'])
+
+    def test_route_catalog_must_match_model_provider_tag_and_status(self):
+        good={'data':dict(id=MODELS[0],endpoints=[dict(provider_name='Google Vertex',tag='google-vertex/us-east5',status=0)])}
+        self.assertFalse(route_check(good,MODELS[0])['privacy_attested'])
+        for change in ('model','provider','tag','status','missing'):
+            value=deepcopy(good)
+            if change=='model': value['data']['id']='other'
+            elif change=='missing': value['data']['endpoints']=None
+            else: value['data']['endpoints'][0][{'provider':'provider_name','tag':'tag','status':'status'}[change]]='other'
+            with self.subTest(change=change),self.assertRaises(ProbeError):
+                route_check(value,MODELS[0])
 
     def test_wrong_development_decision_stops_without_second_paid_call(self):
         client=FixtureClient()
