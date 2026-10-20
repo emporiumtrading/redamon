@@ -200,13 +200,19 @@ def test_changed_evidence_returns_recovery_guidance_without_completion(tenant,ca
 
 
 @pytest.mark.parametrize('change',['revoked','closed','expired'])
-def test_plan_controls_recheck_current_session_case_and_expiry(tenant,cases,case,server,change):
+def test_plan_controls_recheck_current_session_case_and_expiry(tenant,cases,case,evidence,server,change):
     run=cases.begin_coordinator(tenant.token,case['id'],uuid4())
     cookie,token,_=connect(server)
     if change=='revoked': cases.logout(tenant.token)
     elif change=='closed':
-        with owner_connection(tenant.db) as conn:
-            conn.execute("UPDATE gabriel_identity.cases SET state='closed',closed_at=clock_timestamp() WHERE id=%s",(case['id'],))
+        from gabriel.identity.actions import ActionService
+        actions=ActionService(tenant.db.app,cases.store)
+        actions.set_policy(tenant.token,distinct_approver=False)
+        action=actions.propose_close(tenant.token,case['id'],uuid4(),'Generated reviewed closure for access test')
+        actions.submit(tenant.token,action['id'])
+        actions.approve(tenant.token,action['id'],action['digest'])
+        cases.close_case(tenant.token,case['id'],approval_id=action['id'])
+        assert cases.get_case(tenant.token,case['id'])['case']['state']=='closed'
     else:
         with owner_connection(tenant.db) as conn:
             conn.execute("UPDATE gabriel_identity.coordinator_runs SET created_at=clock_timestamp()-interval '2 minutes',expires_at=clock_timestamp()-interval '1 minute' WHERE id=%s",(run['id'],))
