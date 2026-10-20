@@ -2,7 +2,7 @@
 
 ## Product Requirements Document
 
-Version **1.1** · 18 October 2026
+Version **1.2** · 20 October 2026
 Product owner: **Prof. Iyobosa Ero**  
 Source repository: **emporiumtrading/redamon**  
 Status: **Engineering specification for review; product implementation and acceptance are pending.**
@@ -359,22 +359,24 @@ Availability, detection latency and browser capacity cannot be promised until me
 
 ## 15. Decisions, risks and ownership
 
-| Decision / risk | Accountable role | Required by / resolution |
+The product owner's twelve answers of 20 October 2026 and delegated selections are recorded in the normative [pilot decisions and acceptance plan](GABRIEL_PILOT_DECISIONS.md). That addendum resolves the previously open product choices and extends traceability with GAB-041–GAB-046 and PD-01–PD-10. Its defaults govern the affected requirements; adding requirements does not establish implementation or acceptance.
+
+| Decision / risk | Current resolution | Remaining acceptance dependency |
 | --- | --- | --- |
-| Exact pilot consoles, product editions, roles, OS and UI workflows | Product + integration lead | B0; needed before compatibility and effort commitment |
-| Pairing protocol, endpoint policy and package distribution | Security + extension lead | B0; threat model and both-browser proof |
-| Hosting, Docker-capable runners, staging/production and test accounts | Platform lead | C00/C01; missing environments leave tests BLOCKED |
-| Model versions, NVIDIA/OpenRouter routes, residency/retention and spending limits | Product + security + AI | C01/C07; evaluate actual enabled configurations |
-| Training-data rights, held-out corpus and analyst adjudicator | Analyst + AI lead | C07; no unsupported expert-performance claim |
-| Alert escalation destination, urgency window and solo-team workload | Pilot owner | C01/B0; validate via L-T08 |
-| Selected R3 action, exclusions, approvers and recovery | IR owner | Before C10; R1 remains investigative |
-| Retention, backup, support hours and response obligations | Product + operations | Before C08; define customer-specific policy |
-| UI drift and vendor access/terms changes | Integration owner | Ongoing; compatibility tests and safe degradation |
-| Learned benign baseline hides attacker drift | Security + analyst | R1; L-T04/L-T06 and reviewed suppression policy |
+| Pilot / console agnosticism | Isolated Docker lab; Wazuh and DFIR-IRIS initial real-console journeys; general semantic discovery of unknown consoles | Actual versioned adapters, ambiguity/UI-drift tests and lab provisioning |
+| Deployment / browsers | Docker Compose first; same stack in Ubuntu 24.04 LTS guest VM; Chrome and Brave on Windows/macOS/Linux | Actual install, six browser/OS journeys, recovery and measured resource limits |
+| Models / confidentiality | OpenRouter Flash Lite routine / Flash escalation; NVIDIA Nemotron 3 Super fallback candidate; local redaction and policy-preserving eligible routes | Real account configuration, endpoint terms/capability/price admission, corpus evaluation |
+| Spending | $20 monthly envelope, $18 dispatch allowance, $0.50 daily and $0.05/investigation defaults; durable reservations and bounded calls | Concurrency/restart/reconciliation tests and upstream account controls |
+| Evaluation | At least 60 scenario families, family-disjoint development/validation/held-out split, explicit quality targets | Actual licensed/pinned corpus, hidden labels and qualified human adjudication |
+| Roles / UAT | Simple owner-managed onboarding, user-declared operational profile and verified permission assignments | Named operator/reviewer/release/escalation owners at deployment; human UAT remains required |
+| R3 response | Full mode roadmap retained; R1 read-only and local drafts; consequential actions admitted individually | Exact target, action, approver, effect verification and recovery tests before enabling each action |
+| Retention | Tenant-admin feature; separate evidence/case/audit/memory/backup settings and holds | Persisted configuration, expiry/purge/backup tests and customer onboarding choices |
+| Open-source integrations | Five defensive and five IR components selected in addendum | Per-tool version/license/provenance, health, least privilege and real workflow evidence |
+| UI drift / poisoned learning | Invalidate stale capabilities; source-backed reviewed memory; uncertainty and contradictions remain visible | B-T/L-T negative tests and qualified outcome review |
 
-Accountable roles describe responsibilities, not confirmed staffing. A small customer team does not remove development review needs or permit bypassing an organization's two-person high-impact approval policy. Where that policy applies, an external/on-call reviewer is needed.
+Accountable roles describe responsibilities, not confirmed staffing. Engineers can hold multiple ordinary roles, with explicit ownership; user-declared labels do not self-grant privileges. Existing high-impact approval separation and truthful independent-review claims remain. Security effectiveness and compliance coverage continue to require separate assessment.
 
-Do not reuse the earlier connector-first schedule estimate as a commitment. Browser-first support for discovery-selected console workflows, real lab access and legacy fixes require re-estimation after C00/C01/B0. No fixed vendor trio is required. No artificial deadline or confidence score should conceal these dependencies.
+Product choices no longer require repeated clarification. Continue independent authorized engineering loops; stop only the dependent path when required account configuration, actual test environment, action-specific authority or human acceptance is absent. Do not promise a fixed delivery date or universal console compatibility before measurement.
 
 ## 16. Definition of done and handoff
 
@@ -384,7 +386,7 @@ The first implementation increment is C00/C01: pin the actual baseline, inventor
 
 This PRD and the supporting plan are documentation deliverables. **No product tests, staging UAT, production deployment or post-release regression are represented as completed by publishing them.** Documentation validation checks requirement/test references, release consistency, dependencies and status accuracy only.
 
-Confidence in requirement/design coverage: **high, with unresolved implementation decisions listed above**. Runtime effectiveness, exact console compatibility and staffing benefit: **unverified until measured**. No weighted score or repeated model review establishes factual certainty or production readiness.
+Confidence in requirement/design coverage: **high; the selected product defaults and remaining implementation/acceptance dependencies are recorded in section 15 and the pilot addendum**. Runtime effectiveness, exact console compatibility and staffing benefit: **unverified until measured**. No weighted score or repeated model review establishes factual certainty or production readiness.
 
 ## 17. Reference baseline
 
@@ -396,3 +398,6 @@ Confidence in requirement/design coverage: **high, with unresolved implementatio
 Change control: new product requests must update requirement IDs, release/dependency placement, threats, acceptance mappings and affected loop/gate obligations together. Preserve earlier decisions and rationale through version control. Never mark a requested capability implemented merely because its requirement was added here.
 
 Version 1.1 records the 18 October 2026 clarification: named security products are examples only; external-console authentication belongs exclusively to the engineer, with approved-tab/session visibility supplied by the extension. Internal Gabriel account/worker identity remains required. New browser acceptance obligations are design requirements, not claims that an extension has shipped.
+
+
+Version 1.2 records the 20 October 2026 product-owner decisions, Docker/Ubuntu deployment direction, all three desktop operating systems, console recognition boundary, confidential OpenRouter/NVIDIA model evaluation candidates, $20 spending envelope, configurable retention, lab corpus plan, role onboarding and ten selected open-source integrations. See [the normative addendum](GABRIEL_PILOT_DECISIONS.md) for defaults, new requirement IDs and planned tests. No runtime or human acceptance gate is closed by this revision.
