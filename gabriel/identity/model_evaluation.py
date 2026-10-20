@@ -269,7 +269,7 @@ def evaluate(corpus, configuration, runs, reviews):
 
     held = counts['held_out']
     coverage_ok = (family_count >= 60 and len(selected) >= 20 and all(held[k] >= 5 for k in CLASSES)
-                   and all(sum(counts[s].values()) >= minimum for s, minimum in [('development', 30), ('validation', 10)])
+                   and all(sum(counts[s].values()) >= minimum for s, minimum in [('development', 30), ('validation', 10)]))
     if not coverage_ok:
         failures.append({'case_id': None, 'reason': 'insufficient_corpus_coverage'})
     critical = [c['id'] for c in selected.values() if c['critical']]
