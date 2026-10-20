@@ -1,0 +1,7 @@
+# Engineer spending controls
+
+The authenticated analyst workbench includes an AI spending screen. Engineers can inspect the UTC monthly/day usage and held reservations. Owners/admins can lower the monthly, daily and per-investigation allowances or pause new reservations. Amounts display and accept USD with up to six decimal places and are converted exactly to integer micro-USD; no floating-point monetary parsing is used.
+
+The screen uses the real schema-16 budget service and existing cookie, CSRF, origin, live membership, audit and TLS boundaries. Viewer and analyst accounts cannot change spending policy. Pausing retains claimed unknown costs; it is not a refund, provider cancellation or proof an in-flight request stopped. The screen clearly reports that models/transport are not active and that billing remains operator-attested. It never asks for a provider key or displays prompt/evidence content.
+
+Planned source-specific validation includes actual HTTPS forms, denied viewer/invalid-origin/invalid-CSRF requests, amount/ceiling errors, and native Chrome/Brave navigation and form persistence checks. These tests must finish before their behavior is recorded as verified. This increment does not enable provider transport or establish model suitability. GAB-025/028/039/045 and PD-06 apply.

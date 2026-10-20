@@ -19,6 +19,7 @@ import pytest
 from gabriel.identity.checkpoints import read_document,write_document
 from gabriel.identity.service import provision_organization
 from gabriel.identity.workbench import COOKIE,load_workbench,prepare_workbench
+from gabriel.identity.model_budget import ModelBudgetService
 from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
 from testing.gabriel_identity.test_cases_integration import cases,case,evidence,CONTENT,audit_permission
 from testing.gabriel_identity.tls_lab import certificates
@@ -94,6 +95,45 @@ def connect(server):
     code,_,headers=call(server,'/claim',dict(csrf=token,ticket=server['ticket']))
     assert code==303
     return headers['Set-Cookie'].split(';',1)[0],token,headers
+
+
+def test_spending_screen_changes_real_limits_and_pauses_reservations(tenant,server):
+    cookie,token,_=connect(server)
+    code,html,_=call(server,'/spending',cookie=cookie)
+    assert code==200 and 'AI spending' in html and '$18.000000' in html and 'Models are not active' in html
+    assert tenant.token not in html and server['ticket'] not in html
+    fields=dict(csrf=token,month='17.50',day='0.25',investigation='0.025',enabled='no')
+    code,_,headers=call(server,'/spending/limits',fields,cookie=cookie)
+    assert code==303 and headers['Location']=='/spending'
+    limits=ModelBudgetService(tenant.db.app).status(tenant.token)['limits']
+    assert limits==dict(enabled=False,month_microusd=17500000,day_microusd=250000,investigation_microusd=25000)
+    assert 'New reservations paused' in call(server,'/spending',cookie=cookie)[1]
+
+
+@pytest.mark.parametrize('amount',['20','NaN','1e0','-1','0','0.0000001'])
+def test_spending_form_refuses_invalid_or_excess_limit_without_change(tenant,server,amount):
+    cookie,token,_=connect(server)
+    fields=dict(csrf=token,month=amount,day='0.50',investigation='0.05',enabled='yes')
+    assert call(server,'/spending/limits',fields,cookie=cookie)[0]==403
+    assert ModelBudgetService(tenant.db.app).status(tenant.token)['limits']['month_microusd']==18000000
+
+
+@pytest.mark.parametrize('boot',['viewer'],indirect=True)
+def test_viewer_can_read_spending_but_cannot_change_it(tenant,server):
+    cookie,token,_=connect(server)
+    code,html,_=call(server,'/spending',cookie=cookie)
+    assert code==200 and 'Save spending controls' not in html
+    assert call(server,'/spending/limits',dict(csrf=token,month='1',day='0.1',investigation='0.01',enabled='no'),cookie=cookie)[0]==403
+    assert ModelBudgetService(tenant.db.app).status(tenant.token)['limits']['enabled']
+
+
+def test_spending_form_requires_current_cookie_csrf_and_exact_origin(tenant,server):
+    cookie,token,_=connect(server)
+    fields=dict(csrf=token,month='1',day='0.1',investigation='0.01',enabled='no')
+    assert call(server,'/spending/limits',fields)[0]==403
+    assert call(server,'/spending/limits',{**fields,'csrf':'wrong'},cookie=cookie)[0]==403
+    assert call(server,'/spending/limits',fields,cookie=cookie,origin='https://unapproved.invalid')[0]==403
+    assert ModelBudgetService(tenant.db.app).status(tenant.token)['limits']['enabled']
 
 
 def test_https_case_report_custody_and_explicit_content_view(tenant,cases,case,evidence,server):

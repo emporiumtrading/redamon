@@ -20,6 +20,7 @@ from gabriel.identity.cases import CaseService
 from gabriel.identity.checkpoints import read_document,write_document
 from gabriel.identity.cli import read_secret
 from gabriel.identity.evidence_store import EvidenceKeys,LocalEvidenceStore
+from gabriel.identity.model_budget import ModelBudgetService
 from gabriel.identity.service import AccessDenied,IdentityError,IdentityUnavailable,_audit,connection
 
 COOKIE='__Host-gabriel_workbench'
@@ -51,6 +52,17 @@ def prepare_workbench(service,token,target,directory):
 
 
 def e(value): return escape(str(value),quote=True)
+
+
+def dollars(value):
+    return str(value//1000000)+'.'+str(value%1000000).zfill(6)
+
+
+def budget_amount(value):
+    if not isinstance(value,str) or re.fullmatch(r'(?:0|[1-9][0-9]?)(?:\.[0-9]{1,6})?',value) is None:
+        raise AccessDenied('invalid_spending_amount')
+    whole,_,fraction=value.partition('.')
+    return int(whole)*1000000+int(fraction.ljust(6,'0'))
 
 
 def table(columns,rows):
@@ -86,7 +98,7 @@ class Workbench:
     def _page(self,title,body,principal=None):
         navigation=''
         if principal:
-            navigation='<p id="team-scope">Organization '+e(principal.organization_id)+' · Role '+e(principal.role)+'</p><nav><a href="/cases">Cases</a><a href="/sources">Browser health</a>'
+            navigation='<p id="team-scope">Organization '+e(principal.organization_id)+' · Role '+e(principal.role)+'</p><nav><a href="/cases">Cases</a><a href="/sources">Browser health</a><a href="/spending">AI spending</a>'
             if principal.role!='viewer': navigation+='<a href="/cases/new">New case</a>'
             if principal.role!='viewer': navigation+='<a href="/audit">Audit</a>'
             navigation+=self._form('/disconnect','Disconnect workbench')+'</nav>'
@@ -135,6 +147,34 @@ class Workbench:
             self._claimed=True
             return '303 See Other',b'',[('Location','/cases'),('Set-Cookie',COOKIE+'='+self._cookie+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=600')]
         principal=self._authenticate(environ)
+        if path in {'/spending','/spending/limits'}:
+            budget=ModelBudgetService(self.service._dsn)
+            if method=='POST' and path=='/spending/limits':
+                if set(fields)!={'csrf','month','day','investigation','enabled'} or fields['enabled'] not in {'yes','no'}:
+                    raise AccessDenied('invalid_spending_form')
+                budget.configure(self._token,enabled=fields['enabled']=='yes',
+                    month_microusd=budget_amount(fields['month']),day_microusd=budget_amount(fields['day']),
+                    investigation_microusd=budget_amount(fields['investigation']))
+                return '303 See Other',b'',[('Location','/spending')]
+            if method!='GET' or path!='/spending': raise AccessDenied('workbench_route_denied')
+            result=budget.status(self._token)
+            policy,used=result['limits'],result['usage']
+            body='<p class="notice">Models are not active. These controls manage local cost reservations; provider billing has not been independently verified.</p>'
+            body+='<p id="spending-state">New reservations '+('allowed' if policy['enabled'] else 'paused')+'</p>'
+            body+=table(['Budget','Used or reserved','Limit'],[(e('Month (UTC)'),e('$'+dollars(used['month_used'])),e('$'+dollars(policy['month_microusd']))),
+                (e('Day (UTC)'),e('$'+dollars(used['day_used'])),e('$'+dollars(policy['day_microusd']))),
+                (e('Per investigation'),e('Varies by investigation'),e('$'+dollars(policy['investigation_microusd'])))])
+            body+='<p id="spending-held">Unresolved reservations: '+e(used['held_slots'])+' of 2. Unknown costs remain reserved until reconciled.</p>'
+            body+='<p>The monthly dispatch allowance is at most $18 within your $20 envelope. Other applications using the same provider account are outside this ledger. Automatic top-up is disabled.</p>'
+            if principal.role in {'owner','admin'}:
+                form=''
+                for name,label,key,maximum in [('month','Monthly allowance (USD)','month_microusd','18'),('day','Daily allowance (USD)','day_microusd','0.50'),('investigation','Per-investigation allowance (USD)','investigation_microusd','0.05')]:
+                    form+='<label>'+label+'<input type="number" name="'+name+'" min="0.000001" max="'+maximum+'" step="0.000001" value="'+dollars(policy[key])+'" required></label>'
+                form+='<label>New reservations<select name="enabled"><option value="yes"'+(' selected' if policy['enabled'] else '')+'>Allow within limits</option><option value="no"'+(' selected' if not policy['enabled'] else '')+'>Pause</option></select></label>'
+                body+=self._form('/spending/limits','Save spending controls',form)
+            else:
+                body+='<p>Ask your owner or administrator to change spending controls.</p>'
+            return '200 OK',self._page('AI spending',body,principal),[]
         if method=='GET' and path=='/sources':
             result=source_health(self.service,self._token)
             body='<p class="notice">Partial coverage. A recent heartbeat does not establish current page visibility or uninterrupted monitoring. Sources are sampled individually.</p>'
