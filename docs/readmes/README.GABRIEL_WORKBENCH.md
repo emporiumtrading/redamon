@@ -30,6 +30,7 @@ Human UAT is NOT_RUN. Matching-image network tests and generated-console native-
 | Evidence custody | Validated custody sequence and storage state | Foreign/unlinked artifact denied; source authenticity remains unverified |
 | `/sources` browser health | Individually sampled current session/task/authority and heartbeat checks for up to 32 recent lease records | Pending, disconnected, expired/authority loss and heartbeat gaps stay explicit; recent heartbeat does not establish live page visibility |
 | `/audit` activity | Up to 200 actual tenant audit events, ordered by server time/ID | Viewer denied; actor/target identifiers never substitute for a complete audit archive; omitted older records disclosed |
+| `/spending` controls | Real UTC monthly/daily used-or-reserved amounts and unresolved slots; owner/admin can lower allowances or pause new reservations | Invalid amounts, higher-than-ceiling allowances, viewer/analyst writes, stale access, CSRF or wrong Origin deny; claimed unknown costs remain held. Models/transport remain inactive; billing is operator-attested |
 | View evidence content | Explicit POST, live content role, actual decryption/integrity and audit | GET, viewer, CSRF, purged/corrupt object or audit failure denied; hostile HTML rendered as text |
 | Disconnect workbench | Clear local cookie/authority, audit session handoff | Existing browser cookie cannot access cases afterward |
 
