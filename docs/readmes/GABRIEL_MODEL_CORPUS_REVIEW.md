@@ -74,3 +74,7 @@ Packet generation excludes labels, class, rationale, gaps and critical flags. Co
 | candidate-partial-network-path | held_out | visibility | Pending |
 | candidate-retention-window-gap | held_out | visibility | Pending |
 | candidate-unreadable-view | held_out | visibility | Pending |
+
+## Software verification checkpoint
+
+Candidate source `b46f266f73578004c400364acb45e9d856a8efa7`, tree `441a73695236fc8bc7f419ac9ec63398d07d241f`, passed isolated Docker job 118835610532: 43 tests, zero failures/errors/skips. Native ARM64 run 39482852702 and x86 run 39482852690 each passed **754 component + 49 runtime + 21 foundation = 824 tests**, zero failures/errors/skips, plus real PostgreSQL restart and fresh dump/restore preserving coordinator claims/replay/Stop. Browser run 39482852670 and separate runtime run 39482852639 passed. The live provider job intentionally skipped. These are software integrity/regression results, not reviewed labels, sealed holdout, model answers or quality evidence. All analyst review entries remain pending.

@@ -209,6 +209,30 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             loaded("document.getElementById('specialist-attack-status')?.textContent==='Attacker status: unknown'")
             runs=service.list_specialist_runs(human,case['id'])['runs']
             assert len(runs)==1 and service.get_specialist_run(human,case['id'],runs[0]['id'])['result']['attack_status']=='unknown'
+            mark(family+':workbench-coordinator')
+            cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/coordinator'},session)
+            loaded("document.title==='Local investigation plan · Gabriel'")
+            cdp.evaluate(session,"document.querySelector('form[action$=new]').requestSubmit();true")
+            loaded("document.getElementById('coordinator-progress')?.textContent==='0 of 2 local steps complete'")
+            plans=service.list_coordinator_runs(human,case['id'])['runs']
+            assert len(plans)==1
+            plan_id=plans[0]['id']
+            detail=cdp.evaluate(session,'location.pathname')
+            assert detail.endswith('/'+plan_id)
+            cdp.evaluate(session,"document.querySelector('form[action$=next]').requestSubmit();true")
+            loaded("document.getElementById('coordinator-progress')?.textContent==='1 of 2 local steps complete'")
+            assert service.get_coordinator(human,plan_id)['completed_steps']==1
+            cdp.evaluate(session,"document.querySelector('form[action$=next]').requestSubmit();true")
+            loaded("document.getElementById('coordinator-status')?.textContent==='Local checks complete'")
+            completed=service.get_coordinator(human,plan_id)
+            assert completed['completed_steps']==2 and not completed['model_enabled'] and not completed['external_actions_enabled']
+            assert cdp.evaluate(session,"Boolean(document.querySelector('a[href*=specialists]'))")
+            cdp.evaluate(session,"document.querySelector('form[action$=stop]').requestSubmit();true")
+            loaded("document.getElementById('coordinator-status')?.textContent==='Stopped'")
+            assert service.get_coordinator(human,plan_id)['status']=='stopped'
+            assert not cdp.evaluate(session,"Boolean(document.querySelector('form[action$=next]'))")
+            cdp.send('Page.navigate',{'url':target+detail},session)
+            loaded("document.getElementById('coordinator-status')?.textContent==='Stopped'")
             mark(family+':workbench-memory')
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/memory'},session)
             loaded("document.title==='Memory review · Gabriel'")
@@ -398,7 +422,7 @@ def run_browser(family,executable,output):
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
-                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','memory_proposal','memory_review','memory_forget','spending_screen','persisted_spending_pause_and_limits','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
+                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','local_plan_creation','persisted_local_steps','local_receipt_link','persisted_local_plan_stop','memory_proposal','memory_review','memory_forget','spending_screen','persisted_spending_pause_and_limits','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
         except Exception:

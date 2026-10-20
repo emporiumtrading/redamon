@@ -49,6 +49,30 @@ def test_duplicate_begin_and_conflicting_limits(tenant,cases,case,evidence):
     assert cases.advance_coordinator(tenant.token,first['id'])['status']=='local_plan_complete'
 
 
+def test_expected_step_replay_never_advances_the_following_step(tenant,cases,plan):
+    first=cases.advance_coordinator(tenant.token,plan['id'],expected_sequence=1)
+    assert first['completed_steps']==1
+    assert cases.advance_coordinator(tenant.token,plan['id'],expected_sequence=1)==first
+    assert cases.get_coordinator(tenant.token,plan['id'])['steps'][1]['claimed_at'] is None
+    with pytest.raises(InvalidIdentityInput):
+        cases.advance_coordinator(tenant.token,plan['id'],expected_sequence=True)
+    assert cases.advance_coordinator(tenant.token,plan['id'],expected_sequence=2)['completed_steps']==2
+
+
+def test_history_is_bounded_case_scoped_and_omits_receipt_bodies(tenant,cases,case,plan):
+    other=cases.create_case(tenant.token,'Generated separate coordinator case')
+    cases.begin_coordinator(tenant.token,other['id'],uuid4())
+    for _ in range(32): cases.begin_coordinator(tenant.token,case['id'],uuid4())
+    history=cases.list_coordinator_runs(tenant.token,case['id'])
+    assert len(history['runs'])==32 and history['truncated']
+    assert all(row['case_id']==str(case['id']) and 'steps' not in row for row in history['runs'])
+    assert all(not row['current_source_authority_checked'] for row in history['runs'])
+    password=secrets.token_urlsafe(24)
+    foreign_org,_=provision_organization(tenant.db.owner,'Generated foreign coordinator history','owner',password)
+    token=cases.login(foreign_org,'owner',password).token
+    with pytest.raises(AccessDenied): cases.list_coordinator_runs(token,case['id'])
+
+
 def test_concurrent_requests_never_exceed_plan_or_duplicate_specialist(tenant,cases,plan,case):
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(lambda _:cases.advance_coordinator(tenant.token,plan['id']),range(4)))

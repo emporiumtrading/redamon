@@ -110,6 +110,118 @@ def test_spending_screen_changes_real_limits_and_pauses_reservations(tenant,serv
     assert 'New reservations paused' in call(server,'/spending',cookie=cookie)[1]
 
 
+def test_local_plan_forms_persist_steps_replay_receipts_and_stop(tenant,cases,case,evidence,server):
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/coordinator'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'Create local plan' in html and 'does not assess an attack' in html
+    request=str(uuid4())
+    code,_,headers=call(server,path+'/new',dict(csrf=token,request_id=request),cookie=cookie)
+    assert code==303
+    detail=headers['Location']
+    run_id=detail.rsplit('/',1)[1]
+    code,_,again=call(server,path+'/new',dict(csrf=token,request_id=request),cookie=cookie)
+    assert code==303 and again['Location']==detail
+    assert len(cases.list_coordinator_runs(tenant.token,case['id'])['runs'])==1
+    assert cases.get_coordinator(tenant.token,run_id)['completed_steps']==0
+    for _ in range(2):
+        assert call(server,detail+'/next',dict(csrf=token,sequence='1'),cookie=cookie)[0]==303
+    state=cases.get_coordinator(tenant.token,run_id)
+    assert state['completed_steps']==1 and state['steps'][1]['claimed_at'] is None
+    html=call(server,detail,cookie=cookie)[1]
+    assert 'Receipt checksum' in html and str(evidence['id']) in html and CONTENT not in html
+    assert call(server,detail+'/next',dict(csrf=token,sequence='2'),cookie=cookie)[0]==303
+    html=call(server,detail,cookie=cookie)[1]
+    assert 'Local checks complete' in html and 'Review telemetry assessment' in html and 'Run next local step' not in html
+    assert call(server,detail+'/stop',dict(csrf=token),cookie=cookie)[0]==303
+    assert cases.get_coordinator(tenant.token,run_id)['status']=='stopped'
+    assert 'Stop this plan' not in call(server,detail,cookie=cookie)[1]
+    assert call(server,detail+'/next',dict(csrf=token,sequence='2'),cookie=cookie)[0]==403
+
+
+@pytest.mark.parametrize('attack',['no_cookie','csrf','origin','extra','sequence','get'])
+def test_local_plan_actions_reject_invalid_boundary_without_claim(tenant,cases,case,server,attack):
+    run=cases.begin_coordinator(tenant.token,case['id'],uuid4())
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/coordinator/'+run['id']+'/next'
+    fields=dict(csrf=token,sequence='1')
+    kwargs=dict(cookie=cookie)
+    if attack=='no_cookie': kwargs={}
+    elif attack=='csrf': fields['csrf']='wrong'
+    elif attack=='origin': kwargs['origin']='https://unapproved.invalid'
+    elif attack=='extra': fields['operation']='external_action'
+    elif attack=='sequence': fields['sequence']='3'
+    elif attack=='get': fields=None
+    assert call(server,path,fields,**kwargs)[0]==403
+    assert cases.get_coordinator(tenant.token,run['id'])['steps'][0]['claimed_at'] is None
+
+
+def test_local_plan_wrong_case_and_foreign_tenant_cannot_mutate(tenant,cases,case,server):
+    run=cases.begin_coordinator(tenant.token,case['id'],uuid4())
+    other=cases.create_case(tenant.token,'Generated wrong path case')
+    password=secrets.token_urlsafe(24)
+    org,_=provision_organization(tenant.db.owner,'Generated foreign plan','owner',password)
+    foreign=cases.login(org,'owner',password).token
+    foreign_case=cases.create_case(foreign,'Generated foreign plan case')
+    foreign_run=cases.begin_coordinator(foreign,foreign_case['id'],uuid4())
+    cookie,token,_=connect(server)
+    for case_id,run_id in [(str(other['id']),run['id']),(str(case['id']),foreign_run['id'])]:
+        path='/cases/'+case_id+'/coordinator/'+run_id
+        assert call(server,path,cookie=cookie)[0]==403
+        assert call(server,path+'/stop',dict(csrf=token),cookie=cookie)[0]==403
+    assert cases.get_coordinator(tenant.token,run['id'])['status']=='pending_local_steps'
+    assert cases.get_coordinator(foreign,foreign_run['id'])['status']=='pending_local_steps'
+
+
+@pytest.mark.parametrize('boot',['viewer'],indirect=True)
+def test_viewer_plan_history_has_no_controls_and_cannot_mutate(tenant,cases,case,server):
+    run=cases.begin_coordinator(tenant.token,case['id'],uuid4())
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/coordinator'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and run['id'] in html and 'Create local plan' not in html
+    detail=path+'/'+run['id']
+    html=call(server,detail,cookie=cookie)[1]
+    assert 'Run next local step' not in html and 'Stop this plan' not in html
+    assert call(server,path+'/new',dict(csrf=token,request_id=str(uuid4())),cookie=cookie)[0]==403
+    assert call(server,detail+'/next',dict(csrf=token,sequence='1'),cookie=cookie)[0]==403
+    assert call(server,detail+'/stop',dict(csrf=token),cookie=cookie)[0]==403
+    assert cases.get_coordinator(tenant.token,run['id'])['completed_steps']==0
+
+
+def test_changed_evidence_returns_recovery_guidance_without_completion(tenant,cases,case,server):
+    run=cases.begin_coordinator(tenant.token,case['id'],uuid4())
+    cases.acquire(tenant.token,case['id'],uuid4(),'Generated later evidence','Generated fixture',approved=True)
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/coordinator/'+run['id']
+    code,html,_=call(server,path+'/next',dict(csrf=token,sequence='1'),cookie=cookie)
+    assert code==409 and 'evidence set changed' in html and 'create a new plan' in html
+    assert cases.get_coordinator(tenant.token,run['id'])['completed_steps']==0
+
+
+@pytest.mark.parametrize('change',['revoked','closed','expired'])
+def test_plan_controls_recheck_current_session_case_and_expiry(tenant,cases,case,evidence,server,change):
+    run=cases.begin_coordinator(tenant.token,case['id'],uuid4())
+    cookie,token,_=connect(server)
+    if change=='revoked': cases.logout(tenant.token)
+    elif change=='closed':
+        from gabriel.identity.actions import ActionService
+        actions=ActionService(tenant.db.app,cases.store)
+        actions.set_policy(tenant.token,distinct_approver=False)
+        action=actions.propose_close(tenant.token,case['id'],uuid4(),'Generated reviewed closure for access test')
+        actions.submit(tenant.token,action['id'])
+        actions.approve(tenant.token,action['id'],action['digest'])
+        cases.close_case(tenant.token,case['id'],approval_id=action['id'])
+        assert cases.get_case(tenant.token,case['id'])['case']['state']=='closed'
+    else:
+        with owner_connection(tenant.db) as conn:
+            conn.execute("UPDATE gabriel_identity.coordinator_runs SET created_at=clock_timestamp()-interval '2 minutes',expires_at=clock_timestamp()-interval '1 minute' WHERE id=%s",(run['id'],))
+    path='/cases/'+str(case['id'])+'/coordinator/'+run['id']
+    assert call(server,path+'/next',dict(csrf=token,sequence='1'),cookie=cookie)[0]==403
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.coordinator_claims WHERE run_id=%s',(run['id'],)).fetchone()['n']==0
+
+
 @pytest.mark.parametrize('amount',['20','NaN','1e0','-1','0','0.0000001'])
 def test_spending_form_refuses_invalid_or_excess_limit_without_change(tenant,server,amount):
     cookie,token,_=connect(server)

@@ -59,9 +59,13 @@ class CaseService(IdentityService):
         from gabriel.identity.coordinator import get
         return get(self,token,run_id)
 
-    def advance_coordinator(self,token,run_id):
+    def list_coordinator_runs(self,token,case_id):
+        from gabriel.identity.coordinator import history
+        return history(self,token,case_id)
+
+    def advance_coordinator(self,token,run_id,**options):
         from gabriel.identity.coordinator import advance
-        return advance(self,token,run_id)
+        return advance(self,token,run_id,**options)
 
     def stop_coordinator(self,token,run_id):
         from gabriel.identity.coordinator import stop

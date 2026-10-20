@@ -76,7 +76,7 @@ def snapshot(conn,row):
     completed=sum(step['completed_at'] is not None for step in steps)
     status=('stopped' if row['stopped'] else 'authority_lost' if not row['creator_current']
             else 'expired' if row['expired'] else 'local_plan_complete' if completed==row['max_steps'] else 'pending_local_steps')
-    return dict(id=str(row['id']),case_id=str(row['case_id']),plan_version=row['plan_version'],
+    return dict(id=str(row['id']),case_id=str(row['case_id']),requested_by=str(row['requested_by']),plan_version=row['plan_version'],
         source_digest=row['source_digest'],created_at=iso(row['created_at']),expires_at=iso(row['expires_at']),
         status=status,max_steps=row['max_steps'],completed_steps=completed,
         steps=[dict(sequence=step['sequence'],operation=step['operation'],claimed_at=iso(step['claimed_at']),
@@ -130,6 +130,21 @@ def get(service,token,run_id):
         return snapshot(conn,row)
 
 
+def history(service,token,case_id):
+    with connection(service._dsn) as conn:
+        p=service._human(conn,token)
+        case=service._case(conn,p,case_id)
+        rows=conn.execute('''SELECT id FROM gabriel_identity.coordinator_runs
+            WHERE organization_id=%s AND case_id=%s ORDER BY created_at DESC,id LIMIT 33''',
+            (p.organization_id,case['id'])).fetchall()
+        summaries=[]
+        for row in rows[:32]:
+            value=snapshot(conn,load(conn,p,row['id']))
+            summaries.append({k:v for k,v in value.items() if k!='steps'})
+        _audit(conn,'coordinator.history_read',p,case['id'])
+        return dict(runs=summaries,truncated=len(rows)>32)
+
+
 def stop(service,token,run_id):
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True)
@@ -152,7 +167,9 @@ def execute_local(service,token,row,step,selected):
     raise AccessDenied('coordinator_operation_not_enabled')
 
 
-def advance(service,token,run_id):
+def advance(service,token,run_id,*,expected_sequence=None):
+    if expected_sequence is not None and (type(expected_sequence) is not int or expected_sequence not in {1,2}):
+        raise InvalidIdentityInput('invalid_coordinator_sequence')
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True)
         row=load(conn,p,run_id)
@@ -163,7 +180,7 @@ def advance(service,token,run_id):
             (SELECT 1 FROM gabriel_identity.coordinator_results r
               WHERE (r.organization_id,r.run_id,r.sequence)=(s.organization_id,s.run_id,s.sequence))
             ORDER BY s.sequence LIMIT 1''',(p.organization_id,row['id'])).fetchone()
-        if not step:
+        if not step or (expected_sequence is not None and step['sequence']!=expected_sequence):
             return snapshot(conn,row)
         conn.execute('''INSERT INTO gabriel_identity.coordinator_claims
             (organization_id,run_id,sequence,claimed_by) VALUES (%s,%s,%s,%s)
