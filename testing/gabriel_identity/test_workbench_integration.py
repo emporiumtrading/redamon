@@ -180,6 +180,27 @@ def test_telemetry_specialist_forms_persist_history_with_csrf_and_role_checks(te
     assert call(server,path,dict(fields,request_id=str(uuid4()),role='threat_hunting'),cookie=cookie)[0]==403
 
 
+def test_memory_forms_require_review_and_forget_does_not_erase_source(tenant,cases,case,evidence,server):
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/memory'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'No memory references recorded' in html and 'source evidence' in html
+    request=re.search(r'name="request_id" value="([0-9a-f-]+)"',html)[1]
+    fields=dict(csrf=token,request_id=request,evidence_id=str(evidence['id']),kind='fact',scope='case',topic='generated.web-memory',supersedes='')
+    assert call(server,path+'/propose',dict(fields,csrf='bad'),cookie=cookie)[0]==403
+    assert call(server,path+'/propose',fields,cookie=cookie)[0]==303
+    record=cases.list_memory(tenant.token,case['id'])['records'][0]
+    assert record['status']=='proposed' and not cases.retrieve_memory(tenant.token,case['id'])
+    review=dict(csrf=token,memory_id=record['id'],decision='approved',expected_digest=record['source_digest'])
+    assert call(server,path+'/review',review,cookie=cookie)[0]==403
+    assert call(server,path+'/review',dict(review,acknowledged='yes'),cookie=cookie)[0]==303
+    assert cases.retrieve_memory(tenant.token,case['id'])[0].metadata['id']==record['id']
+    assert call(server,path+'/forget',dict(csrf=token,memory_id=record['id']),cookie=cookie)[0]==303
+    assert not cases.retrieve_memory(tenant.token,case['id'])
+    assert cases.read_evidence(tenant.token,evidence['id']).reveal()==CONTENT.encode()
+    assert call(server,path+'/reset',dict(csrf=token,epoch='0'),cookie=cookie)[0]==303
+
+
 @pytest.mark.parametrize('attack',['missing_csrf','wrong_origin','null_origin','duplicate_field','forwarding','wrong_host','query','cross_site','duplicate_cookie','get_body','json','unknown_route'])
 def test_boundary_denials_do_not_create_case(tenant,cases,server,attack):
     cookie,token,_=connect(server)

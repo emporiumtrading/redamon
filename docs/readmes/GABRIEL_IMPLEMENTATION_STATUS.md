@@ -1,5 +1,13 @@
 # Gabriel implementation ledger
 
+## C07 increment 23 — governed reference memory implemented, hosted verification pending
+
+Schema 15 and actual service/CLI/workbench paths add explicitly reviewed facts/preferences over existing encrypted evidence, scope/classification, fixed expiry, correction lineage, forgetting and organization epoch reset. Source bytes and authority are verified on actual retrieval; proposed/rejected/expired/forgotten/reset/superseded/revoked/unavailable references remain excluded. Self-review is explicit and grants no truth or authority. Source retention/legal-hold exceptions are disclosed; no source erasure, cache deletion, automatic model learning or privacy-compliance claim is invented. [Lifecycle, UAT inventory, limits and rollback](README.GABRIEL_MEMORY.md).
+
+Status **IMPLEMENTED_UNVERIFIED** until exact-source matching-image execution. Added real PostgreSQL/crypto/CLI/TLS/native-browser and actual restart/dump-restore assertions include recovery of reviewed memory and exclusion after retained forget/reset epochs. Full C07, model/coordinator reuse, expert evaluation, independent review and human pre/post-release UAT remain open.
+
+The parent telemetry specialist code `470addfec33c450eeac5782d2d77bd91a476d54e` passed [database/recovery/regression 39367408922](https://github.com/emporiumtrading/redamon/actions/runs/39367408922): **605 component + 49 runtime + 21 foundation = 675 passed, zero failures/errors/skips**, including actual persisted telemetry result reconstruction after PostgreSQL restart/dump-restore. Native Chrome/Brave `39367409123` and separate runtime `39367408934` passed. This parent result does not validate the new memory code. Eleven other specialist engines and all live model routes remain unimplemented/unaccepted, regardless of registered role contracts.
+
 ## C07 increment 22 — specialist contracts and local telemetry health implemented, verification pending
 
 Schema 14 and the actual service/CLI/workbench paths persist bounded, audited, immutable telemetry-health assessments from case-scoped browser authority records. Versioned contracts enumerate all twelve PRD roles; only the local telemetry engine is executable. Eleven contract-only roles deny execution. Strict scoped references, partial/historical labels, alternatives/uncertainty, zero model cost with no model called, replay/concurrency admission, live role/session checks, append-only grants and explicit quotas protect the implemented path. No attacker assessment, model result, external action or learned memory is invented. [Operation, UAT inventory, limits and rollback](README.GABRIEL_SPECIALISTS.md).

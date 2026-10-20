@@ -88,7 +88,7 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('create','list','get','report','graph','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
+    parser.add_argument('command',choices=('create','list','get','report','graph','memory-propose','memory-review','memory-list','memory-check','memory-forget','memory-reset','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
@@ -129,6 +129,15 @@ def main():
     parser.add_argument('--answer')
     parser.add_argument('--specialist-role',default='telemetry_health')
     parser.add_argument('--run-id')
+    parser.add_argument('--memory-id')
+    parser.add_argument('--memory-kind',choices=('fact','preference'),default='fact')
+    parser.add_argument('--memory-scope',choices=('case','organization'),default='case')
+    parser.add_argument('--topic')
+    parser.add_argument('--sensitivity',choices=('internal','confidential','restricted'),default='internal')
+    parser.add_argument('--supersedes')
+    parser.add_argument('--decision',choices=('approved','rejected'))
+    parser.add_argument('--acknowledged-source',action='store_true')
+    parser.add_argument('--epoch',type=int)
     args = parser.parse_args()
     try:
         keys = EvidenceKeys.from_file(os.environ.get('GABRIEL_EVIDENCE_KEYRING_FILE'))
@@ -229,6 +238,19 @@ def main():
             result = service.get_specialist_run(token,args.case_id,args.run_id)
         elif args.command=='specialist-list':
             result = service.list_specialist_runs(token,args.case_id)
+        elif args.command=='memory-propose':
+            result = service.propose_memory(token,args.case_id,args.evidence_id,args.request_id,args.memory_kind,args.memory_scope,args.topic,
+                ttl_seconds=args.ttl,sensitivity=args.sensitivity,supersedes=args.supersedes)
+        elif args.command=='memory-review':
+            result = service.review_memory(token,args.memory_id,args.decision,args.expected_digest,args.acknowledged_source)
+        elif args.command=='memory-list':
+            result = service.list_memory(token,args.case_id)
+        elif args.command=='memory-check':
+            result = dict(records=[item.metadata for item in service.retrieve_memory(token,args.case_id)],body_included=False)
+        elif args.command=='memory-forget':
+            result = service.forget_memory(token,args.memory_id)
+        elif args.command=='memory-reset':
+            result = service.reset_memory(token,args.epoch)
         elif args.command=='workflow-get':
             result = service.case_workflow(token,args.case_id)
         elif args.command=='assign':

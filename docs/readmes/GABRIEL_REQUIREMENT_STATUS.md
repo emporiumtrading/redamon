@@ -34,8 +34,8 @@ Verified code baseline: `dcaaaf2ecffb840e281ca7141cf2fbe649991991` passed **644 
 | GAB-028 | Bounded local tasks tested; specialist coordinator, model budgets and duplicate/disagreement handling outstanding. |
 | GAB-029 | Provider vault exists; approved NVIDIA/OpenRouter routing, actual model evaluations and policy-preserving fallback outstanding. |
 | GAB-030 | Reviewed defensive hunt playbooks, versioning, alternatives and escalation evaluation outstanding. |
-| GAB-031 | Tenant memory provenance/correction/expiry/supersession/reset and retrieval lifecycle outstanding. |
-| GAB-032 | Memory poisoning/drift/cross-tenant defenses require implementation and adversarial evaluation. |
+| GAB-031 | Evidence-backed reviewed memory, provenance, correction/expiry/supersession/forget/reset and fresh encrypted retrieval implemented with verification pending; AI reuse, source-erasure/backup/operational acceptance remain open. |
+| GAB-032 | Scope/role/source-authority exclusion, explicit review and correction/reset controls implemented with verification pending; poisoning, drift and prompt-injection effectiveness require adversarial evaluation before AI reuse. |
 | GAB-033 | Prompt/model/playbook/adapter promotion and rollback governance outstanding. |
 | GAB-034 | Open-source candidates are a catalog, not supported integrations; exact tool/version/license/owner and real lab acceptance required per enabled integration. |
 | GAB-035 | Detection/code changes and deployed-effect verification not admitted. |

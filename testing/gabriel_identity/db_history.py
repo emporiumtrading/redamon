@@ -101,6 +101,13 @@ def remove_v13(conn):
 
 
 def remove_v14(conn):
+    remove_v15(conn)
     if conn.execute("SELECT to_regclass('gabriel_identity.specialist_runs') AS t").fetchone()['t'] is not None:
         conn.execute('DROP TABLE gabriel_identity.specialist_runs')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=14')
+
+
+def remove_v15(conn):
+    if conn.execute("SELECT to_regclass('gabriel_identity.memory_records') AS t").fetchone()['t'] is not None:
+        conn.execute('DROP TABLE gabriel_identity.memory_reviews,gabriel_identity.memory_invalidations,gabriel_identity.memory_resets,gabriel_identity.memory_records')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=15')
