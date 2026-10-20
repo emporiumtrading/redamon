@@ -1,5 +1,12 @@
 # Gabriel implementation ledger
 
+## Confidential typed model input — implemented, verification pending
+
+The owner-authorized OpenRouter key settings were saved and verified after reload: $18 monthly cap. Live job `118765377853` in run `39458714816` passed key preflight, attempted one generation and received HTTP 404 with no validated answer. Possible cost remains unresolved; there was no automatic retry. The live endpoint catalog for both Gemini candidates lists AI Studio variants and no Vertex route. Repair `e12028f271d0e459725af16ffc6c984e71ce972b` adds a pre-paid-call catalog check while preserving ZDR, no-fallback and price limits. Its hosted outcomes are pending.
+
+The typed local input projection adds case/tenant/type-scoped HMAC pseudonyms, a private integrity-bound lineage manifest, exact-fact duplicate compaction and a hard wire-byte limit with no silent truncation. It accepts no free-text instruction/content/action fields. New software assertions cover leakage, domain separation, full source mapping, tampering, input limits, identity distinctions and preserved event differences. Matching-image gates are pending. [Scope, acceptance and rollback](GABRIEL_CONFIDENTIAL_MODEL_INPUT.md). This does not deliver adapter normalization, secret/key lifecycle integration, current-authority checks, network dispatch or model suitability. Full release remains unaccepted.
+
+
 ## C07 evaluation, durable budgets and spending screen — components verified
 
 Code source `7ce5a2e81cfd3f75fa3515553f4621c361b00738` (tree `94bcb20f84823e41970641e862dfb8d7fdc74be2`) passed [database/recovery/regression 39440075956](https://github.com/emporiumtrading/redamon/actions/runs/39440075956): **692 component + 49 runtime/inventory + 21 foundation = 762 passed, zero failures/errors/skips**. This includes 25 evaluator software tests, 24 real PostgreSQL budget tests and 36 HTTPS workbench tests. Actual restart and fresh dump/restore preserved an unknown claimed reservation, release of never-claimed work and Stop. The stopped claim could not execute again; operator reconciliation recorded its supplied actual cost. All prior case/identity/crypto/custody/checkpoint/memory/worker/browser-authority regressions passed.
