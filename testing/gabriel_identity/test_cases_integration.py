@@ -414,6 +414,14 @@ def test_real_cli_intake_verify_export_and_close(tenant,tmp_path):
     assert code==0 and assessed['result']['result']['attack_status']=='unknown'
     assert cli('specialist-get','--case-id',case_id,'--run-id',assessed['result']['id'])[1]['result']['result_digest']==assessed['result']['result_digest']
     assert len(cli('specialist-list','--case-id',case_id)[1]['result']['runs'])==1
+    code,remembered=cli('memory-propose','--case-id',case_id,'--evidence-id',evidence_id,'--request-id',str(uuid4()),'--topic','generated.cli-memory')
+    assert code==0 and remembered['result']['status']=='proposed'
+    memory=remembered['result']
+    assert cli('memory-review','--memory-id',memory['id'],'--decision','approved','--expected-digest',memory['source_digest'],'--acknowledged-source')[0]==0
+    assert cli('memory-check','--case-id',case_id)[1]['result']['records'][0]['id']==memory['id']
+    assert cli('memory-forget','--memory-id',memory['id'])[1]['result']['retrieval_removed']
+    assert cli('memory-check','--case-id',case_id)[1]['result']['records']==[]
+    assert cli('memory-reset','--epoch','0')[1]['result']['epoch']==1
     assert cli('custody','--evidence-id',evidence_id)[0]==0
     assert cli('verify','--case-id',case_id)[1]['result']['complete']
     assert cli('assign','--case-id',case_id,'--request-id',str(uuid4()),'--member-id',str(tenant.owner))[0]==0

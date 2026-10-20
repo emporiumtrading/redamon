@@ -52,7 +52,8 @@ def counts():
               'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events',
               'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts',
               'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
-              'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs','migrations')
+              'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
+              'memory_records','memory_reviews','memory_invalidations','memory_resets','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -198,12 +199,19 @@ if sys.argv[1] == 'before':
     assignment=cases.assign_case(token,case['id'],uuid4(),user)
     question=cases.add_question(token,case['id'],uuid4(),'Generated recovery investigation question')
     cases.answer_question(token,case['id'],question,evidence['id'],'Generated recovery analyst explanation')
+    prior_memory=cases.propose_memory(token,case['id'],evidence['id'],uuid4(),'fact','case','recovery.old',ttl_seconds=3600)
+    cases.review_memory(token,prior_memory['id'],'approved',prior_memory['source_digest'],True)
+    assert cases.forget_memory(token,prior_memory['id'])['retrieval_removed']
+    assert cases.reset_memory(token,0)['epoch']==1
+    memory=cases.propose_memory(token,case['id'],evidence['id'],uuid4(),'fact','case','recovery.current',ttl_seconds=3600)
+    cases.review_memory(token,memory['id'],'approved',memory['source_digest'],True)
     report_snapshot = cases.case_report(token,case['id'])['snapshot']
     specialist=cases.run_specialist(token,case['id'],uuid4(),'telemetry_health')
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
         'workflow_assignment':assignment['id'],'workflow_question':question,
         'specialist_id':specialist['id'],'specialist_digest':specialist['result_digest'],
+        'memory_id':memory['id'],'memory_source_digest':memory['source_digest'],'old_memory_id':prior_memory['id'],
         'provenance_digest':cases.case_graph(token,case['id'])['digest'],
         'task':str(task),'service_token':machine.token,'grant_id':str(machine.id),
         'request_id':str(request_id),'response':response,
@@ -284,6 +292,14 @@ elif sys.argv[1] in {'after','restored'}:
     specialist=cases.get_specialist_run(saved['token'],saved['case_id'],saved['specialist_id'])
     assert specialist['result_digest']==saved['specialist_digest'] and specialist['result']['attack_status']=='unknown'
     assert not specialist['grants_authority'] and specialist['result']['execution']['model'] is None
+    memory,=cases.retrieve_memory(saved['token'],saved['case_id'])
+    assert memory.metadata['id']==saved['memory_id'] and memory.metadata['source_digest']==saved['memory_source_digest']
+    assert memory.reveal()==b'approved recovery fixture' and not memory.metadata['grants_authority']
+    history=cases.list_memory(saved['token'],saved['case_id'])
+    assert history['current_epoch']==1 and next(row for row in history['records'] if row['id']==saved['old_memory_id'])['status']=='reset'
+    assert cases.forget_memory(saved['token'],saved['memory_id'])['retrieval_removed']
+    assert not cases.retrieve_memory(saved['token'],saved['case_id'])
+    assert cases.reset_memory(saved['token'],1)['epoch']==2
     workflow=cases.case_workflow(saved['token'],saved['case_id'])
     assert workflow['assignment']['id']==saved['workflow_assignment'] and workflow['assignment']['assignee_active']
     assert workflow['questions'][0]['id']==saved['workflow_question'] and workflow['questions'][0]['state']=='human_answer_supplied'
@@ -359,6 +375,7 @@ elif sys.argv[1] in {'after','restored'}:
     print('PASS: metadata report reconstructed evidence and prior timeline after recovery without inventing source truth or content-integrity verification')
     print('PASS: case provenance graph rebuilt with identical checksum after actual database recovery')
     print('PASS: immutable telemetry specialist result survived recovery without inventing attacker or model conclusions')
+    print('PASS: reviewed encrypted memory and forget/reset epochs survived recovery; stale records remained excluded')
     print('PASS: append-only case assignment and evidence-linked analyst answer survived recovery without granting authority or learned truth')
     print('PASS: exact policy/approval survived recovery; pending local closure executed and completed receipt replayed')
     print('PASS: legal hold and retention survived recovery; completed purge retained and interrupted unlink reconciled without another deletion')

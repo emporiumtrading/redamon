@@ -51,6 +51,30 @@ def metadata(row):
 
 
 class CaseService(IdentityService):
+    def propose_memory(self,token,case_id,evidence_id,request_id,kind,scope,topic,**options):
+        from gabriel.identity.memory import propose
+        return propose(self,token,case_id,evidence_id,request_id,kind,scope,topic,**options)
+
+    def review_memory(self,token,memory_id,decision,expected_digest,acknowledged=False):
+        from gabriel.identity.memory import review
+        return review(self,token,memory_id,decision,expected_digest,acknowledged)
+
+    def list_memory(self,token,case_id):
+        from gabriel.identity.memory import list_memory
+        return list_memory(self,token,case_id)
+
+    def retrieve_memory(self,token,case_id):
+        from gabriel.identity.memory import retrieve
+        return retrieve(self,token,case_id)
+
+    def forget_memory(self,token,memory_id,reason='analyst_requested'):
+        from gabriel.identity.memory import forget
+        return forget(self,token,memory_id,reason)
+
+    def reset_memory(self,token,expected_epoch):
+        from gabriel.identity.memory import reset
+        return reset(self,token,expected_epoch)
+
     def run_specialist(self,token,case_id,request_id,role):
         from gabriel.identity.specialists import run_specialist
         return run_specialist(self,token,case_id,request_id,role)

@@ -178,6 +178,50 @@ class Workbench:
                 self.service.answer_question(self._token,case_id,fields['question_id'],fields['evidence_id'],fields['answer'])
             else: raise AccessDenied('invalid_case_workflow_form')
             return '303 See Other',b'',[('Location','/cases/'+case_id)]
+        memory=re.fullmatch('/cases/('+ID+')/memory(?:/(propose|review|forget|reset))?',path)
+        if memory:
+            case_id,operation=memory.groups()
+            path='/cases/'+case_id+'/memory'
+            case=self.service.get_case(self._token,case_id)
+            history=self.service.list_memory(self._token,case_id)
+            if method=='POST':
+                if operation=='propose' and set(fields)=={'csrf','request_id','evidence_id','kind','scope','topic','supersedes'}:
+                    self.service.propose_memory(self._token,case_id,fields['evidence_id'],fields['request_id'],fields['kind'],fields['scope'],fields['topic'],supersedes=fields['supersedes'] or None)
+                elif operation in {'review','forget'}:
+                    if fields.get('memory_id') not in {row['id'] for row in history['records']}: raise AccessDenied('memory_not_on_page')
+                    if operation=='review' and set(fields)=={'csrf','memory_id','decision','expected_digest','acknowledged'}:
+                        self.service.review_memory(self._token,fields['memory_id'],fields['decision'],fields['expected_digest'],fields['acknowledged']=='yes')
+                    elif operation=='forget' and set(fields)=={'csrf','memory_id'}:
+                        self.service.forget_memory(self._token,fields['memory_id'])
+                    else: raise AccessDenied('invalid_memory_form')
+                elif operation=='reset' and set(fields)=={'csrf','epoch'}:
+                    self.service.reset_memory(self._token,int(fields['epoch']))
+                else: raise AccessDenied('invalid_memory_form')
+                return '303 See Other',b'',[('Location',path)]
+            if method!='GET' or operation: raise AccessDenied('workbench_route_denied')
+            writable=principal.role!='viewer' and case['case']['state']=='open'
+            body='<p class="notice">Reviewed reference data grants no authority and does not establish source truth. Forget and reset remove retrieval; encrypted source evidence and audit history remain under case retention and legal holds.</p>'
+            if writable:
+                options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in case['evidence'] if row['state']=='ready' and row['storage_state']=='active' and row['byte_length']<=4096)
+                if options:
+                    scopes='<option value="case">This case</option>'+('<option value="organization">Organization</option>' if principal.role in {'owner','admin'} else '')
+                    body+=self._form(path+'/propose','Propose reference','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Source evidence<select name="evidence_id">'+options+'</select></label><label>Kind<select name="kind"><option value="fact">Fact</option><option value="preference">Preference</option></select></label><label>Scope<select name="scope">'+scopes+'</select></label><label>Topic identifier<input name="topic" pattern="[a-z][a-z0-9_.-]{0,63}" required></label><label>Correct a prior record (optional UUID)<input name="supersedes"></label><p>Internal classification; expires 24 hours after proposal. Review is a separate step.</p>')
+            for row in history['records']:
+                labels={'proposed':'Needs review','eligible_pending_content_check':'Reviewed; source content will be verified before use',
+                    'forgotten':'Excluded from retrieval','reset':'Excluded by organization reset','superseded':'Superseded by a proposed correction',
+                    'expired':'Expired','rejected':'Rejected','authority_unavailable':'Excluded: contributor or reviewer access changed',
+                    'source_unavailable':'Excluded: source evidence is unavailable'}
+                body+='<section><h2>'+e(row['topic'])+'</h2><p data-memory-status="'+e(row['status'])+'">'+e(labels[row['status']])+'</p><p>'+e(row['id'])+' · '+e(row['scope'])+' · '+e(row['sensitivity'])+' · Expires '+e(row['expires_at'])+'</p><p><a href="/cases/'+e(row['case_id'])+'/evidence/'+e(row['evidence_id'])+'">Review source evidence</a></p>'
+                if writable and row['status']=='proposed' and (row['scope']=='case' or principal.role in {'owner','admin'}):
+                    body+=self._form(path+'/review','Record review','<input type="hidden" name="memory_id" value="'+e(row['id'])+'"><input type="hidden" name="expected_digest" value="'+e(row['source_digest'])+'"><label>Decision<select name="decision"><option value="approved">Approve as reference data</option><option value="rejected">Reject</option></select></label><label><input type="checkbox" name="acknowledged" value="yes" required>I reviewed this source and decision; approval is not proof of source truth.</label>')
+                if principal.role!='viewer' and row['status'] not in {'forgotten','reset'} and (row['scope']=='case' or principal.role in {'owner','admin'}):
+                    body+=self._form(path+'/forget','Forget from retrieval','<input type="hidden" name="memory_id" value="'+e(row['id'])+'">')
+                body+='</section>'
+            if not history['records']: body+='<p>No memory references recorded.</p>'
+            if principal.role in {'owner','admin'}:
+                body+=self._form(path+'/reset','Reset all organization memory retrieval','<input type="hidden" name="epoch" value="'+str(history['current_epoch'])+'"><p>This removes all current reference retrieval for the organization; source evidence is retained.</p>')
+            body+='<p>Showing up to 128 latest applicable records.'+(' Older records are omitted.' if history['truncated'] else '')+'</p>'
+            return '200 OK',self._page('Memory review',body,principal),[]
         specialist=re.fullmatch('/cases/('+ID+')/specialists(?:/('+ID+'))?',path)
         if specialist:
             case_id,run_id=specialist.groups()
@@ -240,7 +284,7 @@ class Workbench:
         if report:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
-        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/specialists">Telemetry assessments</a></p>'
+        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/specialists">Telemetry assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
         body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'
