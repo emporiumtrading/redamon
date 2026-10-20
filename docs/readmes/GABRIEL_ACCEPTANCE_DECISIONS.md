@@ -1,17 +1,22 @@
-# Gabriel acceptance decisions requiring an accountable owner
+# Gabriel acceptance decisions and remaining deployment inputs
 
-Development and isolated tests are authorized. That does not identify a customer environment, approve data egress/model spending, provide deployment authority or constitute analyst acceptance. These decisions are open; none is filled with invented customer data. See PRD section 15 and the complete requirement reconciliation.
+Updated 20 October 2026 following the product owner's twelve answers. Product choices and delegated defaults are now recorded in the normative [pilot decisions and acceptance plan](GABRIEL_PILOT_DECISIONS.md) and PRD section 15. Do not repeat the prior twelve-question blocker list.
 
-| Decision | Minimum answer needed | Gate affected | Current safe behavior |
-| --- | --- | --- | --- |
-| Pilot workflows | Authorized organization/lab; exact console editions/pages; existing read-only search/filter journeys; engineer role; supported Chrome/Brave and OS versions; permitted test access process | B0/B2, C08; GAB-010/013/014/017/020/021 | Generated console only; no real console adapter, external login or API credential prerequisite |
-| Model policy | Approved providers/routes and exact models; allowed data classifications; retention/residency terms; per-task and total spending limits; approved account configuration | C07; GAB-023/027/028/029 | No live model dispatch, invented model response or spend |
-| Expert evaluation | Lawfully usable scenario corpus, held-out split, qualified analyst adjudicator, benign alternatives, escalation destination and quality/workload thresholds | C07/C08; GAB-021/023/027/030/033 | No claim of expert-level detection, exhaustive attacker absence or certainty 1.0 |
-| Hosting and operations | Approved staging/production targets, identity/TLS/secret custody owners, backup/retention policy, capacity/load profile and deployment/rollback authority | C01/C08/C13; GAB-003/004/008/039/040 | Isolated disposable CI and loopback/private operator gateway only; no production release |
-| Independent review and UAT | Security/privacy/protocol reviewer; one/two engineer pilot users; staging and post-release scenario sign-off owners | All release gates, GAB-009/025/040 | Draft PRs and source-specific component evidence; human UAT remains NOT_RUN |
-| R3 response workflow | Exact admitted action/target/exclusions, approvers, effect-verification criteria and recovery authority | C10/B3; GAB-035/036/037/038 | No external containment, rule write, third-party draft entry or response dispatch |
-| Optional open-source integration | Exact tool/version/license, supported workflow, maintainer/operations owner and authorized lab | C09, GAB-034 | Candidate catalog, not claimed working support for every listed tool |
+| Area | Selected direction | Remaining concrete input/evidence |
+| --- | --- | --- |
+| Pilot workflows | Isolated Docker lab; console-agnostic semantic observation; Wazuh/DFIR-IRIS initial real-console journeys | Provision actual versioned consoles; test admitted controls and unknown-console degradation |
+| Browser/VM delivery | Chrome/Brave on Windows/macOS/Linux; Docker Compose first, same stack inside Ubuntu guest VM | Real OS/hypervisor journeys and install/upgrade/recovery evidence; architecture-specific build proof |
+| Model policy | OpenRouter Flash Lite/Flash candidates; NVIDIA Nemotron 3 Super fallback candidate; local minimization/redaction and eligible confidential routes | Normal private account configuration; exact endpoint capability, price, retention/residency admission and held-out quality evaluation |
+| Budget | $20/month envelope; $18 dispatch allowance; $0.50/day and $0.05/investigation defaults | Durable spend ledger/reservations/reconciliation tests; account/key limits; no automatic top-up |
+| Evaluation | Build at least 60 scenario families with disjoint hidden-label evaluation and published denominators | Actual pinned licensed corpus, qualified adjudicator and real human workload evaluation |
+| Hosting/operations | Local lab first; tenant-owned deployment and persistent storage | Actual TLS, identity/key/backup owners and deployment/rollback process before staging/customer release |
+| Roles/review/UAT | Owner assigns permissions; users declare operational roles; solo operation supported | Named reviewers and UAT/release/escalation owners during deployment. Self-review is not independent review |
+| Response modes | Observation, autonomous admitted read-only investigation, local drafts; engineer-approved response in later release | Each consequential action requires exact target/parameters, authorization, verification and recovery acceptance |
+| Retention | Engineer/admin configuration, distinct evidence/case/audit/memory/backup policies and legal holds | Working persisted controls, purge/restore tests and customer-specific settings |
+| Optional integrations | Five defensive and five IR components selected in addendum, enabled progressively | Exact version/license review and real per-tool workflow, health and upgrade evidence |
 
-Provide non-secret choices and use the normal approved configuration/access process for credentials. Do not place passwords, MFA codes, browser profiles/cookies, model keys, live telemetry or sensitive target details in public issues, code or PRs. Browser sign-in remains human-only even after a pilot is selected. Direct vendor APIs remain optional, not a requirement to unlock supported browser investigations.
+Independent authorized engineering can proceed with these defaults. Remaining deployment/account/human inputs gate only their dependent paths; they are not reasons to ask routine permission to continue. No chat checkpoint creates an unattended background service.
 
-These decisions block their dependent implementation/evaluation or shipping path, not independent safe development. Engineering checkpoints do not request routine permission to continue. The loop must still stop on missing authority, after the documented same-cause repair limit, or for required human acceptance. No chat checkpoint establishes a persistent background engineering or production-monitoring service.
+Browser sign-in remains human-only. Direct vendor APIs remain optional. Do not place passwords, MFA codes, cookies, model keys or sensitive live telemetry in chat, public issues, code or PRs. Use normal private configuration channels.
+
+Choices recorded in documents are not working integrations, corpus artifacts, tests, human UAT or release approval. The established component evidence remains valid only for its recorded source and scope. New PD scenarios are planned until executable implementation and results exist.
