@@ -2,6 +2,8 @@ name: Gabriel bounded provider probe and ARM64 build
 on:
   pull_request:
     paths:
+      - 'gabriel/identity/**'
+      - 'testing/gabriel_identity/**'
       - 'gabriel/identity/provider_probe.py'
       - 'gabriel/identity/model_input.py'
       - 'gabriel/provider_probe/**'

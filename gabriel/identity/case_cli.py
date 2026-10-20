@@ -88,7 +88,7 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('create','list','get','report','graph','memory-propose','memory-review','memory-list','memory-check','memory-forget','memory-reset','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
+    parser.add_argument('command',choices=('coordinator-begin','coordinator-get','coordinator-next','coordinator-stop','create','list','get','report','graph','memory-propose','memory-review','memory-list','memory-check','memory-forget','memory-reset','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
         'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
@@ -129,6 +129,7 @@ def main():
     parser.add_argument('--answer')
     parser.add_argument('--specialist-role',default='telemetry_health')
     parser.add_argument('--run-id')
+    parser.add_argument('--max-steps',type=int,default=2)
     parser.add_argument('--memory-id')
     parser.add_argument('--memory-kind',choices=('fact','preference'),default='fact')
     parser.add_argument('--memory-scope',choices=('case','organization'),default='case')
@@ -232,6 +233,14 @@ def main():
             result = service.case_report(token,args.case_id)
         elif args.command=='graph':
             result = service.case_graph(token,args.case_id)
+        elif args.command=='coordinator-begin':
+            result = service.begin_coordinator(token,args.case_id,args.request_id,max_steps=args.max_steps,ttl_seconds=args.ttl)
+        elif args.command=='coordinator-get':
+            result = service.get_coordinator(token,args.run_id)
+        elif args.command=='coordinator-next':
+            result = service.advance_coordinator(token,args.run_id)
+        elif args.command=='coordinator-stop':
+            result = service.stop_coordinator(token,args.run_id)
         elif args.command=='specialist-run':
             result = service.run_specialist(token,args.case_id,args.request_id,args.specialist_role)
         elif args.command=='specialist-get':

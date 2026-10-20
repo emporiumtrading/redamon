@@ -51,6 +51,22 @@ def metadata(row):
 
 
 class CaseService(IdentityService):
+    def begin_coordinator(self,token,case_id,request_id,**limits):
+        from gabriel.identity.coordinator import begin
+        return begin(self,token,case_id,request_id,**limits)
+
+    def get_coordinator(self,token,run_id):
+        from gabriel.identity.coordinator import get
+        return get(self,token,run_id)
+
+    def advance_coordinator(self,token,run_id):
+        from gabriel.identity.coordinator import advance
+        return advance(self,token,run_id)
+
+    def stop_coordinator(self,token,run_id):
+        from gabriel.identity.coordinator import stop
+        return stop(self,token,run_id)
+
     def propose_memory(self,token,case_id,evidence_id,request_id,kind,scope,topic,**options):
         from gabriel.identity.memory import propose
         return propose(self,token,case_id,evidence_id,request_id,kind,scope,topic,**options)

@@ -57,7 +57,8 @@ def counts():
               'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
               'memory_records','memory_reviews','memory_invalidations','memory_resets',
               'model_budget_policies','model_price_quotes','model_investigations','model_reservations',
-              'model_dispatch_claims','model_settlements','model_investigation_stops','migrations')
+              'model_dispatch_claims','model_settlements','model_investigation_stops',
+              'coordinator_runs','coordinator_sources','coordinator_steps','coordinator_claims','coordinator_results','coordinator_stops','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
         return {name:conn.execute(f'SELECT count(*) AS n FROM gabriel_identity.{name}').fetchone()['n']
@@ -211,6 +212,22 @@ if sys.argv[1] == 'before':
     cases.review_memory(token,memory['id'],'approved',memory['source_digest'],True)
     report_snapshot = cases.case_report(token,case['id'])['snapshot']
     specialist=cases.run_specialist(token,case['id'],uuid4(),'telemetry_health')
+    coordinated=cases.begin_coordinator(token,case['id'],uuid4())
+    first_step=cases.advance_coordinator(token,coordinated['id'])
+    with connection(owner_dsn,runtime=False) as conn:
+        conn.execute('REVOKE INSERT ON gabriel_identity.coordinator_results FROM gabriel_identity_app')
+    try:
+        try:
+            cases.advance_coordinator(token,coordinated['id'])
+        except IdentityUnavailable:
+            pass
+        else:
+            raise AssertionError('coordinator receipt failure did not block success')
+    finally:
+        with connection(owner_dsn,runtime=False) as conn:
+            conn.execute('GRANT INSERT ON gabriel_identity.coordinator_results TO gabriel_identity_app')
+    stopped_coordinator=cases.begin_coordinator(token,case['id'],uuid4())
+    cases.stop_coordinator(token,stopped_coordinator['id'])
     budget.configure(token)
     price=budget.quote(token,'openrouter','google/gemini-2.5-flash-lite','a'*64,100000,400000,3600)
     model_job=budget.begin(token,case['id'],uuid4())
@@ -223,6 +240,8 @@ if sys.argv[1] == 'before':
         'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
         'workflow_assignment':assignment['id'],'workflow_question':question,
         'specialist_id':specialist['id'],'specialist_digest':specialist['result_digest'],
+        'coordinator_id':coordinated['id'],'coordinator_first_digest':first_step['steps'][0]['result_digest'],
+        'stopped_coordinator_id':stopped_coordinator['id'],
         'memory_id':memory['id'],'memory_source_digest':memory['source_digest'],'old_memory_id':prior_memory['id'],
         'model_reservation_id':str(claimed['id']),'model_job_id':str(model_job['id']),
         'provenance_digest':cases.case_graph(token,case['id'])['digest'],
@@ -246,6 +265,23 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
+    coordinated=cases.get_coordinator(saved['token'],saved['coordinator_id'])
+    assert coordinated['completed_steps']==1 and coordinated['steps'][1]['claimed_at'] is not None
+    assert coordinated['steps'][0]['result_digest']==saved['coordinator_first_digest']
+    with connection(app_dsn) as conn:
+        before=conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_runs WHERE case_id=%s',(saved['case_id'],)).fetchone()['n']
+    finished=cases.advance_coordinator(saved['token'],saved['coordinator_id'])
+    assert finished['status']=='local_plan_complete' and finished['completed_steps']==2
+    with connection(app_dsn) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_runs WHERE case_id=%s',(saved['case_id'],)).fetchone()['n']==before
+    assert cases.get_coordinator(saved['token'],saved['stopped_coordinator_id'])['status']=='stopped'
+    try:
+        cases.advance_coordinator(saved['token'],saved['stopped_coordinator_id'])
+    except AccessDenied:
+        pass
+    else:
+        raise AssertionError('stopped coordinator became executable after recovery')
+    print('PASS: coordinator claim, source binding, replay and Stop survived recovery without duplicate specialist work')
     assert budget.status(saved['token'])['usage']==dict(month_used=1400,day_used=1400,held_slots=1)
     try:
         budget.claim(saved['token'],saved['model_reservation_id'])
