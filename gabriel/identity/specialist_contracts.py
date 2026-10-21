@@ -13,9 +13,11 @@ CONTRACT_VERSION='specialist-metadata-v1'
 
 
 def catalog():
-    return [dict(role=role,contract_version=CONTRACT_VERSION,
-        engine='telemetry-health-v1' if role=='telemetry_health' else None,
-        status='implemented_local_read' if role=='telemetry_health' else 'contract_only',
+    return [dict(role=role,contract_version=CONTRACT_VERSION if role=='telemetry_health' else 'specialist-analysis-v2',
+        typed_analysis_contract_version='specialist-analysis-v2',
+        engine='telemetry-health-v1' if role=='telemetry_health' else 'specialist-rules-v1',
+        status='implemented_local_read' if role=='telemetry_health' else 'implemented_local_rules',
+        typed_evidence_required=role!='telemetry_health',quality_qualified=False,
         model_enabled=False,external_actions_enabled=False) for role in ROLES]
 
 
@@ -28,6 +30,9 @@ def digest(value): return sha256(canonical(value)).hexdigest()
 
 
 def validate_packet(packet):
+    if isinstance(packet,dict) and packet.get('schema_version')==2:
+        from gabriel.identity.specialist_analysis_runs import validate_packet as validate_analysis_packet
+        return validate_analysis_packet(packet)
     expected={'schema_version','purpose','contract_version','role','organization_id','case_id','generated_at','references',
         'source_limit','sources_truncated','coverage','sampling','evidence_bodies_included'}
     if (not isinstance(packet,dict) or set(packet)!=expected or type(packet['schema_version']) is not int or packet['schema_version']!=1
@@ -72,6 +77,9 @@ def validate_packet(packet):
 
 
 def validate_result(packet,result):
+    if isinstance(packet,dict) and packet.get('schema_version')==2:
+        from gabriel.identity.specialist_analysis_runs import validate_result as validate_analysis_result
+        return validate_analysis_result(packet,result)
     validate_packet(packet)
     expected={'schema_version','purpose','role','contract_version','observations','hypotheses','alternatives',
         'contradictions','uncertainty','next_steps','coverage','incident_assessment','attack_status','execution'}

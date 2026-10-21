@@ -357,27 +357,39 @@ class Workbench:
             case_id,run_id=specialist.groups()
             path='/cases/'+case_id+'/specialists'
             if method=='POST':
-                if run_id or set(fields)!={'csrf','request_id','role'}: raise AccessDenied('invalid_specialist_form')
-                run=self.service.run_specialist(self._token,case_id,fields['request_id'],fields['role'])
+                if run_id or set(fields) not in ({'csrf','request_id','role'},{'csrf','request_id','role','input_evidence_id'}):
+                    raise AccessDenied('invalid_specialist_form')
+                run=self.service.run_specialist(self._token,case_id,fields['request_id'],fields['role'],input_evidence_id=fields.get('input_evidence_id'))
                 return '303 See Other',b'',[('Location',path+'/'+run['id'])]
             if method!='GET': raise AccessDenied('workbench_route_denied')
-            body='<p class="notice">Telemetry coverage only. Attacker activity is not assessed. A heartbeat does not prove page visibility. Stored results are historical samples.</p>'
+            body='<p class="notice">Local evidence review. Stored results are historical and partial; specialist quality is unqualified. A heartbeat does not prove page visibility. No model, search or external action is enabled here.</p>'
             if run_id:
                 run=self.service.get_specialist_run(self._token,case_id,run_id)
                 result=run['result']
                 body+='<p id="specialist-attack-status">Attacker status: '+e(result['attack_status'])+'</p><p>Recorded '+e(run['created_at'])+' · No model was called.</p>'
                 body+='<h2>Observations</h2>'+table(['Observation','Recorded reference'],[(e(row['statement']),e(', '.join(row['references']))) for row in result['observations']])
+                body+='<h2>Hypotheses for review</h2>'+table(['Hypothesis','Recorded reference'],[(e(row['statement']),e(', '.join(row['references']))) for row in result['hypotheses']])
+                body+='<h2>Contradictions</h2>'+table(['Discrepancy','Recorded reference'],[(e(row['statement']),e(', '.join(row['references']))) for row in result['contradictions']])
                 body+='<h2>Alternative explanation</h2>'+''.join('<p>'+e(row['statement'])+'</p>' for row in result['alternatives'])
                 body+='<h2>Uncertainty</h2>'+''.join('<p>'+e(item)+'</p>' for item in result['uncertainty'])
+                if result.get('schema_version')==2:
+                    body+='<p id="specialist-urgency">Review priority: '+e(result['urgency'].replace('_',' '))+' · Confidence: unqualified</p>'
+                body+='<h2>Suggested review steps</h2>'+''.join('<p>'+e(item.replace('_',' '))+'</p>' for item in result['next_steps'])
                 body+='<p>Result checksum '+e(run['result_digest'])+'</p><p><a href="'+path+'">Assessment history</a></p>'
             else:
                 history=self.service.list_specialist_runs(self._token,case_id)
-                case=self.service.get_case(self._token,case_id)['case']
+                snapshot=self.service.get_case(self._token,case_id)
+                case=snapshot['case']
                 if principal.role!='viewer' and case['state']=='open':
                     body+=self._form(path,'Check telemetry coverage','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><input type="hidden" name="role" value="telemetry_health">')
-                body+=table(['Recorded','Specialty'],[(f'<a href="{path}/{e(row["id"])}">{e(row["created_at"])}</a>',e(row['role'].replace('_',' '))) for row in history['runs']]) if history['runs'] else '<p>No telemetry assessments recorded.</p>'
+                    options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in snapshot['evidence'] if row['state']=='ready' and row['storage_state']=='active')
+                    if options:
+                        from gabriel.identity.specialist_contracts import ROLES
+                        body+=self._form(path,'Review typed evidence','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Specialist<select name="role">'+''.join('<option value="'+role+'">'+e(role.replace('_',' '))+'</option>' for role in ROLES)+'</select></label><label>Typed facts artifact<select name="input_evidence_id" required>'+options+'</select></label>')
+                        body+='<p>Select an approved specialist-facts-v1 artifact whose cited source evidence belongs to this case. Unsupported formats are rejected.</p>'
+                body+=table(['Recorded','Specialty'],[(f'<a href="{path}/{e(row["id"])}">{e(row["created_at"])}</a>',e(row['role'].replace('_',' '))) for row in history['runs']]) if history['runs'] else '<p>No specialist assessments recorded.</p>'
                 body+='<p>Showing up to 50 most recent assessments.'+(' Older records are omitted.' if history['truncated'] else '')+'</p>'
-            return '200 OK',self._page('Telemetry assessments',body,principal),[]
+            return '200 OK',self._page('Specialist assessments',body,principal),[]
         projection=re.fullmatch('/cases/('+ID+')/(relationships|graph)',path)
         if projection:
             if method!='GET': raise AccessDenied('workbench_route_denied')
@@ -414,7 +426,7 @@ class Workbench:
         if report:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
-        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Telemetry assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
+        body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Specialist assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
         body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'

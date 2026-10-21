@@ -123,6 +123,25 @@ def test_customer_provider_screen_stores_nvidia_privately_and_requires_csrf(tena
     assert 'revoked' in call(server,'/providers',cookie=cookie)[1]
 
 
+def test_twelve_role_selector_persists_typed_review_and_shows_uncertainty(tenant,cases,case,evidence,server):
+    from testing.gabriel_identity.test_specialist_analysis_integration import intake
+    _,holder=intake(tenant,cases,case,evidence)
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/specialists'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'Specialist assessments' in html
+    from gabriel.identity.specialist_contracts import ROLES
+    assert all('value="'+role+'"' in html for role in ROLES)
+    fields=dict(csrf=token,request_id=str(uuid4()),role='alert_triage',input_evidence_id=str(holder['id']))
+    code,_,headers=call(server,path,fields,cookie=cookie)
+    assert code==303
+    code,html,_=call(server,headers['Location'],cookie=cookie)
+    assert code==200 and 'urgent review' in html and 'Attacker status: unknown' in html
+    assert 'Hypotheses for review' in html and 'Alternative explanation' in html and 'Uncertainty' in html
+    runs=cases.list_specialist_runs(tenant.token,case['id'])['runs']
+    assert len(runs)==1 and runs[0]['role']=='alert_triage'
+
+
 @pytest.mark.parametrize('boot',['viewer'],indirect=True)
 def test_provider_forms_are_hidden_and_denied_for_viewer(server):
     cookie,token,_=connect(server)
@@ -351,7 +370,7 @@ def test_telemetry_specialist_forms_persist_history_with_csrf_and_role_checks(te
     cookie,token,_=connect(server)
     path='/cases/'+str(case['id'])+'/specialists'
     code,html,_=call(server,path,cookie=cookie)
-    assert code==200 and 'No telemetry assessments recorded' in html
+    assert code==200 and 'No specialist assessments recorded' in html
     request=re.search(r'name="request_id" value="([0-9a-f-]+)"',html)[1]
     fields=dict(csrf=token,request_id=request,role='telemetry_health')
     assert call(server,path,dict(fields,csrf='bad'),cookie=cookie)[0]==403

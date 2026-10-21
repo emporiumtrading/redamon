@@ -242,7 +242,7 @@ def main():
         elif args.command=='coordinator-stop':
             result = service.stop_coordinator(token,args.run_id)
         elif args.command=='specialist-run':
-            result = service.run_specialist(token,args.case_id,args.request_id,args.specialist_role)
+            result = service.run_specialist(token,args.case_id,args.request_id,args.specialist_role,input_evidence_id=args.evidence_id)
         elif args.command=='specialist-get':
             result = service.get_specialist_run(token,args.case_id,args.run_id)
         elif args.command=='specialist-list':

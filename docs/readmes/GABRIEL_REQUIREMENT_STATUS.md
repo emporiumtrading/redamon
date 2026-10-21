@@ -1,5 +1,12 @@
 # Gabriel PRD requirement reconciliation
 
+Implementation in progress in PR #39: customer-owned OpenRouter/NVIDIA key setup,
+schema-19 revision-bound funding checks, and schema-20 persisted typed local
+reviews for all twelve specialists. Docker verification for this expanded source
+is pending. These local rules do not complete specialist AI reasoning, console
+adapters, live attack detection or the full PRD. See [customer keys](GABRIEL_CUSTOMER_KEYS.md)
+and [the precise specialist capability boundaries](GABRIEL_TWELVE_SPECIALISTS.md).
+
 Verified component source: `207954a297dcc8443088fd9ad8b677ac30b89275` passed **839 tests per architecture** (769 component + 49 runtime + 21 foundation), actual PostgreSQL restart/fresh dump-restore, and generated-console Chrome for Testing/Brave journeys (**40 checks each**). This includes bounded local coordinator claims/receipts/Stop, step-bound workbench controls and the candidate 60-family corpus safeguards. No model is activated or quality-qualified. Exact source/tree/artifacts, the closed-case test setup failure/repair and scope limits are recorded in the implementation ledger and coordinator acceptance record. This maps all 46 requirement IDs, including the pilot addendum, to remaining implementation and acceptance gaps. None has full post-release acceptance; a component pass does not accept a complete release requirement.
 
 New worker source `c42478bb892c1918eb42a241d4696137644d73c3` additionally passed 871 tests per architecture and recovery/browser gates. The restricted network kernel is present but default-denied and has no durable answer storage. Actual six-model continuation at `796adfdb0987d20957711c7d3a9883080cc8bf2e` passed 874 tests per architecture, restart/fresh restore and 40 Chrome/Brave checks each, and made 12 calls for $0.005203688 reported cost: nine contract-valid answers; no model matched all three development decisions and none is quality-qualified. Earlier possible-charge holds remain intact. See [exact worker/comparison evidence and limitations](GABRIEL_RESTRICTED_MODEL_WORKER.md). These later results do not convert any complete release requirement to accepted.

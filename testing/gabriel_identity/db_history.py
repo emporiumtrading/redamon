@@ -141,6 +141,17 @@ def remove_v18(conn):
 
 
 def remove_v19(conn):
+    remove_v20(conn)
     if conn.execute("SELECT to_regclass('gabriel_identity.provider_onboarding_checks') AS t").fetchone()['t'] is not None:
         conn.execute('DROP TABLE gabriel_identity.provider_onboarding_checks')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=19')
+
+
+def remove_v20(conn):
+    applied=conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=20').fetchone()
+    if applied:
+        conn.execute("DELETE FROM gabriel_identity.specialist_runs WHERE engine_version='specialist-rules-v1'")
+        conn.execute('ALTER TABLE gabriel_identity.specialist_runs DROP CONSTRAINT specialist_runs_engine_version_check')
+        conn.execute("ALTER TABLE gabriel_identity.specialist_runs ADD CONSTRAINT specialist_runs_engine_version_check CHECK (engine_version='telemetry-health-v1')")
+        conn.execute("ALTER TABLE gabriel_identity.specialist_runs ADD CONSTRAINT specialist_runs_role_check CHECK (role='telemetry_health')")
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=20')

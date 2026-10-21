@@ -16,9 +16,11 @@ def public_run(row):
             or row['packet'].get('case_id')!=str(row['case_id']) or row['packet'].get('role')!=row['role']):
         raise AccessDenied('specialist_record_integrity_failed')
     validate_result(row['packet'],row['result'])
+    if row['engine_version']!=row['result']['execution']['engine']:
+        raise AccessDenied('specialist_record_integrity_failed')
     return dict(id=str(row['id']),case_id=str(row['case_id']),role=row['role'],requested_by=str(row['requested_by']),
         created_at=iso(row['created_at']),packet=row['packet'],result=row['result'],packet_digest=row['packet_digest'],
-        result_digest=row['result_digest'],time_basis='historical_individual_samples',grants_authority=False)
+        result_digest=row['result_digest'],time_basis=('historical_typed_snapshot' if row['packet']['schema_version']==2 else 'historical_individual_samples'),grants_authority=False)
 
 
 def get_run(service,token,case_id,run_id):
@@ -50,7 +52,10 @@ def _replay(conn,p,case,request_id,role):
     return row
 
 
-def run_specialist(service,token,case_id,request_id,role):
+def run_specialist(service,token,case_id,request_id,role,*,input_evidence_id=None):
+    if input_evidence_id is not None:
+        from gabriel.identity.specialist_analysis_runs import run
+        return run(service,token,case_id,request_id,role,input_evidence_id)
     role,request_id=role_name(role),identifier(request_id)
     if role!='telemetry_health': raise AccessDenied('specialist_engine_not_enabled')
     started=time.monotonic()
