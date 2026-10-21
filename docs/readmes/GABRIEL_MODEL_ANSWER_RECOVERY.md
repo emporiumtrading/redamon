@@ -27,3 +27,20 @@ Initial source 4153b0b62e6d4c996e6e69b591718bb521970f7e passed all 823 component
 
 
 Integrated source bc9ed3b559b9d60b2626103c7c4ec9b38298f07f passed its component/runtime/foundation and existing restart/restore gates, but artifact review showed its restart script had retained the older fixture without the new answer-receipt scenarios. That pass is not new-answer restart acceptance. The full fixture is restored from the original authored source, both UUIDs are explicitly serialized as strings, and its pending/completed answer checkpoints are verified present before publication. A fresh exact-source run is required. No assertion is removed or relaxed and no paid call is repeated.
+
+
+## Verified combined recovery checkpoint
+
+Corrected source `b76e329c5019c0b22129fd81b814cffb01d2d297`, tree `144c0437bcf218d68f0a992889b84a7ca39c5ff7`, passed all five workflows. Native ARM64 run 39527507120 and x86 run 39527507154 each passed **826 component + 49 runtime + 21 foundation = 896 tests**, zero failures/errors/skips. The restored full restart fixture (SHA256 `a1fabd915987566d29ff93c68b73d428f6ce1e6a36669c5bdc5a6bd864d92757`) was checked in the published source before execution. On both architectures the logs separately confirm completed encrypted answer/lineage replay and interrupted receipt recovery after actual database restart and after fresh pg_dump/pg_restore, with no provider access/resend and two claimed-cost slots retained. Fresh restore also reconciled both new tables' row counts. Fixture HTTP is not actual model quality evidence.
+
+Browser run 39527507148 passed 40 generated-console checks each in Chrome and Brave; separate runtime 39527507113 and isolated 31-case comparison software run 39527507111 passed. Both paid jobs intentionally skipped on this follow-up. No paid model call was repeated by the repair or integration. Earlier source failures and the older-fixture verification gap remain recorded above and are not relabeled as successful new-answer recovery.
+
+All three evidence ZIPs were independently downloaded and hash-verified:
+
+| Evidence | Run / artifact | Verified ZIP SHA256 |
+| --- | --- | --- |
+| x86 | 39527507154 / 12314025999 | `336c2ea7a18f41f60289e02ce556328e697bd20f902670a93c68cc8e775841bf` |
+| Native ARM64 | 39527507120 / 12314340759 | `5bcae648d697876126ad999be92d4f311b7a21a47acc0001add3cb69273d1088` |
+| Chrome / Brave | 39527507148 / 12313919355 | `f6c3c4010d4f27fb33f4c46e1d708e6448406791566bf6f99a02327eba3aea1a` |
+
+All report source files name checkout `ee916edc6681fc6de3c5e24be34cf6f20ba51cd2`; its tree was verified identical to `144c0437bcf218d68f0a992889b84a7ca39c5ff7`. Architecture totals cover the same scenarios, not 1,792 distinct cases. Application/runtime/test code is unchanged by subsequent evidence-only documentation/data commits. No schema-18 database was deployed to production and no model is admitted. The model review queue contains 24 actual answers with seven provisional AI screening flags and all human adjudication pending. Full product/specialist/adapter/retention/operational acceptance and Mac UAT remain open.

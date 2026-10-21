@@ -29,3 +29,6 @@ The generated artifact 12313765881 was independently downloaded and its ZIP SHA2
 ## Integrated worker candidate
 
 The wider-comparison branch now incorporates the encrypted answer/recovery increment and the v2 evidence records. No subsequent push may repeat paid calls. Integrated x86/ARM64/restart/restore/browser/software acceptance must be recorded at the combined source, rather than inferring it from separate branch results. Model comparisons and recovery fixtures remain separate evidence. Production admission remains empty. Earlier source-specific results remain preserved.
+
+
+The combined source `b76e329c5019c0b22129fd81b814cffb01d2d297` passed **896 tests per architecture** and actual completed/interrupted-answer restart/fresh restore, plus 40 checks each in Chrome/Brave. Exact source/tree, initial fixture failure and integration repair, independent artifact hashes and limits are in `GABRIEL_MODEL_ANSWER_RECOVERY.md`. This is combined software/recovery evidence, separate from the actual wider comparison source above. Human claim/uncertainty adjudication remains pending; `GABRIEL_MODEL_REVIEW_QUEUE.md` preserves seven provisional AI screening concerns rather than equating matching decisions to full model quality. Wider JSONL SHA256: `34062d0bb51a9c1bc55c7601aa0ce0a897d42ac958be2891172e5ed0b66e7a50`.
