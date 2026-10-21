@@ -128,7 +128,8 @@ def test_unresolved_or_expired_move_requires_stop_not_automatic_retry(tenant,bro
     intent=prepare(tenant,browser,grant)
     with pytest.raises(AccessDenied,match='outcome_unresolved'): prepare(tenant,browser,grant)
     with owner_connection(tenant.db) as conn:
-        conn.execute("UPDATE gabriel_identity.browser_navigation_intents SET created_at=clock_timestamp()-interval '2 minutes',expires_at=clock_timestamp()-interval '90 seconds' WHERE organization_id=%s",(tenant.org,))
+        # Both endpoints must use one instant to satisfy the exact 30-second constraint.
+        conn.execute("UPDATE gabriel_identity.browser_navigation_intents SET created_at=statement_timestamp()-interval '2 minutes',expires_at=statement_timestamp()-interval '90 seconds' WHERE organization_id=%s",(tenant.org,))
     with pytest.raises(AccessDenied,match='not_current'): complete(tenant,browser,grant,intent,context)
     with pytest.raises(AccessDenied,match='outcome_unresolved'): prepare(tenant,browser,grant)
     with pytest.raises(AccessDenied,match='navigation_outcome_unresolved'):
