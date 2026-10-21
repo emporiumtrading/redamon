@@ -24,3 +24,6 @@ Migration retains prior checksums. Because older images reject unknown migration
 
 
 Initial source 4153b0b62e6d4c996e6e69b591718bb521970f7e passed all 823 component checks in native ARM64 run 39525087825, zero failures/errors/skips, but its subsequent restart setup failed serializing a UUID in the newly generated normalized-input fixture. This is not a completed restart/restore acceptance. The integrated source explicitly serializes the fixture evidence/input IDs as strings, without changing recovery assertions. Full rerun results remain required; the earlier failure is retained in history.
+
+
+Integrated source bc9ed3b559b9d60b2626103c7c4ec9b38298f07f passed its component/runtime/foundation and existing restart/restore gates, but artifact review showed its restart script had retained the older fixture without the new answer-receipt scenarios. That pass is not new-answer restart acceptance. The full fixture is restored from the original authored source, both UUIDs are explicitly serialized as strings, and its pending/completed answer checkpoints are verified present before publication. A fresh exact-source run is required. No assertion is removed or relaxed and no paid call is repeated.
