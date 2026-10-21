@@ -352,6 +352,43 @@ class Workbench:
                 body+='<p>Showing up to 32 most recent plans.'+(' Older plans are omitted.' if history['truncated'] else '')+'</p>'
             body+='<p><a href="/cases/'+case_id+'">Back to case</a></p>'
             return '200 OK',self._page('Local investigation plan',body,principal),[]
+        attack=re.fullmatch('/cases/('+ID+')/attack-reviews(?:/('+ID+'))?',path)
+        if attack:
+            case_id,run_id=attack.groups()
+            base='/cases/'+case_id+'/attack-reviews'
+            if method=='POST':
+                if run_id or set(fields)!={'csrf','request_id','input_evidence_id'}: raise AccessDenied('invalid_attack_review_form')
+                run=self.service.run_attack_review(self._token,case_id,fields['request_id'],fields['input_evidence_id'])
+                return '303 See Other',b'',[('Location',base+'/'+run['id'])]
+            if method!='GET': raise AccessDenied('workbench_route_denied')
+            body='<p class="notice">Historical review of supplied events. Patterns are hypotheses that need investigation. Source authenticity, current visibility and detection quality remain unverified. No model or response action is enabled here.</p>'
+            if run_id:
+                run=self.service.get_attack_review(self._token,case_id,run_id)
+                result=run['result']
+                body+='<p>Recorded '+e(run['created_at'])+' · Supplied event snapshot '+e(run['packet']['as_of'])+'</p>'
+                body+='<p id="attack-review-priority">'+('Candidate patterns need urgent review.' if result['findings'] else 'No candidate pattern matched. This does not establish that activity is safe.')+'</p>'
+                body+='<p>'+e(result['unique_event_count'])+' distinct supplied events; '+e(result['forwarded_duplicate_count'])+' repeated copies excluded.</p>'
+                for finding in result['findings']:
+                    body+='<section><h2>'+e(finding['family'].replace('_',' '))+'</h2><p>Suspected; needs review. Confidence is unqualified.</p>'
+                    body+='<p>'+e(finding['observed_event_count'])+' events across '+e(finding['affected_asset_count'])+' supplied assets.</p>'
+                    body+='<p>Reported interval: '+e(finding['first_event_time'])+' to '+e(finding['last_event_time'])+'. Source clocks are unverified.</p>'
+                    body+='<p>Alternative explanation: '+e(finding['alternative'])+'</p>'
+                    body+='<p>Evidence: '+', '.join('<a href="/cases/'+case_id+'/evidence/'+e(ref.removeprefix('evidence/'))+'">'+e(ref)+'</a>' for ref in finding['references'])+'</p></section>'
+                body+='<h2>Missing source coverage</h2><p>'+e(', '.join(result['missing_sources']) or 'No gaps were declared; completeness is unverified.')+'</p>'
+                body+='<h2>Limitations</h2>'+''.join('<p>'+e(item)+'</p>' for item in result['limitations'])
+                body+='<p>Result checksum '+e(run['result_digest'])+' · Model cost $0</p><p><a href="'+base+'">Review history</a></p>'
+            else:
+                snapshot=self.service.get_case(self._token,case_id)
+                if principal.role!='viewer' and snapshot['case']['state']=='open':
+                    options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in snapshot['evidence'] if row['state']=='ready' and row['storage_state']=='active')
+                    if options:
+                        body+=self._form(base,'Review event snapshot','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Event snapshot<select name="input_evidence_id" required>'+options+'</select></label>')
+                        body+='<p>Accepts an approved security-events-v1 document whose source evidence belongs to this case. Other formats are rejected.</p>'
+                history=self.service.list_attack_reviews(self._token,case_id)
+                body+=table(['Recorded review'],[(f'<a href="{base}/{e(row["id"])}">{e(row["created_at"])}</a>',) for row in history['runs']]) if history['runs'] else '<p>No attack-pattern reviews recorded.</p>'
+                if history['truncated']: body+='<p>Showing the latest 32 reviews.</p>'
+            body+='<p><a href="/cases/'+case_id+'">Back to case</a></p>'
+            return '200 OK',self._page('Attack pattern review',body,principal),[]
         specialist=re.fullmatch('/cases/('+ID+')/specialists(?:/('+ID+'))?',path)
         if specialist:
             case_id,run_id=specialist.groups()
@@ -427,6 +464,7 @@ class Workbench:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
         body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Specialist assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
+        body+='<p><a href="'+path+'/attack-reviews">Attack pattern review</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
         body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'

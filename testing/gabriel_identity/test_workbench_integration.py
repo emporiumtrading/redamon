@@ -142,6 +142,27 @@ def test_twelve_role_selector_persists_typed_review_and_shows_uncertainty(tenant
     assert len(runs)==1 and runs[0]['role']=='alert_triage'
 
 
+def test_attack_review_form_persists_hypothesis_and_source_links(tenant,cases,case,evidence,server):
+    from testing.gabriel_identity.test_attack_pattern_runs_integration import intake
+    document,holder=intake(tenant,cases,case,evidence)
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/attack-reviews'
+    assert 'Attack pattern review' in call(server,'/cases/'+str(case['id']),cookie=cookie)[1]
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'Review event snapshot' in html
+    fields=dict(csrf=token,request_id=str(uuid4()),input_evidence_id=str(holder['id']))
+    assert call(server,path,dict(fields,csrf='generated-wrong-csrf'),cookie=cookie)[0]==403
+    assert not cases.list_attack_reviews(tenant.token,case['id'])['runs']
+    code,_,headers=call(server,path,fields,cookie=cookie)
+    assert code==303
+    code,html,_=call(server,headers['Location'],cookie=cookie)
+    assert code==200 and 'Candidate patterns need urgent review' in html and 'brute force' in html
+    assert 'Suspected; needs review' in html and 'Alternative explanation' in html and 'Missing source coverage' in html
+    assert '/evidence/'+str(evidence['id']) in html and 'Model cost $0' in html
+    assert document['events'][0]['actor_id'] not in html and tenant.token not in html
+    assert len(cases.list_attack_reviews(tenant.token,case['id'])['runs'])==1
+
+
 @pytest.mark.parametrize('boot',['viewer'],indirect=True)
 def test_provider_forms_are_hidden_and_denied_for_viewer(server):
     cookie,token,_=connect(server)

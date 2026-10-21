@@ -99,6 +99,18 @@ class CaseService(IdentityService):
         from gabriel.identity.specialists import run_specialist
         return run_specialist(self,token,case_id,request_id,role,input_evidence_id=input_evidence_id)
 
+    def run_attack_review(self,token,case_id,request_id,input_evidence_id):
+        from gabriel.identity.attack_pattern_runs import run
+        return run(self,token,case_id,request_id,input_evidence_id)
+
+    def get_attack_review(self,token,case_id,run_id):
+        from gabriel.identity.attack_pattern_runs import get
+        return get(self,token,case_id,run_id)
+
+    def list_attack_reviews(self,token,case_id):
+        from gabriel.identity.attack_pattern_runs import history
+        return history(self,token,case_id)
+
     def get_specialist_run(self,token,case_id,run_id):
         from gabriel.identity.specialists import get_run
         return get_run(self,token,case_id,run_id)

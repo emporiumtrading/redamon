@@ -60,7 +60,7 @@ def counts():
               'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
               'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
               'browser_navigation_grants','browser_navigation_intents','browser_navigation_receipts',
-              'browser_navigation_commits','browser_navigation_stops',
+              'browser_navigation_commits','browser_navigation_stops','attack_pattern_runs',
               'memory_records','memory_reviews','memory_invalidations','memory_resets',
               'model_budget_policies','model_price_quotes','model_investigations','model_reservations',
               'model_dispatch_claims','model_settlements','model_investigation_stops','model_answer_intents','model_answer_receipts',
@@ -323,7 +323,14 @@ if sys.argv[1] == 'before':
     navigation_context=dict(browser_context,page_url=navigation_intent['destination_url'],document_id=str(uuid4()))
     navigation.complete_navigation(observation_token,navigation_lease.token,navigation_intent['id'],navigation_context)
     navigation_pending=navigation.prepare_navigation(observation_token,navigation_lease.token,uuid4(),browser_context['page_url'])
+    from testing.gabriel_identity.test_attack_pattern_runs_integration import event_document
+    attack_case=cases.create_case(token,'Separate generated attack review recovery case')
+    attack_source=cases.acquire(token,attack_case['id'],uuid4(),'Generated attack review recovery bytes','Generated attack review source',approved=True)
+    attack_input=cases.acquire(token,attack_case['id'],uuid4(),json.dumps(event_document(attack_case['id'],attack_source)),
+        'Generated attack review snapshot',approved=True)
+    attack_review=cases.run_attack_review(token,attack_case['id'],uuid4(),attack_input['id'])
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
+        'attack_case_id':str(attack_case['id']),'attack_review_id':attack_review['id'],'attack_review_digest':attack_review['result_digest'],
         'navigation_peer':navigation_lease.token,'navigation_intent':navigation_intent['id'],
         'navigation_pending':navigation_pending['id'],'navigation_context':navigation_context,
         'answer_token':answer_token,'answer_reservation':answer_reservation['reservation_id'],
@@ -400,6 +407,12 @@ elif sys.argv[1] in {'after','restored'}:
         raise AssertionError('stopped model dispatch became claimable after recovery')
     budget.settle(saved['token'],saved['model_reservation_id'],700,'d'*64)
     assert budget.status(saved['token'])['usage']==dict(month_used=700,day_used=700,held_slots=0)
+    attack_review=cases.get_attack_review(saved['token'],saved['attack_case_id'],saved['attack_review_id'])
+    assert attack_review['result_digest']==saved['attack_review_digest'] and attack_review['result']['findings'][0]['family']=='brute_force'
+    assert not attack_review['grants_authority'] and not attack_review['result']['live_detection_accepted']
+    for ref in attack_review['packet']['references']:
+        assert sha256(cases.read_evidence(saved['token'],ref['record_id']).reveal()).hexdigest()==ref['digest']
+    print('PASS: persisted attack candidate review and verified source bytes survived recovery without model access or response authority')
     replayed_navigation=navigation.complete_navigation(saved['observation_token'],saved['navigation_peer'],
         saved['navigation_intent'],saved['navigation_context'])
     assert replayed_navigation['replayed'] and replayed_navigation['current']

@@ -168,7 +168,13 @@ def remove_v21(conn):
 
 
 def remove_v22(conn):
+    remove_v23(conn)
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=22').fetchone():
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
         conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version='0.1.0')")
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=22')
+
+
+def remove_v23(conn):
+    conn.execute('DROP TABLE IF EXISTS gabriel_identity.attack_pattern_runs')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=23')
