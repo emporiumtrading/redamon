@@ -20,6 +20,7 @@ COPY gabriel/identity/specialists.py gabriel/identity/specialist_contracts.py ga
 COPY gabriel/identity/memory.py gabriel/identity/schema_v15.sql /app/gabriel/identity/
 COPY gabriel/identity/model_evaluation.py gabriel/identity/model_protocol.py gabriel/identity/model_routes.py gabriel/identity/model_transport.py gabriel/identity/model_worker.py /app/gabriel/identity/
 COPY gabriel/identity/model_input.py /app/gabriel/identity/
+COPY gabriel/identity/attack_patterns.py /app/gabriel/identity/
 COPY gabriel/identity/specialist_analysis_runs.py gabriel/identity/schema_v20.sql /app/gabriel/identity/
 COPY gabriel/identity/provider_onboarding.py gabriel/identity/schema_v19.sql gabriel/identity/specialist_analysis.py /app/gabriel/identity/
 COPY gabriel/identity/model_answers.py gabriel/identity/schema_v18.sql /app/gabriel/identity/
