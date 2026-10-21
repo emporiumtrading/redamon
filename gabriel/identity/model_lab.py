@@ -22,6 +22,12 @@ HISTORICAL_PROBE_RESERVED=Decimal('0.01')
 PRIOR_ARTIFACT_SHA256='3b92f975f9dccca501b2b8fd70117899eb928b60b1bf79f3bead2d73c0baf0d1'
 V2_PRIOR_REPORTED=Decimal('0.005710488')
 V2_PRIOR_ARTIFACT_SHA256='f6f29fde5ff7c6d13504f9ae6581117248ea9d5559e2f3c942b23f4d555a8ef4'
+WIDER_CASES=('dev-persistence','dev-egress','dev-admin','dev-injection','dev-skew')
+WIDER_MODELS=('openai/gpt-4.1-mini','nvidia/nemotron-3-super-120b-a12b',
+              'openai/gpt-oss-120b','meta-llama/llama-3.3-70b-instruct')
+WIDER_PRIOR_REPORTED=Decimal('0.011676605')
+WIDER_PRIOR_RESERVED=Decimal('0.012608')
+WIDER_PRIOR_ARTIFACT_SHA256='1d220c6e9d92dfc29b1a31a4cc03faea549acbc48d0b75c9bdc7ce97b3b54ff6'
 
 
 class LabCredential:
@@ -126,19 +132,22 @@ def invalid_identifier_fields(reply):
     return invalid[:32]
 
 
-def compare(client,corpus,checkpoint=lambda event:None,*,remaining=False,protocol_v2=False):
-    if type(remaining) is not bool or type(protocol_v2) is not bool or remaining and protocol_v2:
+def compare(client,corpus,checkpoint=lambda event:None,*,remaining=False,protocol_v2=False,wider=False):
+    modes=(remaining,protocol_v2,wider)
+    if any(type(value) is not bool for value in modes) or sum(modes)>1:
         raise ProbeError('comparison_schedule_denied')
     if digest(corpus)!=CORPUS_DIGEST: raise ProbeError('pinned_generated_corpus_required')
-    selected={p['case_id']:p for p in packets(corpus,'development') if p['case_id'] in CASES}
-    labels={c['id']:c['label']['acceptable_decisions'] for c in corpus['cases'] if c['id'] in CASES}
-    carrying=remaining or protocol_v2
-    prior_cost=V2_PRIOR_REPORTED if protocol_v2 else PRIOR_REPORTED if remaining else Decimal(0)
-    report=dict(version='bounded-multi-model-lab-v2' if protocol_v2 else 'bounded-multi-model-lab-v1',results=[],routes=[],failures=[],attempted_calls=0,
+    schedule=WIDER_CASES if wider else CASES
+    selected={p['case_id']:p for p in packets(corpus,'development') if p['case_id'] in schedule}
+    labels={c['id']:c['label']['acceptable_decisions'] for c in corpus['cases'] if c['id'] in schedule}
+    carrying=any(modes)
+    prior_cost=WIDER_PRIOR_REPORTED if wider else V2_PRIOR_REPORTED if protocol_v2 else PRIOR_REPORTED if remaining else Decimal(0)
+    prior_reserved=WIDER_PRIOR_RESERVED if wider else PRIOR_RESERVED if carrying else Decimal(0)
+    report=dict(version='bounded-multi-model-lab-v2-wider' if wider else 'bounded-multi-model-lab-v2' if protocol_v2 else 'bounded-multi-model-lab-v1',results=[],routes=[],failures=[],attempted_calls=0,
         validated_calls=0,reported_cost_usd='0',unknown_cost_possible=carrying,new_unknown_cost_possible=False,
-        unresolved_comparison_calls=1 if carrying else 0,carried_reserved_usd=str(PRIOR_RESERVED) if carrying else '0',
+        unresolved_comparison_calls=2 if wider else 1 if carrying else 0,carried_reserved_usd=str(prior_reserved),
         carried_reported_cost_usd=str(prior_cost),
-        prior_artifact_sha256=V2_PRIOR_ARTIFACT_SHA256 if protocol_v2 else PRIOR_ARTIFACT_SHA256 if remaining else None,
+        prior_artifact_sha256=WIDER_PRIOR_ARTIFACT_SHA256 if wider else V2_PRIOR_ARTIFACT_SHA256 if protocol_v2 else PRIOR_ARTIFACT_SHA256 if remaining else None,
         historical_probe_reserved_usd=str(HISTORICAL_PROBE_RESERVED),
         quality_qualified=False,production_admission=False,
         limitations=['Known generated development examples, not sealed holdout or analyst adjudication.',
@@ -146,7 +155,7 @@ def compare(client,corpus,checkpoint=lambda event:None,*,remaining=False,protoco
                     'No production data, model activation, tools, retries or automatic fallback.',
                     'Other account/key consumers are outside this serialized batch accounting.'])
     total=Decimal(0)
-    models=tuple(model for i,model in enumerate(ROUTES) if i!=1) if protocol_v2 else tuple(ROUTES)[2:] if remaining else tuple(ROUTES)
+    models=WIDER_MODELS if wider else tuple(model for i,model in enumerate(ROUTES) if i!=1) if protocol_v2 else tuple(ROUTES)[2:] if remaining else tuple(ROUTES)
     for model in models:
         try:
             preflight(client.request('GET','/api/v1/key').get('data'))
@@ -155,11 +164,11 @@ def compare(client,corpus,checkpoint=lambda event:None,*,remaining=False,protoco
         except Exception as error:
             report['failures'].append(dict(model=model,case_id=None,stage='preflight',reason=error.args[0] if isinstance(error,(ProbeError,RouteError)) else 'preflight_unresolved'))
             continue
-        for case_id in CASES:
+        for case_id in schedule:
             packet=selected[case_id]
-            body=body_for(model,packet,protocol_v2=protocol_v2)
+            body=body_for(model,packet,protocol_v2=protocol_v2 or wider)
             # The historical hold is reserved separately by account preflight.
-            if CALL_RESERVATION*(report['attempted_calls']+1)+(PRIOR_RESERVED if carrying else Decimal(0))+prior_cost>RUN_ALLOWANCE:
+            if CALL_RESERVATION*(report['attempted_calls']+1)+prior_reserved+prior_cost>RUN_ALLOWANCE:
                 raise ProbeError('batch_reservation_exhausted')
             try:
                 preflight(client.request('GET','/api/v1/key').get('data'))
@@ -202,9 +211,9 @@ def main():
         if secret and secret.encode() in raw: raise ProbeError('credential_output_rejected')
         print(raw.decode(),flush=True)
     try:
-        if sys.argv[1:] not in ([],['--remaining-after-checkpoint'],['--protocol-v2-development']): raise ProbeError('comparison_arguments_denied')
+        if sys.argv[1:] not in ([],['--remaining-after-checkpoint'],['--protocol-v2-development'],['--protocol-v2-wider']): raise ProbeError('comparison_arguments_denied')
         report=compare(OpenRouterTransport(LabCredential(secret)),load_json('/app/development_corpus.json'),emit,
-                       remaining=sys.argv[1:]==['--remaining-after-checkpoint'],protocol_v2=sys.argv[1:]==['--protocol-v2-development'])
+                       remaining=sys.argv[1:]==['--remaining-after-checkpoint'],protocol_v2=sys.argv[1:]==['--protocol-v2-development'],wider=sys.argv[1:]==['--protocol-v2-wider'])
         emit(dict(event='comparison_final',report=report))
         return 2 if report['new_unknown_cost_possible'] else 0
     except Exception:
