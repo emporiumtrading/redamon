@@ -170,6 +170,7 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
         click(cdp,popup,'select')
         scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
         assert scope['extension_version']=='0.2.0'
+        assert scope['page_url']==console_origin+'/security'
         endpoint='https://localhost:'+str(port)
         assert cdp.evaluate(popup,'chrome.permissions.contains({origins:['+json.dumps(endpoint+'/*')+']})')
         case=navigation.create_case(human,'Generated navigation '+scenario+' case')
