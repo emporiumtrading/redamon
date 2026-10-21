@@ -1,8 +1,9 @@
 # Candidate attack-pattern correlation kernel
 
 `attack_patterns.py` implements bounded, deterministic correlations over strict
-`security-events-v1` documents. It is not connected to automatic browser capture
-or the persisted specialist UI yet. No live detection or production quality is
+`security-events-v1` documents. A source-verifying persisted caller is available
+through the case workbench's Attack pattern review page; automatic browser event
+normalization and specialist orchestration remain pending. No live detection or production quality is
 claimed. The module performs no network request, model call, page operation or
 response. Its results are candidate hypotheses for review, never confirmations.
 
@@ -32,8 +33,8 @@ approval never suppresses a candidate: page data cannot approve its own behavior
 Results retain evidence references, event interval, observed event count,
 affected asset count, a benign alternative, unverified-source labels and
 unqualified confidence. Missing source classes remain explicit. Current runtime
-authority and source bytes must be checked by the future persisted caller; this
-pure kernel provides neither. The accepted product path must connect source
+authority, same-case source bytes and digests are checked by `attack_pattern_runs`;
+the pure kernel itself provides neither. The accepted product path must connect source
 capture, normalization, correlation, specialist assessment, urgent presentation
 and measured end-to-end latency.
 

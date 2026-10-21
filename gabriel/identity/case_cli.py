@@ -89,7 +89,7 @@ def export_file(service,token,evidence_id,path):
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
     parser.add_argument('command',choices=('coordinator-begin','coordinator-get','coordinator-next','coordinator-stop','create','list','get','report','graph','memory-propose','memory-review','memory-list','memory-check','memory-forget','memory-reset','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
-        'policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
+        'attack-run','attack-get','attack-list','policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
         'checkpoint-key-trust','checkpoint-key-revoke','checkpoint-policy-set','checkpoint-policy-get','checkpoint-accept','checkpoint-check',
@@ -241,6 +241,12 @@ def main():
             result = service.advance_coordinator(token,args.run_id)
         elif args.command=='coordinator-stop':
             result = service.stop_coordinator(token,args.run_id)
+        elif args.command=='attack-run':
+            result = service.run_attack_review(token,args.case_id,args.request_id,args.evidence_id)
+        elif args.command=='attack-get':
+            result = service.get_attack_review(token,args.case_id,args.run_id)
+        elif args.command=='attack-list':
+            result = service.list_attack_reviews(token,args.case_id)
         elif args.command=='specialist-run':
             result = service.run_specialist(token,args.case_id,args.request_id,args.specialist_role,input_evidence_id=args.evidence_id)
         elif args.command=='specialist-get':

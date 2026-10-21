@@ -85,7 +85,8 @@ cp -a "$work_dir/object-backup" "$work_dir/restored-objects"
 "${compose[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" \
     -v "$report_dir:/evidence" --entrypoint python identity-tests \
     tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_browser_navigation_integration.py \
-    --strict --parallel 1 --report /evidence/navigation-tests.json
+    testing/gabriel_identity/test_attack_pattern_runs_integration.py \
+    --strict --parallel 1 --report /evidence/focused-identity-tests.json
 "${compose[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" \
     -v "$report_dir:/evidence" identity-tests --report /evidence/identity-tests.json
 printf '%s\n' 'PASS: identity integration and PostgreSQL restart checks complete; disposable database cleaned on exit.'
