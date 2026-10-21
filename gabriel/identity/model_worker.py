@@ -23,6 +23,7 @@ QUESTION='Assess only the supplied partial typed observations. Disclose missing 
 
 def configuration(model):
     return dict(version='restricted-model-worker-v1',model=model,
+                route_registry_version=model_routes.VERSION,expected_provider=model_routes.ROUTES[model][0],
                 prompt_digest=sha256(PROMPT.encode()).hexdigest(),
                 projection_version='typed-telemetry-minimization-v1',
                 parameters=model_routes.parameters(model))
@@ -53,6 +54,14 @@ class ModelWorker:
         admit_epoch(conn,p.organization_id,self.cases.store.keys)
         return run,selected
 
+    def _verify_sources(self,conn,p,evidence_id,prepared):
+        ids={evidence_id}|{identifier(ref['evidence_id']) for ref in prepared['local_manifest']['lineage'].values()}
+        for source_id in sorted(ids,key=str):
+            source=self.cases._evidence(conn,p,source_id)
+            self.cases._verify(conn,source)
+            self.cases._custody(conn,p,source,'accessed')
+        _audit(conn,'model_worker.sources_verified',p,evidence_id)
+
     def _input(self,token,run_id,evidence_id,model):
         config=self._admission(model)
         evidence_id=identifier(evidence_id)
@@ -72,6 +81,7 @@ class ModelWorker:
             for ref in prepared['local_manifest']['lineage'].values():
                 if expected.get(ref['evidence_id'])!=ref['evidence_digest']:
                     raise AccessDenied('normalized_source_binding_mismatch')
+            self._verify_sources(conn,p,evidence_id,prepared)
             body=dict(model=model,messages=[dict(role='system',content=PROMPT),
                       dict(role='user',content=canonical(dict(question=QUESTION,observations=prepared['packet'])).decode())],**config['parameters'])
             if len(canonical(body))>7000: raise AccessDenied('model_input_requires_narrower_scope')
@@ -111,6 +121,7 @@ class ModelWorker:
         def guard(conn,p):
             job=investigation(conn,p,held['investigation_id'],active=True)
             self._scope(conn,p,run_id,job['case_id'])
+            self._verify_sources(conn,p,identifier(evidence_id),prepared)
         claimed=self.budget.claim(token,reservation_id,_guard=guard)
         if not claimed['new_claim']: raise AccessDenied('model_worker_already_claimed_no_resend')
         started=time.monotonic()

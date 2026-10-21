@@ -11,7 +11,7 @@ from gabriel.identity.model_worker import ModelWorker,configuration
 from gabriel.identity.provider_probe import ProbeError
 from gabriel.identity.service import AccessDenied,IdentityUnavailable
 from gabriel.identity.vault import ProviderVault
-from testing.gabriel_identity.test_cases_integration import cases,case,evidence,audit_permission
+from testing.gabriel_identity.test_cases_integration import cases,case,evidence,audit_permission,row_and_file
 from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
 from testing.gabriel_identity.test_vault_integration import fresh_ring
 from testing.gabriel_identity.test_model_lab import catalog,key_data
@@ -135,3 +135,13 @@ def test_input_read_requires_auditable_admission(tenant,setup):
         with pytest.raises(IdentityUnavailable): reserve(tenant,setup)
     finally: audit_permission(tenant,True)
     assert not setup['calls'] and setup['worker'].budget.status(tenant.token)['usage']['held_slots']==0
+
+
+def test_referenced_source_ciphertext_must_still_verify_before_dispatch(tenant,setup,cases,evidence):
+    row=reserve(tenant,setup)
+    _,path=row_and_file(tenant,cases,evidence)
+    path.chmod(0o600)
+    path.write_bytes(b'generated-corrupt-ciphertext')
+    from gabriel.identity.evidence_store import EvidenceError
+    with pytest.raises(EvidenceError): dispatch(tenant,setup,row)
+    assert not setup['calls']
