@@ -57,7 +57,7 @@ def counts():
               'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
               'memory_records','memory_reviews','memory_invalidations','memory_resets',
               'model_budget_policies','model_price_quotes','model_investigations','model_reservations',
-              'model_dispatch_claims','model_settlements','model_investigation_stops',
+              'model_dispatch_claims','model_settlements','model_investigation_stops','model_answer_intents','model_answer_receipts',
               'coordinator_runs','coordinator_sources','coordinator_steps','coordinator_claims','coordinator_results','coordinator_stops','migrations')
     # Migrations are deliberately not readable by the runtime role.
     with connection(app_dsn) as conn:
@@ -236,7 +236,65 @@ if sys.argv[1] == 'before':
     budget.reserve(token,model_job['id'],uuid4(),price['id'],'c'*64)
     budget.stop(token,model_job['id'])
     assert budget.status(token)['usage']==dict(month_used=1400,day_used=1400,held_slots=1)
+    # A separate generated tenant preserves the existing budget checkpoint's exact assertions.
+    from gabriel.identity import model_routes,model_worker
+    from gabriel.identity.model_worker import ModelWorker,configuration
+    from gabriel.identity.model_evaluation import digest as model_digest
+    from testing.gabriel_identity.test_model_lab import catalog,key_data
+    answer_password=secrets.token_urlsafe(24)
+    answer_org,_=provision_organization(owner_dsn,'Generated answer recovery','answer-owner',answer_password)
+    answer_token=service.login(answer_org,'answer-owner',answer_password).token
+    answer_secret='generated-answer-key-'+secrets.token_urlsafe(30)
+    vault.put(answer_token,'openrouter',answer_secret)
+    answer_case=cases.create_case(answer_token,'Generated durable answer case')
+    answer_source=cases.acquire(answer_token,answer_case['id'],uuid4(),'Generated normalized source','Generated answer source',approved=True)
+    record=dict(record_id=str(uuid4()),evidence_id=answer_source['id'],evidence_digest=answer_source['digest'],
+        event_time='2026-10-20T12:00:00Z',kind='authentication',outcome='failure',actor='Generated private recovery actor',
+        asset='Generated private recovery asset',address=None,count=2)
+    answer_input=cases.acquire(answer_token,answer_case['id'],uuid4(),json.dumps(dict(version='normalized-telemetry-v1',records=[record])),
+        'Generated answer input',approved=True)
+    answer_plan=cases.begin_coordinator(answer_token,answer_case['id'],uuid4())
+    cases.advance_coordinator(answer_token,answer_plan['id']);cases.advance_coordinator(answer_token,answer_plan['id'])
+    model='openai/gpt-4.1-mini';answer_calls=[]
+    class GeneratedTransport:
+        def __init__(self,credential): assert credential.reveal()==answer_secret
+        def request(self,method,path,payload=None):
+            if path=='/api/v1/key': return dict(data=key_data())
+            if path=='/api/v1/endpoints/zdr': return catalog()
+            assert method=='POST';answer_calls.append(1)
+            decision=dict(disposition='abstain',claims=[dict(id='claim-1',statement='Generated partial source.',references=['o1'])],
+                alternatives=['Generated authorized explanation.'],contradictions=['No independent corroboration supplied.'],
+                uncertainty=['Generated visibility limit.'],reported_gaps=['missing-context'],requested_actions=[])
+            return dict(id='generated-recovery-answer',model=model,provider='Azure',
+                choices=[dict(finish_reason='stop',message=dict(content=json.dumps(decision)))],
+                usage=dict(prompt_tokens=300,completion_tokens=200,cost=0.0002))
+    old_transport,old_admission=model_worker.OpenRouterTransport,model_routes.PRODUCTION_CONFIGURATIONS
+    try:
+        model_worker.OpenRouterTransport=GeneratedTransport
+        model_routes.PRODUCTION_CONFIGURATIONS=frozenset({model_digest(configuration(model))})
+        answer_worker=ModelWorker(cases,vault)
+        answer_reservation=answer_worker.reserve(answer_token,answer_plan['id'],answer_input['id'],uuid4(),model)
+        answer_result=answer_worker.dispatch(answer_token,answer_plan['id'],answer_input['id'],answer_reservation['reservation_id'])
+        assert answer_result.metadata['result_persisted'] and len(answer_calls)==1
+        pending_plan=cases.begin_coordinator(answer_token,answer_case['id'],uuid4())
+        cases.advance_coordinator(answer_token,pending_plan['id']);cases.advance_coordinator(answer_token,pending_plan['id'])
+        pending_answer=answer_worker.reserve(answer_token,pending_plan['id'],answer_input['id'],uuid4(),model)
+        with connection(owner_dsn,runtime=False) as conn:
+            conn.execute('REVOKE INSERT ON gabriel_identity.model_answer_receipts FROM gabriel_identity_app')
+        try:
+            try: answer_worker.dispatch(answer_token,pending_plan['id'],answer_input['id'],pending_answer['reservation_id'])
+            except IdentityUnavailable: pass
+            else: raise AssertionError('answer receipt failure did not block publication')
+        finally:
+            with connection(owner_dsn,runtime=False) as conn:
+                conn.execute('GRANT INSERT ON gabriel_identity.model_answer_receipts TO gabriel_identity_app')
+        assert len(answer_calls)==2
+    finally:
+        model_worker.OpenRouterTransport=old_transport;model_routes.PRODUCTION_CONFIGURATIONS=old_admission
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
+        'answer_token':answer_token,'answer_reservation':answer_reservation['reservation_id'],
+        'pending_answer_reservation':pending_answer['reservation_id'],
+        'answer_run':answer_plan['id'],'answer_input':answer_input['id'],'answer_digest':sha256(answer_result.reveal()).hexdigest(),
         'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
         'workflow_assignment':assignment['id'],'workflow_question':question,
         'specialist_id':specialist['id'],'specialist_digest':specialist['result_digest'],
@@ -265,6 +323,22 @@ elif sys.argv[1] in {'after','restored'}:
     saved = json.loads(state.read_text())
     if sys.argv[1] == 'restored':
         assert counts()==saved['counts']
+    from gabriel.identity.model_worker import ModelWorker
+    answer_worker=ModelWorker(cases,vault)
+    restored_answer=answer_worker.get_answer(saved['answer_token'],saved['answer_reservation'])
+    assert sha256(restored_answer.reveal()).hexdigest()==saved['answer_digest']
+    assert restored_answer.metadata['historical'] and restored_answer.metadata['cost_reconciliation_required']
+    assert answer_worker.recover_answer(saved['answer_token'],saved['answer_reservation']).reveal()==restored_answer.reveal()
+    try:
+        answer_worker.dispatch(saved['answer_token'],saved['answer_run'],saved['answer_input'],saved['answer_reservation'])
+    except AccessDenied as error:
+        assert str(error)=='model_worker_already_claimed_no_resend'
+    else: raise AssertionError('completed answer was sent again after recovery')
+    pending_recovered=answer_worker.recover_answer(saved['answer_token'],saved['pending_answer_reservation'])
+    assert pending_recovered.metadata['result_persisted']
+    assert answer_worker.get_answer(saved['answer_token'],saved['pending_answer_reservation']).reveal()==pending_recovered.reveal()
+    assert budget.status(saved['answer_token'])['usage']['held_slots']==2
+    print('PASS: encrypted model answer/lineage and immutable receipt survived recovery without provider access or another charge claim')
     coordinated=cases.get_coordinator(saved['token'],saved['coordinator_id'])
     assert coordinated['completed_steps']==1 and coordinated['steps'][1]['claimed_at'] is not None
     assert coordinated['steps'][0]['result_digest']==saved['coordinator_first_digest']

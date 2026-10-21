@@ -1,7 +1,7 @@
 """Admission-bound single-attempt worker kernel; no route is production admitted.
 
-Results remain private in memory. A crash after a claim never authorizes resend;
-reservations stay held for operator reconciliation, including successful calls.
+Validated results use encrypted evidence receipts. A crash after a claim never
+authorizes resend; reservations stay held for explicit operator reconciliation.
 """
 import hmac
 import time
@@ -14,7 +14,7 @@ from gabriel.identity.model_budget import ModelBudgetService,investigation,reser
 from gabriel.identity.model_evaluation import digest,validate_run
 from gabriel.identity.model_input import prepare
 from gabriel.identity.model_transport import OpenRouterTransport
-from gabriel.identity.model_protocol import PROMPT,ProbeError,budget_check,decode,money
+from gabriel.identity.model_protocol import PROMPT_V2 as PROMPT,ProbeError,budget_check,decode,money
 from gabriel.identity.service import AccessDenied,_audit,connection,identifier
 from gabriel.identity.vault import ProviderVault
 
@@ -22,7 +22,7 @@ QUESTION='Assess only the supplied partial typed observations. Disclose missing 
 
 
 def configuration(model):
-    return dict(version='restricted-model-worker-v1',model=model,
+    return dict(version='restricted-model-worker-v2',model=model,
                 route_registry_version=model_routes.VERSION,expected_provider=model_routes.ROUTES[model][0],
                 prompt_digest=sha256(PROMPT.encode()).hexdigest(),
                 projection_version='typed-telemetry-minimization-v1',
@@ -44,9 +44,9 @@ class ModelWorker:
             raise AccessDenied('model_configuration_not_production_admitted')
         return config
 
-    def _scope(self,conn,p,run_id,case_id=None):
+    def _scope(self,conn,p,run_id,case_id=None,*,_exclude_ingestion=None):
         run=coordinator.load(conn,p,run_id)
-        selected=coordinator.active(self.cases,conn,p,run)
+        selected=coordinator.active(self.cases,conn,p,run,_exclude_ingestion=_exclude_ingestion)
         if case_id is not None and run['case_id']!=case_id:
             raise AccessDenied('model_worker_case_mismatch')
         if coordinator.snapshot(conn,run)['completed_steps']!=run['max_steps']:
@@ -58,6 +58,9 @@ class ModelWorker:
         ids={evidence_id}|{identifier(ref['evidence_id']) for ref in prepared['local_manifest']['lineage'].values()}
         for source_id in sorted(ids,key=str):
             source=self.cases._evidence(conn,p,source_id)
+            derived=conn.execute('''SELECT 1 FROM gabriel_identity.model_answer_intents
+                WHERE organization_id=%s AND ingestion_id=%s''',(p.organization_id,source['ingestion_id'])).fetchone()
+            if derived: raise AccessDenied('unreviewed_model_answer_is_not_source_evidence')
             self.cases._verify(conn,source)
             self.cases._custody(conn,p,source,'accessed')
         _audit(conn,'model_worker.sources_verified',p,evidence_id)
@@ -105,6 +108,7 @@ class ModelWorker:
         with connection(self.cases._dsn) as conn:
             p=self.cases._admin(conn,token)
             held=reservation(conn,p,reservation_id)
+            if held['claim_id']: raise AccessDenied('model_worker_already_claimed_no_resend')
             quote=conn.execute('''SELECT * FROM gabriel_identity.model_price_quotes WHERE organization_id=%s AND id=%s''',
                                (p.organization_id,held['quote_id'])).fetchone()
             if quote['provider']!='openrouter': raise AccessDenied('model_worker_provider_denied')
@@ -150,9 +154,13 @@ class ModelWorker:
         with connection(self.cases._dsn) as conn:
             p=self.cases._admin(conn,token)
             guard(conn,p)
-        private=dict(result=result,local_manifest=prepared['local_manifest'])
-        # There is no durable answer receipt yet. Keep the entire reservation
-        # until explicit reconciliation, even for an apparently successful reply.
-        return EvidenceContent(dict(reservation_id=str(held['id']),provider_response_digest=digest(reply),
-            cost_reconciliation_required=True,result_persisted=False,quality_qualified=False,
-            production_admission=False,coverage='partial'),canonical(private))
+        from gabriel.identity.model_answers import persist
+        return persist(self,token,run,evidence_id,held,prepared,result,reply,guard)
+
+    def get_answer(self,token,reservation_id):
+        from gabriel.identity.model_answers import get
+        return get(self,token,reservation_id)
+
+    def recover_answer(self,token,reservation_id):
+        from gabriel.identity.model_answers import recover
+        return recover(self,token,reservation_id)
