@@ -7,11 +7,11 @@ VERSION='openrouter-candidate-routes-v1'
 ROUTES={
     'openai/gpt-4.1-mini':('Azure','azure','max_completion_tokens',None),
     'qwen/qwen3.5-35b-a3b':('DeepInfra','deepinfra/fp8','max_tokens','disabled'),
-    'mistralai/mistral-small-3.2-24b-instruct':('DeepInfra','deepinfra/fp8','max_tokens',None),
-    'nvidia/nemotron-3-super-120b-a12b':('DeepInfra','deepinfra/bf16','max_tokens','disabled'),
-    'openai/gpt-oss-120b':('DeepInfra','deepinfra/bf16','max_tokens','low'),
-    'meta-llama/llama-3.3-70b-instruct':('DeepInfra','deepinfra/turbo','max_tokens',None),
-    'deepseek/deepseek-v3.2':('DeepInfra','deepinfra/fp4','max_tokens','disabled'),
+    'mistralai/mistral-small-3.2-24b-instruct':('Mistral','mistral/eu','max_tokens',None),
+    'nvidia/nemotron-3-super-120b-a12b':('Crusoe','crusoe/fp8','max_tokens','disabled'),
+    'openai/gpt-oss-120b':('Cerebras','cerebras/fp16','max_tokens','low'),
+    'meta-llama/llama-3.3-70b-instruct':('Cloudflare','cloudflare/fp8','max_tokens',None),
+    'deepseek/deepseek-v3.2':('SiliconFlow','siliconflow/fp8','max_tokens','disabled'),
     'qwen/qwen3.5-122b-a10b':('SiliconFlow','siliconflow/fp8','max_tokens','disabled'),
 }
 # Only a reviewed release can populate exact configuration digests. An account
