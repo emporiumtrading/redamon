@@ -65,7 +65,7 @@ def test_pairing_persists_hashed_scoped_credential_and_no_content_claim(tenant,b
 
 
 @pytest.mark.parametrize('field,value',[
-    ('browser','firefox'),('extension_version','0.2.0'),('tab_id',True),('tab_id',-1),('tab_id',2147483648),
+    ('browser','firefox'),('extension_version','9.9.9'),('tab_id',True),('tab_id',-1),('tab_id',2147483648),
     ('installation_id','not-a-uuid'),('document_id','../bad'),('account_label',''),('account_label','unsafe\nvalue'),
     ('page_url','http://generated-console.invalid/security'),('page_url','https://user:secret@generated-console.invalid/security'),
     ('page_url','https://generated-console.invalid/security?token=secret'),('page_url','https://generated-console.invalid/login'),

@@ -11,7 +11,8 @@ from gabriel.identity.service import (AccessDenied,AuthenticationDenied,InvalidI
     _audit,_digest,connection,identifier)
 from gabriel.identity.tasks import task_record,available
 
-VERSION = '0.1.0'
+VERSION = '0.2.0'
+SUPPORTED_VERSIONS = frozenset({'0.1.0',VERSION})
 CONTEXT_FIELDS = {'browser','extension_version','installation_id','tab_id','document_id','page_url','account_label'}
 
 
@@ -31,7 +32,7 @@ def browser_digest(token):
 def approved_context(value):
     try:
         if (not isinstance(value,dict) or set(value)!=CONTEXT_FIELDS or value['browser'] not in {'chrome','brave'}
-                or value['extension_version']!=VERSION or type(value['tab_id']) is not int
+                or value['extension_version'] not in SUPPORTED_VERSIONS or type(value['tab_id']) is not int
                 or not 0<=value['tab_id']<=2147483647 or not isinstance(value['page_url'],str)
                 or not 9<=len(value['page_url'])<=2048 or not isinstance(value['account_label'],str)
                 or not 1<=len(value['account_label'])<=64 or any(ord(c)<32 or ord(c)==127 for c in value['account_label'])):

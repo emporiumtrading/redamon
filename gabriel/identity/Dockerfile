@@ -11,6 +11,7 @@ COPY gabriel/identity/evidence_crypto.py gabriel/identity/evidence_keys.py gabri
 COPY gabriel/identity/browser_sessions.py gabriel/identity/browser_cli.py gabriel/identity/schema_v11.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_observations.py gabriel/identity/schema_v12.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_navigation.py gabriel/identity/schema_v21.sql /app/gabriel/identity/
+COPY gabriel/identity/schema_v22.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_gateway.py gabriel/identity/gateway_cli.py /app/gabriel/identity/
 COPY gabriel/identity/reports.py /app/gabriel/identity/
 COPY gabriel/identity/workbench.py gabriel/identity/workbench_cli.py /app/gabriel/identity/

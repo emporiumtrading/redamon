@@ -20,7 +20,7 @@ from gabriel.identity.cli import read_secret
 from gabriel.identity.service import AccessDenied,IdentityError,IdentityUnavailable,_digest,connection
 
 MAX_BODY = 262144
-OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-prepare','navigation-complete'}
+OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete'}
 
 
 def endpoint(value):
@@ -137,9 +137,12 @@ class BrowserGateway:
                 self.service.disconnect_browser(self._peer)
                 self._claimed=False
                 return {'disconnected':True}
-            if operation in {'navigation-prepare','navigation-complete'}:
+            if operation in {'navigation-plan','navigation-prepare','navigation-complete'}:
                 if not isinstance(self.service,BrowserNavigationService):
                     raise AccessDenied('navigation_service_required')
+                if operation=='navigation-plan':
+                    if set(body)!={'context'}: raise ValueError('invalid_navigation_plan_request')
+                    return self.service.navigation_plan(self._human,self._peer,body['context'])
                 if operation=='navigation-prepare':
                     if set(body)!={'context','request_id','destination_url'} or approved_context(body['context'])!=self.context:
                         raise AccessDenied('gateway_scope_changed')

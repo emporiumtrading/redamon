@@ -159,8 +159,16 @@ def remove_v20(conn):
 
 
 def remove_v21(conn):
+    remove_v22(conn)
     conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.apply_browser_navigation(uuid,uuid)')
     if conn.execute("SELECT to_regclass('gabriel_identity.browser_navigation_grants') AS t").fetchone()['t'] is not None:
         conn.execute('''DROP TABLE gabriel_identity.browser_navigation_commits,gabriel_identity.browser_navigation_receipts,
             gabriel_identity.browser_navigation_intents,gabriel_identity.browser_navigation_stops,gabriel_identity.browser_navigation_grants''')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=21')
+
+
+def remove_v22(conn):
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=22').fetchone():
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
+        conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version='0.1.0')")
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=22')
