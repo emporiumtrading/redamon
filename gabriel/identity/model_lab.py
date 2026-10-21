@@ -127,7 +127,8 @@ def compare(client,corpus,checkpoint=lambda event:None,*,remaining=False):
         for case_id in CASES:
             packet=selected[case_id]
             body=body_for(model,packet)
-            if CALL_RESERVATION*(report['attempted_calls']+1)+(PRIOR_RESERVED+PRIOR_REPORTED+HISTORICAL_PROBE_RESERVED if remaining else HISTORICAL_PROBE_RESERVED)>RUN_ALLOWANCE:
+            # The historical hold is reserved separately by account preflight.
+            if CALL_RESERVATION*(report['attempted_calls']+1)+(PRIOR_RESERVED+PRIOR_REPORTED if remaining else Decimal(0))>RUN_ALLOWANCE:
                 raise ProbeError('batch_reservation_exhausted')
             try:
                 preflight(client.request('GET','/api/v1/key').get('data'))

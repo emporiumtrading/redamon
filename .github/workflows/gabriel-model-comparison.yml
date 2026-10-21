@@ -22,7 +22,8 @@ jobs:
       - run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m gabriel-model-lab-tests
   live-generated-comparison:
     needs: software
-    if: github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feature/gabriel-model-worker' || github.head_ref == 'feature/gabriel-model-comparison-remaining')
+    # The exact-before exception recovers a software-only failure; no paid job ran.
+    if: (github.event.action == 'opened' || (github.event.action == 'synchronize' && github.event.before == 'a7206b289231a1a2df381092b40dbcae35613b8a' && github.head_ref == 'feature/gabriel-model-comparison-remaining')) && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feature/gabriel-model-worker' || github.head_ref == 'feature/gabriel-model-comparison-remaining')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
