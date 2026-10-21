@@ -78,11 +78,13 @@ def test_unverified_or_wrongly_bound_inputs_never_publish(tenant,cases,case,evid
     elif attack=='model_source':
         # Construct a historical origin fixture; normal intake correctly requires a model intent.
         with owner_connection(tenant.db) as conn:
-            conn.execute("UPDATE gabriel_identity.evidence_objects SET source_kind='model_generated_text' WHERE organization_id=%s AND id=%s",
+            conn.execute("UPDATE gabriel_identity.evidence_objects SET source_kind='model_generated_text',parser_version='model-json-v1' WHERE organization_id=%s AND id=%s",
                 (tenant.org,evidence['id']))
     elif attack=='conflicting_digest': document['events'][1]['evidence_digest']='f'*64
     if holder is None: _,holder=intake(tenant,cases,case,evidence,document)
-    with pytest.raises((AccessDenied,InvalidIdentityInput,EvidenceError)): cases.run_attack_review(tenant.token,case['id'],uuid4(),holder['id'])
+    with pytest.raises((AccessDenied,InvalidIdentityInput,EvidenceError)) as denial:
+        cases.run_attack_review(tenant.token,case['id'],uuid4(),holder['id'])
+    if attack=='model_source': assert str(denial.value)=='model_answer_is_not_attack_source'
     assert not cases.list_attack_reviews(tenant.token,case['id'])['runs']
 
 
