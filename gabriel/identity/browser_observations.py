@@ -55,6 +55,9 @@ class BrowserObservationService(BrowserSessionService):
             raise AccessDenied('browser_sharing_not_approved')
         if not lease['last_seen'] or not 0<=(now-lease['last_seen']).total_seconds()<=45:
             raise AccessDenied('browser_heartbeat_gap_repair_required')
+        from gabriel.identity.browser_navigation import pending_navigation
+        if pending_navigation(conn,p.organization_id,lease['id']):
+            raise AccessDenied('browser_navigation_outcome_unresolved')
         return p,lease,now
 
     def _observation(self,conn,p,observation_id):

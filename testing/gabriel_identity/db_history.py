@@ -148,6 +148,7 @@ def remove_v19(conn):
 
 
 def remove_v20(conn):
+    remove_v21(conn)
     applied=conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=20').fetchone()
     if applied:
         conn.execute("DELETE FROM gabriel_identity.specialist_runs WHERE engine_version='specialist-rules-v1'")
@@ -155,3 +156,11 @@ def remove_v20(conn):
         conn.execute("ALTER TABLE gabriel_identity.specialist_runs ADD CONSTRAINT specialist_runs_engine_version_check CHECK (engine_version='telemetry-health-v1')")
         conn.execute("ALTER TABLE gabriel_identity.specialist_runs ADD CONSTRAINT specialist_runs_role_check CHECK (role='telemetry_health')")
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=20')
+
+
+def remove_v21(conn):
+    conn.execute('DROP FUNCTION IF EXISTS gabriel_identity.apply_browser_navigation(uuid,uuid)')
+    if conn.execute("SELECT to_regclass('gabriel_identity.browser_navigation_grants') AS t").fetchone()['t'] is not None:
+        conn.execute('''DROP TABLE gabriel_identity.browser_navigation_commits,gabriel_identity.browser_navigation_receipts,
+            gabriel_identity.browser_navigation_intents,gabriel_identity.browser_navigation_stops,gabriel_identity.browser_navigation_grants''')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=21')
