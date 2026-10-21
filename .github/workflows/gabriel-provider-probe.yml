@@ -4,6 +4,7 @@ on:
     paths:
       - 'gabriel/identity/**'
       - 'testing/gabriel_identity/**'
+      - 'tooling/scripts/gabriel_candidate_export.py'
       - 'testing/gabriel_model_lab/**'
       - 'gabriel/identity/provider_probe.py'
       - 'gabriel/identity/model_input.py'
@@ -44,6 +45,21 @@ jobs:
         run: |
           bash tooling/scripts/gabriel_runtime_check.sh "$RUNNER_TEMP/gabriel-arm64-runtime"
           bash tooling/scripts/gabriel_foundation_check.sh "$RUNNER_TEMP/gabriel-arm64-foundation"
+      - name: Export the existing checked ARM64 images
+        run: >-
+          python3 tooling/scripts/gabriel_candidate_export.py
+          --output "$RUNNER_TEMP/gabriel-core-candidate-arm64"
+          --identity-evidence "$RUNNER_TEMP/gabriel-arm64-evidence"
+          --runtime-evidence "$RUNNER_TEMP/gabriel-arm64-runtime"
+          --foundation-evidence "$RUNNER_TEMP/gabriel-arm64-foundation"
+      - name: Retain the ARM64 core test candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-core-candidate-arm64
+          path: ${{ runner.temp }}/gabriel-core-candidate-arm64
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
       - name: Retain sanitized native ARM64 evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
