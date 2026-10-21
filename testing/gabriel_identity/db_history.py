@@ -182,5 +182,21 @@ def remove_v23(conn):
 
 
 def remove_v24(conn):
+    remove_v25(conn)
     conn.execute('DROP TABLE IF EXISTS gabriel_identity.browser_event_snapshots')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=24')
+
+
+def remove_v25(conn):
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=25').fetchone():
+        for table in ('coordinator_results','coordinator_claims','coordinator_steps','coordinator_sources','coordinator_stops'):
+            conn.execute('DELETE FROM gabriel_identity.'+table+" WHERE (organization_id,run_id) IN (SELECT organization_id,id FROM gabriel_identity.coordinator_runs WHERE plan_version='local-specialist-coordinator-v2')")
+        conn.execute("DELETE FROM gabriel_identity.coordinator_runs WHERE plan_version='local-specialist-coordinator-v2'")
+        conn.execute('ALTER TABLE gabriel_identity.coordinator_runs DROP CONSTRAINT coordinator_plan_bounds')
+        conn.execute('ALTER TABLE gabriel_identity.coordinator_runs DROP COLUMN input_evidence_id')
+        conn.execute("ALTER TABLE gabriel_identity.coordinator_runs ADD CONSTRAINT coordinator_runs_plan_version_check CHECK (plan_version='local-coordinator-v1')")
+        conn.execute('ALTER TABLE gabriel_identity.coordinator_runs ADD CONSTRAINT coordinator_runs_max_steps_check CHECK (max_steps BETWEEN 1 AND 2)')
+        conn.execute('ALTER TABLE gabriel_identity.coordinator_steps DROP CONSTRAINT coordinator_operation_bounds')
+        conn.execute('ALTER TABLE gabriel_identity.coordinator_steps ADD CONSTRAINT coordinator_steps_sequence_check CHECK (sequence BETWEEN 1 AND 2)')
+        conn.execute("ALTER TABLE gabriel_identity.coordinator_steps ADD CONSTRAINT coordinator_steps_check CHECK ((sequence=1 AND operation='evidence_inventory') OR (sequence=2 AND operation='telemetry_health'))")
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=25')

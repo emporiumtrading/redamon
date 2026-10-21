@@ -184,6 +184,26 @@ def test_spending_screen_changes_real_limits_and_pauses_reservations(tenant,serv
     assert 'New reservations paused' in call(server,'/spending',cookie=cookie)[1]
 
 
+def test_twelve_specialist_plan_form_runs_all_roles_and_replay_is_stable(tenant,cases,case,evidence,server):
+    from testing.gabriel_identity.test_specialist_analysis_integration import intake
+    _,typed=intake(tenant,cases,case,evidence)
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/coordinator'
+    assert 'Create twelve-specialist plan' in call(server,path,cookie=cookie)[1]
+    code,_,headers=call(server,path+'/new',dict(csrf=token,request_id=str(uuid4()),input_evidence_id=str(typed['id'])),cookie=cookie)
+    assert code==303
+    detail=headers['Location'];run_id=detail.rsplit('/',1)[1]
+    assert call(server,detail+'/run',dict(csrf='generated-invalid'),cookie=cookie)[0]==403
+    assert cases.get_coordinator(tenant.token,run_id)['completed_steps']==0
+    assert call(server,detail+'/run',dict(csrf=token),cookie=cookie)[0]==303
+    html=call(server,detail,cookie=cookie)[1]
+    assert '12 of 12 local steps complete' in html and 'Review specialist assessment' in html
+    assert 'Run remaining specialist reviews' not in html and 'confidence is unqualified' in html
+    assert len(cases.list_specialist_runs(tenant.token,case['id'])['runs'])==12
+    assert call(server,detail+'/run',dict(csrf=token),cookie=cookie)[0]==303
+    assert len(cases.list_specialist_runs(tenant.token,case['id'])['runs'])==12
+
+
 def test_local_plan_forms_persist_steps_replay_receipts_and_stop(tenant,cases,case,evidence,server):
     cookie,token,_=connect(server)
     path='/cases/'+str(case['id'])+'/coordinator'

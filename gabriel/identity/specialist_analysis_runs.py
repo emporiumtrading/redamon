@@ -89,7 +89,42 @@ def validate_result(packet,result):
     return result
 
 
-def run(service,token,case_id,request_id,role,input_evidence_id):
+def verified_input(service,conn,p,case,input_evidence_id):
+    def source(eid):
+        row=service._evidence(conn,p,eid)
+        if row['case_id']!=case['id']:
+            raise AccessDenied('specialist_source_case_mismatch')
+        if row['source_kind']=='model_generated_text' or conn.execute('''SELECT 1 FROM gabriel_identity.model_answer_intents
+            WHERE organization_id=%s AND ingestion_id=%s''',(p.organization_id,row['ingestion_id'])).fetchone():
+            raise AccessDenied('model_answer_is_not_specialist_source')
+        body=service._verify(conn,row)
+        service._custody(conn,p,row,'accessed')
+        return row,body
+    original,body=source(input_evidence_id)
+    try:
+        document=decode(body.decode('utf-8'))
+    except (ValueError,UnicodeError,RecursionError):
+        raise InvalidIdentityInput('invalid_specialist_facts') from None
+    validate_document(document,case['id'])
+    expected={}
+    for fact in document['facts']:
+        eid=identifier(fact['evidence_id'])
+        if eid==input_evidence_id or eid in expected and expected[eid]!=fact['evidence_digest']:
+            raise AccessDenied('specialist_source_binding_mismatch')
+        expected[eid]=fact['evidence_digest']
+    refs=[dict(ref='case/'+str(case['id']),kind='case_record',record_id=str(case['id']))]
+    rows=[original]
+    for eid,expected_digest in sorted(expected.items(),key=lambda item:str(item[0])):
+        row,_=source(eid)
+        if row['digest']!=expected_digest:
+            raise AccessDenied('specialist_source_binding_mismatch')
+        rows.append(row)
+    refs.extend(dict(ref='evidence/'+str(row['id']),kind='evidence_metadata',record_id=str(row['id']),
+                     digest=row['digest'],source_verified=False,content_integrity='verified') for row in rows)
+    return original,document,refs
+
+
+def run(service,token,case_id,request_id,role,input_evidence_id,*,_admission=None):
     from gabriel.identity.specialists import _replay, public_run
     role=role_name(role)
     request_id,input_evidence_id=identifier(request_id),identifier(input_evidence_id)
@@ -97,6 +132,7 @@ def run(service,token,case_id,request_id,role,input_evidence_id):
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True)
         case=service._case(conn,p,case_id,open_only=True)
+        if _admission is not None: _admission(conn)
         old=_replay(conn,p,case,request_id,role)
         if old:
             if old['packet'].get('input_evidence_id')!=str(input_evidence_id):
@@ -107,37 +143,7 @@ def run(service,token,case_id,request_id,role,input_evidence_id):
                        (p.organization_id,case['id'])).fetchone()['n']
         if n>=128:
             raise AccessDenied('case_specialist_run_limit')
-        def source(eid):
-            row=service._evidence(conn,p,eid)
-            if row['case_id']!=case['id']:
-                raise AccessDenied('specialist_source_case_mismatch')
-            if row['source_kind']=='model_generated_text' or conn.execute('''SELECT 1 FROM gabriel_identity.model_answer_intents
-                WHERE organization_id=%s AND ingestion_id=%s''',(p.organization_id,row['ingestion_id'])).fetchone():
-                raise AccessDenied('model_answer_is_not_specialist_source')
-            body=service._verify(conn,row)
-            service._custody(conn,p,row,'accessed')
-            return row,body
-        original,body=source(input_evidence_id)
-        try:
-            document=decode(body.decode('utf-8'))
-        except (ValueError,UnicodeError,RecursionError):
-            raise InvalidIdentityInput('invalid_specialist_facts') from None
-        validate_document(document,case['id'])
-        expected={}
-        for fact in document['facts']:
-            eid=identifier(fact['evidence_id'])
-            if eid==input_evidence_id or eid in expected and expected[eid]!=fact['evidence_digest']:
-                raise AccessDenied('specialist_source_binding_mismatch')
-            expected[eid]=fact['evidence_digest']
-        refs=[dict(ref='case/'+str(case['id']),kind='case_record',record_id=str(case['id']))]
-        rows=[original]
-        for eid,expected_digest in sorted(expected.items(),key=lambda item:str(item[0])):
-            row,_=source(eid)
-            if row['digest']!=expected_digest:
-                raise AccessDenied('specialist_source_binding_mismatch')
-            rows.append(row)
-        refs.extend(dict(ref='evidence/'+str(row['id']),kind='evidence_metadata',record_id=str(row['id']),
-                         digest=row['digest'],source_verified=False,content_integrity='verified') for row in rows)
+        original,document,refs=verified_input(service,conn,p,case,input_evidence_id)
         packet=dict(schema_version=2,purpose='specialist-input-v2',contract_version=CONTRACT,role=role,
             organization_id=str(p.organization_id),case_id=str(case['id']),
             generated_at=iso(conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']),references=refs,

@@ -291,15 +291,15 @@ class Workbench:
                 body+=self._form(path+'/reset','Reset all organization memory retrieval','<input type="hidden" name="epoch" value="'+str(history['current_epoch'])+'"><p>This removes all current reference retrieval for the organization; source evidence is retained.</p>')
             body+='<p>Showing up to 128 latest applicable records.'+(' Older records are omitted.' if history['truncated'] else '')+'</p>'
             return '200 OK',self._page('Memory review',body,principal),[]
-        coordinator=re.fullmatch('/cases/('+ID+')/coordinator(?:/(new|'+ID+')(?:/(next|stop))?)?',path)
+        coordinator=re.fullmatch('/cases/('+ID+')/coordinator(?:/(new|'+ID+')(?:/(next|run|stop))?)?',path)
         if coordinator:
             case_id,run_id,operation=coordinator.groups()
             path='/cases/'+case_id+'/coordinator'
             case=self.service.get_case(self._token,case_id)['case']
             if run_id=='new':
-                if method!='POST' or operation or set(fields)!={'csrf','request_id'}:
+                if method!='POST' or operation or set(fields) not in ({'csrf','request_id'},{'csrf','request_id','input_evidence_id'}):
                     raise AccessDenied('invalid_coordinator_form')
-                run=self.service.begin_coordinator(self._token,case_id,fields['request_id'])
+                run=self.service.begin_coordinator(self._token,case_id,fields['request_id'],input_evidence_id=fields.get('input_evidence_id'))
                 return '303 See Other',b'',[('Location',path+'/'+run['id'])]
             run=None
             if run_id:
@@ -307,12 +307,13 @@ class Workbench:
                 if run['case_id']!=case_id: raise AccessDenied('coordinator_case_mismatch')
             if method=='POST':
                 expected={'csrf','sequence'} if operation=='next' else {'csrf'}
-                if not run or operation not in {'next','stop'} or set(fields)!=expected:
+                if not run or operation not in {'next','run','stop'} or set(fields)!=expected:
                     raise AccessDenied('invalid_coordinator_form')
-                if operation=='next':
-                    if fields['sequence'] not in {'1','2'}: raise AccessDenied('invalid_coordinator_form')
+                if operation in {'next','run'}:
+                    if operation=='next' and fields['sequence'] not in {str(n) for n in range(1,run['max_steps']+1)}: raise AccessDenied('invalid_coordinator_form')
                     try:
-                        self.service.advance_coordinator(self._token,run_id,expected_sequence=int(fields['sequence']))
+                        if operation=='run': self.service.complete_coordinator(self._token,run_id)
+                        else: self.service.advance_coordinator(self._token,run_id,expected_sequence=int(fields['sequence']))
                     except AccessDenied as error:
                         if str(error)!='coordinator_source_scope_changed': raise
                         body='<p>The evidence set changed. This plan cannot continue. Stop it and create a new plan for the current evidence.</p><p><a href="'+path+'/'+run_id+'">Review this plan</a> · <a href="'+path+'">Local plan history</a></p>'
@@ -322,7 +323,7 @@ class Workbench:
             if method!='GET' or operation: raise AccessDenied('workbench_route_denied')
             labels={'pending_local_steps':'Waiting for the next local step','local_plan_complete':'Local checks complete',
                 'stopped':'Stopped','expired':'Expired','authority_lost':'Creator access changed'}
-            body='<p class="notice">This plan only lists evidence records and checks telemetry coverage. It does not assess an attack or call an AI model. No external action is taken.</p>'
+            body='<p class="notice">The two-step plan does not assess an attack. Twelve-specialist plans review rules over a selected typed facts artifact. Coverage is partial and confidence is unqualified. No AI model or external action is enabled.</p>'
             if run:
                 body+='<p id="coordinator-status">'+e(labels[run['status']])+'</p><p id="coordinator-progress">'+e(run['completed_steps'])+' of '+e(run['max_steps'])+' local steps complete</p><p>Created '+e(run['created_at'])+' · Expires '+e(run['expires_at'])+'</p>'
                 body+='<p>Stored results are historical. Current source availability and access have not been checked by viewing this page. They are checked again when a step runs. A changed evidence set requires a new plan.</p>'
@@ -331,8 +332,12 @@ class Workbench:
                     body+=self._form(path+'/'+run_id+'/stop','Stop this plan')
                 if controllable and case['state']=='open' and run['status']=='pending_local_steps':
                     body+=self._form(path+'/'+run_id+'/next','Run next local step','<input type="hidden" name="sequence" value="'+str(run['completed_steps']+1)+'">')
+                    if run['input_evidence_id']:
+                        body+=self._form(path+'/'+run_id+'/run','Run remaining specialist reviews','<p>Runs up to twelve local reviews. Access, Stop and evidence scope are checked between reviews.</p>')
+                if run['input_evidence_id']:
+                    body+='<p>Typed facts artifact <a href="/cases/'+case_id+'/evidence/'+e(run['input_evidence_id'])+'">'+e(run['input_evidence_id'])+'</a></p>'
                 for step in run['steps']:
-                    name={'evidence_inventory':'Evidence record inventory','telemetry_health':'Telemetry coverage check'}[step['operation']]
+                    name={'evidence_inventory':'Evidence record inventory','telemetry_health':'Telemetry coverage check'}.get(step['operation'],step['operation'].replace('_',' ').title())
                     state='Complete' if step['completed_at'] else 'Interrupted or in progress; safe to retry' if step['claimed_at'] else 'Waiting'
                     body+='<section><h2>'+e(name)+'</h2><p>'+e(state)+'</p>'
                     if step['result'] is not None:
@@ -341,12 +346,16 @@ class Workbench:
                             body+='<p>Content integrity was not checked. Source authenticity and independent corroboration remain unverified.</p>'
                             body+=table(['Evidence record','Stored checksum'],[('<a href="/cases/'+case_id+'/evidence/'+e(item['evidence_id'])+'">'+e(item['evidence_id'])+'</a>',e(item['digest'])) for item in step['result']['sources']])
                         else:
-                            body+='<p><a href="/cases/'+case_id+'/specialists/'+e(step['result']['specialist_id'])+'">Review telemetry assessment</a></p>'
+                            body+='<p><a href="/cases/'+case_id+'/specialists/'+e(step['result']['specialist_id'])+'">'+('Review specialist assessment' if run['input_evidence_id'] else 'Review telemetry assessment')+'</a></p>'
                     body+='</section>'
                 body+='<p>Evidence set checksum '+e(run['source_digest'])+'</p><p><a href="'+path+'">Local plan history</a></p>'
             else:
                 if principal.role!='viewer' and case['state']=='open':
                     body+=self._form(path+'/new','Create local plan','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><p>Two steps maximum. Expires after fifteen minutes. Each step runs only when you request it.</p>')
+                    evidence=self.service.get_case(self._token,case_id)['evidence']
+                    options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in evidence if row['state']=='ready' and row['storage_state']=='active')
+                    if options:
+                        body+=self._form(path+'/new','Create twelve-specialist plan','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Typed facts artifact<select name="input_evidence_id" required>'+options+'</select></label><p>Select an approved specialist-facts-v1 artifact with source evidence in this case. Unsupported formats are rejected.</p>')
                 history=self.service.list_coordinator_runs(self._token,case_id)
                 body+=table(['Created','Status','Progress'],[('<a href="'+path+'/'+e(row['id'])+'">'+e(row['created_at'])+'</a>',e(labels[row['status']]),e(str(row['completed_steps'])+' of '+str(row['max_steps']))) for row in history['runs']]) if history['runs'] else '<p>No local plans recorded.</p>'
                 body+='<p>Showing up to 32 most recent plans.'+(' Older plans are omitted.' if history['truncated'] else '')+'</p>'
