@@ -204,7 +204,7 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             assert answer['state']=='human_answer_supplied' and not answer['source_verified'] and answer['evidence_id']
             mark(family+':workbench-specialist')
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/specialists'},session)
-            loaded("document.title==='Telemetry assessments · Gabriel'")
+            loaded("document.title==='Specialist assessments · Gabriel'")
             cdp.evaluate(session,"document.querySelector('form[action$=specialists]').requestSubmit();true")
             loaded("document.getElementById('specialist-attack-status')?.textContent==='Attacker status: unknown'")
             runs=service.list_specialist_runs(human,case['id'])['runs']

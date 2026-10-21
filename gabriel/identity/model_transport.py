@@ -16,7 +16,7 @@ class OpenRouterTransport:
     def __repr__(self): return '<OpenRouterTransport credential=redacted>'
 
     def request(self,method,path,payload=None):
-        if (method,path) not in {('GET','/api/v1/key'),('GET','/api/v1/endpoints/zdr'),('POST','/api/v1/chat/completions')}:
+        if (method,path) not in {('GET','/api/v1/key'),('GET','/api/v1/credits'),('GET','/api/v1/endpoints/zdr'),('POST','/api/v1/chat/completions')}:
             raise ProbeError('model_transport_endpoint_denied')
         if (method=='POST')!=(payload is not None): raise ProbeError('model_transport_payload_denied')
         body=canonical(payload) if payload is not None else None

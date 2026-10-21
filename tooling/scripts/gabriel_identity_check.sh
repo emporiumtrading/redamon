@@ -59,8 +59,6 @@ docker image inspect gabriel-identity:dev --format '{{.Id}}' > "$report_dir/iden
 "${compose[@]}" up -d --wait identity-db
 "${compose[@]}" exec -T identity-db postgres --version > "$report_dir/postgres-version.txt"
 "${compose[@]}" run --rm --no-deps -T identity-admin migrate
-"${compose[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" \
-    -v "$report_dir:/evidence" identity-tests --report /evidence/identity-tests.json
 "${compose[@]}" exec -T identity-db createdb -U postgres gabriel_checkpoint
 for phase in before after; do
     if [[ "$phase" == after ]]; then
@@ -84,4 +82,6 @@ cp -a "$work_dir/object-backup" "$work_dir/restored-objects"
     -v "$work_dir/checkpoint:/checkpoint" -v "$work_dir/restored-objects:/objects" \
     -e GABRIEL_EVIDENCE_ROOT=/objects --entrypoint python identity-tests \
     testing/gabriel_identity/restart_probe.py restored
+"${compose[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" \
+    -v "$report_dir:/evidence" identity-tests --report /evidence/identity-tests.json
 printf '%s\n' 'PASS: identity integration and PostgreSQL restart checks complete; disposable database cleaned on exit.'

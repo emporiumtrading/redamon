@@ -45,6 +45,12 @@ def boot(tenant,cases,tmp_path,monkeypatch,request):
         keys={k:base64.b64encode(v).decode() for k,v in ring._keys.items()}))
     monkeypatch.setenv('GABRIEL_EVIDENCE_KEYRING_FILE',str(keys))
     monkeypatch.setenv('GABRIEL_EVIDENCE_ROOT',str(cases.store.root))
+    from testing.gabriel_identity.test_vault_integration import fresh_ring
+    provider_ring=fresh_ring()
+    provider_keys=tmp_path/'provider-keyring.json'
+    write_document(provider_keys,dict(schema_version=1,generation=provider_ring.generation,active=provider_ring.active,
+        keys={k:base64.b64encode(v).decode() for k,v in provider_ring._keys.items()}))
+    monkeypatch.setenv('GABRIEL_PROVIDER_KEYRING_FILE',str(provider_keys))
     return dict(directory=directory,port=port,target=target,ticket=read_document(directory/'claim.json',private=True)['ticket'],tls=certificates(tmp_path))
 
 
@@ -95,6 +101,53 @@ def connect(server):
     code,_,headers=call(server,'/claim',dict(csrf=token,ticket=server['ticket']))
     assert code==303
     return headers['Set-Cookie'].split(';',1)[0],token,headers
+
+
+def test_customer_provider_screen_stores_nvidia_privately_and_requires_csrf(tenant,server):
+    cookie,token,_=connect(server)
+    code,html,_=call(server,'/providers',cookie=cookie)
+    assert code==200 and 'Your AI keys' in html and '$18 account credit' in html
+    assert 'type="password" name="api_key"' in html and 'no shared API key' in html
+    value='generated-workbench-key-'+secrets.token_urlsafe(32)
+    fields=dict(csrf='wrong',provider='nvidia',api_key=value)
+    assert call(server,'/providers/save',fields,cookie=cookie)[0]==403
+    fields['csrf']=token
+    code,body,headers=call(server,'/providers/save',fields,cookie=cookie)
+    assert code==303 and headers['Location']=='/providers' and value not in body+repr(headers)
+    code,html,_=call(server,'/providers',cookie=cookie)
+    assert code==200 and 'validation pending' in html and value not in html
+    with owner_connection(tenant.db) as conn:
+        row=conn.execute("SELECT * FROM gabriel_identity.provider_secrets WHERE organization_id=%s AND provider='nvidia'",(tenant.org,)).fetchone()
+    assert row and value.encode() not in bytes(row['ciphertext'])
+    assert call(server,'/providers/revoke',dict(csrf=token,provider='nvidia'),cookie=cookie)[0]==303
+    assert 'revoked' in call(server,'/providers',cookie=cookie)[1]
+
+
+def test_twelve_role_selector_persists_typed_review_and_shows_uncertainty(tenant,cases,case,evidence,server):
+    from testing.gabriel_identity.test_specialist_analysis_integration import intake
+    _,holder=intake(tenant,cases,case,evidence)
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/specialists'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'Specialist assessments' in html
+    from gabriel.identity.specialist_contracts import ROLES
+    assert all('value="'+role+'"' in html for role in ROLES)
+    fields=dict(csrf=token,request_id=str(uuid4()),role='alert_triage',input_evidence_id=str(holder['id']))
+    code,_,headers=call(server,path,fields,cookie=cookie)
+    assert code==303
+    code,html,_=call(server,headers['Location'],cookie=cookie)
+    assert code==200 and 'urgent review' in html and 'Attacker status: unknown' in html
+    assert 'Hypotheses for review' in html and 'Alternative explanation' in html and 'Uncertainty' in html
+    runs=cases.list_specialist_runs(tenant.token,case['id'])['runs']
+    assert len(runs)==1 and runs[0]['role']=='alert_triage'
+
+
+@pytest.mark.parametrize('boot',['viewer'],indirect=True)
+def test_provider_forms_are_hidden_and_denied_for_viewer(server):
+    cookie,token,_=connect(server)
+    assert 'Your AI keys' not in call(server,'/cases',cookie=cookie)[1]
+    assert call(server,'/providers',cookie=cookie)[0]==403
+    assert call(server,'/providers/save',dict(csrf=token,provider='nvidia',api_key='generated-key'),cookie=cookie)[0]==403
 
 
 def test_spending_screen_changes_real_limits_and_pauses_reservations(tenant,server):
@@ -317,7 +370,7 @@ def test_telemetry_specialist_forms_persist_history_with_csrf_and_role_checks(te
     cookie,token,_=connect(server)
     path='/cases/'+str(case['id'])+'/specialists'
     code,html,_=call(server,path,cookie=cookie)
-    assert code==200 and 'No telemetry assessments recorded' in html
+    assert code==200 and 'No specialist assessments recorded' in html
     request=re.search(r'name="request_id" value="([0-9a-f-]+)"',html)[1]
     fields=dict(csrf=token,request_id=request,role='telemetry_health')
     assert call(server,path,dict(fields,csrf='bad'),cookie=cookie)[0]==403

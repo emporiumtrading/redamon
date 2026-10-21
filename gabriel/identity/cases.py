@@ -95,9 +95,9 @@ class CaseService(IdentityService):
         from gabriel.identity.memory import reset
         return reset(self,token,expected_epoch)
 
-    def run_specialist(self,token,case_id,request_id,role):
+    def run_specialist(self,token,case_id,request_id,role,*,input_evidence_id=None):
         from gabriel.identity.specialists import run_specialist
-        return run_specialist(self,token,case_id,request_id,role)
+        return run_specialist(self,token,case_id,request_id,role,input_evidence_id=input_evidence_id)
 
     def get_specialist_run(self,token,case_id,run_id):
         from gabriel.identity.specialists import get_run

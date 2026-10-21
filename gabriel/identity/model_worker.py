@@ -17,12 +17,13 @@ from gabriel.identity.model_transport import OpenRouterTransport
 from gabriel.identity.model_protocol import PROMPT_V2 as PROMPT,ProbeError,budget_check,decode,money
 from gabriel.identity.service import AccessDenied,_audit,connection,identifier
 from gabriel.identity.vault import ProviderVault
+from gabriel.identity.provider_onboarding import CustomerProviders,require_checked,dispatch_credit
 
 QUESTION='Assess only the supplied partial typed observations. Disclose missing context and source uncertainty.'
 
 
 def configuration(model):
-    return dict(version='restricted-model-worker-v2',model=model,
+    return dict(version='restricted-model-worker-v3',model=model,
                 route_registry_version=model_routes.VERSION,expected_provider=model_routes.ROUTES[model][0],
                 prompt_digest=sha256(PROMPT.encode()).hexdigest(),
                 projection_version='typed-telemetry-minimization-v1',
@@ -120,10 +121,13 @@ class ModelWorker:
                 or quote['input_microusd_per_million']!=500000
                 or quote['output_microusd_per_million']!=3000000):
             raise AccessDenied('model_worker_reservation_binding_mismatch')
-        client=OpenRouterTransport(self.vault.resolve_for_backend(token,'openrouter'))
+        credential,credential_binding=CustomerProviders(self.vault).resolve(token,'openrouter')
+        client=OpenRouterTransport(credential)
         model_routes.eligible(client.request('GET','/api/v1/endpoints/zdr'),quote['model'])
         budget_check(client.request('GET','/api/v1/key').get('data'))
+        dispatch_credit(client.request('GET','/api/v1/credits'),held['reserved_microusd'])
         def guard(conn,p):
+            require_checked(conn,p,'openrouter',expected=credential_binding)
             job=investigation(conn,p,held['investigation_id'],active=True)
             self._scope(conn,p,run_id,job['case_id'])
             self._verify_sources(conn,p,identifier(evidence_id),prepared)

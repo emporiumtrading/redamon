@@ -34,7 +34,7 @@ def test_empty_run_persists_replays_and_never_invents_detection(tenant,cases,cas
     raw=json.dumps(run)
     assert all(secret not in raw for secret in (CONTENT,tenant.token,tenant.db.app,str(cases.store.root),cases.store.keys.active))
     contracts=catalog()
-    assert len(contracts)==12 and sum(row['engine'] is not None for row in contracts)==1
+    assert len(contracts)==12 and sum(row['engine'] is not None for row in contracts)==12
     assert all(not row['model_enabled'] and not row['external_actions_enabled'] for row in contracts)
 
 
