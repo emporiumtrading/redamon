@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Gabriel — The Defender",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minimum_chrome_version": "120",
-  "description": "Share reviewed text from an explicitly selected security-console page with Gabriel.",
+  "description": "Share selected console evidence and run explicitly approved, bounded section tours with Gabriel.",
   "permissions": ["activeTab", "scripting", "storage"],
   "optional_host_permissions": ["https://*/*"],
   "background": {"service_worker": "worker.js", "type": "module"},

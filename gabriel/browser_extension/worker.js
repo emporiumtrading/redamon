@@ -1,8 +1,10 @@
 import {inspectPage} from "./collector.js";
+import {inspectNavigationIdentity, validatePlan} from "./navigator.js";
 
 const trusted = chrome.runtime.getURL("popup.html");
 let busy = false;
 let generation = 0;
+let expectedMove = null;
 const inflight = new Set();
 const ready = Promise.all([
   chrome.storage.session.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"}),
@@ -70,6 +72,7 @@ async function request(session, operation, body) {
 
 async function stop() {
   generation++;
+  expectedMove = null;
   for (const controller of inflight) controller.abort();
   const {session} = await chrome.storage.session.get("session");
   await chrome.storage.session.clear();
@@ -79,13 +82,13 @@ async function stop() {
 }
 
 async function handle(message) {
-  if (!message || typeof message !== "object" || !["state","select","pair","preview","share","status","receipts","pause","resume","stop"].includes(message.operation)) throw new Error("Unsupported operation.");
+  if (!message || typeof message !== "object" || !["state","select","pair","preview","share","status","receipts","pause","resume","stop","navigation-plan","navigation-run"].includes(message.operation)) throw new Error("Unsupported operation.");
   if (message.operation === "stop") return stop();
   if (message.operation === "state") {
-    const {selected, session, paused} = await chrome.storage.session.get(["selected","session","paused"]);
-    return {context: selected, extension_origin: "chrome-extension://" + chrome.runtime.id, stored_pairing: !!session, paused: !!paused,
+    const {selected, session, paused, navigation, tour} = await chrome.storage.session.get(["selected","session","paused","navigation","tour"]);
+    return {context: selected, extension_origin: "chrome-extension://" + chrome.runtime.id, stored_pairing: !!session, paused: !!paused || !!navigation,
       expires_at: session?.expires_at, organization_id: session?.organization_id, case_id: session?.case_id, task_id: session?.task_id,
-      message: session ? "Stored pairing; check live scope before sharing." : "Disconnected. Nothing is shared."};
+      tour, message: navigation ? "Navigation outcome unresolved. Stop and pair again; no automatic repeat is permitted." : session ? "Stored pairing; check live scope before sharing." : "Disconnected. Nothing is shared."};
   }
   if (message.operation === "pause") {
     generation++;
@@ -96,6 +99,7 @@ async function handle(message) {
   if (busy) throw new Error("Another operation is in progress.");
   busy = true;
   const revision = generation;
+  let tourStarted = false;
   try {
     if (message.operation === "select") {
       await stop();
@@ -113,7 +117,7 @@ async function handle(message) {
       await persist({selected: context}, selectionRevision);
       return {context, extension_origin: "chrome-extension://" + chrome.runtime.id};
     }
-    const {selected, session, pending, paused} = await chrome.storage.session.get(["selected","session","pending","paused"]);
+    let {selected, session, pending, paused, navigation, reviewed_plan} = await chrome.storage.session.get(["selected","session","pending","paused","navigation","reviewed_plan"]);
     if (!selected) throw new Error("Select and approve a page first.");
     if (message.operation === "pair") {
       await current(selected);
@@ -132,7 +136,77 @@ async function handle(message) {
         organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id};
     }
     if (!session || Date.parse(session.expires_at) <= Date.now()) throw new Error("Pairing is missing or expired. Obtain fresh approval.");
-    if (paused && ["preview","share"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
+    if (navigation) throw new Error("Navigation outcome unresolved. Stop and pair again before continuing.");
+    if (paused && ["preview","share","navigation-plan","navigation-run"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
+    if (message.operation === "navigation-plan" || message.operation === "navigation-run") {
+      if (pending) throw new Error("Previous capture outcome is unconfirmed. Inspect receipts first.");
+      await current(selected);
+      await request(session, "heartbeat", {context: wireContext(selected)});
+      const plan = await request(session, "navigation-plan", {context: wireContext(selected)});
+      const signature = validatePlan(plan, selected);
+      await navigationIdentity(selected.tab_id, selected.page_url, selected.account_label);
+      stillCurrent(revision);
+      if (message.operation === "navigation-plan") {
+        await persist({reviewed_plan: signature}, revision);
+        return {plan, message: "Review the assigned sections and approve navigation and automatic minimized-text sharing once for this tour."};
+      }
+      if (message.approved !== true || reviewed_plan !== signature || !session.sharing_approved)
+        throw new Error("Review the current plan and explicitly approve navigation and sharing first.");
+      tourStarted = true;
+      await chrome.storage.session.remove("reviewed_plan");
+      const tour = {plan_id: plan.id, sections: [], state: "running"};
+      await persist({tour}, revision);
+      for (const destination of plan.destinations) {
+        stillCurrent(revision);
+        if (Date.parse(plan.expires_at) <= Date.now()) throw new Error("Navigation grant expired. Stop and pair again.");
+        await current(selected);
+        let intent = null;
+        if (destination !== selected.page_url) {
+          const requestId = crypto.randomUUID();
+          await persist({navigation: {request_id: requestId, destination_url: destination, state: "preparing"}}, revision);
+          intent = await request(session, "navigation-prepare", {context: wireContext(selected), request_id: requestId, destination_url: destination});
+          if (intent.state !== "prepared" || intent.destination_url !== destination || typeof intent.id !== "string" ||
+              !Number.isFinite(Date.parse(intent.expires_at)) || Date.parse(intent.expires_at) <= Date.now() ||
+              !intent.source_context || Object.keys(intent.source_context).length !== Object.keys(selected).length ||
+              Object.keys(wireContext(selected)).some(key => wireContext(selected)[key] !== intent.source_context[key]))
+            throw new Error("Navigation intent does not match the approved source and destination.");
+          await persist({navigation: {intent_id: intent.id, destination_url: destination, state: "prepared"}}, revision);
+          stillCurrent(revision);
+          expectedMove = {tab_id: selected.tab_id, source: selected.page_url, destination, revision};
+          await chrome.tabs.update(selected.tab_id, {url: destination});
+          stillCurrent(revision);
+          const identity = await waitForDestination(selected, destination, Math.min(Date.parse(intent.expires_at), Date.now() + 10000), revision);
+          const next = {...selected, page_url: destination, document_id: identity.document_id};
+          const completed = await request(session, "navigation-complete", {intent_id: intent.id, context: wireContext(next)});
+          if (!completed.current || Object.keys(wireContext(next)).some(key => completed.context?.[key] !== wireContext(next)[key]))
+            throw new Error("Navigation completion is unconfirmed. Stop and inspect the receipt.");
+          stillCurrent(revision);
+          selected = next;
+          session.context = next;
+          await persist({selected, session}, revision);
+          await chrome.storage.session.remove("navigation");
+          expectedMove = null;
+        }
+        await navigationIdentity(selected.tab_id, selected.page_url, selected.account_label);
+        await request(session, "heartbeat", {context: wireContext(selected)});
+        const view = await current(selected, true);
+        const payload = {schema_version: 1, operation: "browser.observe", request_id: crypto.randomUUID(), sequence: session.sequence + 1,
+          context: wireContext(selected), observed_at: new Date().toISOString(), visibility: "partial", client_minimized: true, content: view.content};
+        await persist({pending: {request_id: payload.request_id, sequence: payload.sequence}}, revision);
+        await current(selected);
+        stillCurrent(revision);
+        const receipt = await request(session, "observe", payload);
+        stillCurrent(revision);
+        session.sequence++;
+        tour.sections.push({page_url: selected.page_url, intent_id: intent?.id, observation_id: receipt.observation_id, evidence_id: receipt.evidence_id});
+        await persist({session, tour}, revision);
+        await chrome.storage.session.remove("pending");
+      }
+      tour.state = "complete";
+      await persist({tour}, revision);
+      return {tour, context: selected, extension_origin: "chrome-extension://" + chrome.runtime.id,
+        message: "Approved section tour complete. " + tour.sections.length + " encrypted evidence receipts confirmed."};
+    }
     if (message.operation === "receipts") {
       await current(selected);
       const result = await request(session, "receipts", {context: wireContext(selected)});
@@ -171,6 +245,7 @@ async function handle(message) {
     await chrome.storage.session.remove("pending");
     return {message: "Encrypted evidence receipt confirmed.", receipt};
   } catch (error) {
+    if (tourStarted) await stop();
     throw new Error(error instanceof Error ? error.message : "Operation failed. Visibility is unconfirmed.");
   } finally { busy = false; }
 }
@@ -186,7 +261,33 @@ chrome.tabs.onRemoved.addListener(async tabId => {
   if (selected?.tab_id === tabId) await stop();
 });
 chrome.tabs.onUpdated.addListener(async (tabId, change) => {
+  const expected = expectedMove;
   const {selected} = await chrome.storage.session.get("selected");
-  if (selected?.tab_id === tabId && (change.url || change.status === "loading")) await stop();
+  if (selected?.tab_id !== tabId || (!change.url && change.status !== "loading")) return;
+  if (expected?.tab_id === tabId && expected.revision === generation &&
+      (!change.url || change.url === expected.source || change.url === expected.destination)) return;
+  if (!change.status && change.url === selected.page_url) return;
+  await stop();
 });
 chrome.permissions.onRemoved.addListener(() => stop());
+
+async function navigationIdentity(tabId, pageURL, account) {
+  const tab = await chrome.tabs.get(tabId);
+  if (tab.incognito || safeURL(tab.url) !== pageURL) throw new Error("Navigation left its assigned page.");
+  const results = await chrome.scripting.executeScript({target: {tabId, frameIds: [0]}, func: inspectNavigationIdentity, args: [account]});
+  const result = results[0];
+  if (results.length !== 1 || result.frameId !== 0 || result.result?.page_url !== pageURL || result.result.account_label !== account || !result.documentId)
+    throw new Error("Navigation document or account is unconfirmed.");
+  return {document_id: result.documentId};
+}
+
+async function waitForDestination(selected, destination, deadline, revision) {
+  while (Date.now() < deadline) {
+    stillCurrent(revision);
+    const tab = await chrome.tabs.get(selected.tab_id);
+    if (tab.incognito || ![selected.page_url, destination].includes(tab.url)) throw new Error("Unexpected navigation. Stop and pair again.");
+    if (tab.url === destination && tab.status === "complete") return navigationIdentity(selected.tab_id, destination, selected.account_label);
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  throw new Error("Navigation timed out. Stop and pair again; no automatic repeat is permitted.");
+}

@@ -53,6 +53,17 @@ def public_intent(row,committed=False):
 
 
 class BrowserNavigationService(BrowserObservationService):
+    def navigation_plan(self,human,peer,context):
+        with connection(self._dsn) as conn:
+            p,lease=self._actor(conn,human,peer)
+            self._browser_context(lease,context)
+            grant,_=self._grant(conn,p,lease)
+            if pending_navigation(conn,p.organization_id,lease['id']):
+                raise AccessDenied('navigation_outcome_unresolved')
+            _audit(conn,'browser.navigation_plan_read',p,grant['id'])
+            return dict(id=str(grant['id']),contract_version=grant['contract_version'],destinations=grant['destinations'],
+                max_moves=grant['max_moves'],expires_at=iso(grant['expires_at']),sharing_approved=lease['intake_enabled'],source_verified=False)
+
     def gateway_context(self,conn,p,lease,initial_context):
         current=context_of(lease)
         if current==initial_context: return current
