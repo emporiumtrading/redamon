@@ -18,7 +18,7 @@ COPY gabriel/identity/case_workflow.py gabriel/identity/schema_v13.sql /app/gabr
 COPY gabriel/identity/case_graph.py /app/gabriel/identity/
 COPY gabriel/identity/specialists.py gabriel/identity/specialist_contracts.py gabriel/identity/schema_v14.sql /app/gabriel/identity/
 COPY gabriel/identity/memory.py gabriel/identity/schema_v15.sql /app/gabriel/identity/
-COPY gabriel/identity/model_evaluation.py /app/gabriel/identity/
+COPY gabriel/identity/model_evaluation.py gabriel/identity/model_protocol.py gabriel/identity/model_routes.py gabriel/identity/model_transport.py gabriel/identity/model_worker.py /app/gabriel/identity/
 COPY gabriel/identity/model_input.py /app/gabriel/identity/
 COPY gabriel/identity/coordinator.py gabriel/identity/schema_v17.sql /app/gabriel/identity/
 COPY gabriel/identity/model_budget.py gabriel/identity/budget_cli.py gabriel/identity/schema_v16.sql /app/gabriel/identity/
@@ -38,7 +38,7 @@ COPY testing/gabriel_model_lab/ /repo/testing/gabriel_model_lab/
 COPY gabriel/browser_extension/ /repo/gabriel/browser_extension/
 COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
 COPY gabriel/identity/checkpoint_cli.py /app/gabriel/identity/
-COPY gabriel/identity/provider_probe.py /app/gabriel/identity/
+COPY gabriel/identity/provider_probe.py gabriel/identity/model_lab.py /app/gabriel/identity/
 RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for p in pathlib.Path('/repo/testing/gabriel_identity').rglob('*.py')]"
 USER 10001:10001
 ENTRYPOINT ["python", "tooling/scripts/pytest_isolated.py", "all", "testing/gabriel_identity", "--strict", "--parallel", "1"]

@@ -1,0 +1,150 @@
+"""Eight exact routes, three pinned development cases; never qualification or production."""
+from decimal import Decimal
+from hashlib import sha256
+import json
+import os
+import sys
+import time
+
+from gabriel.identity.model_evaluation import canonical,digest,load_json,packets,validate_run
+from gabriel.identity.model_routes import ROUTES,RouteError,eligible,parameters
+from gabriel.identity.model_transport import OpenRouterTransport
+from gabriel.identity.model_protocol import PROMPT,ProbeError,decode,money
+
+CORPUS_DIGEST='0fd9f635db6d97c36a6fd9ffb9f7d35ba0f528d638d39dbe82ee7b165cec0a0f'
+CASES=('dev-auth-attack','dev-backup','dev-logout')
+RUN_ALLOWANCE=Decimal('0.16')
+CALL_RESERVATION=Decimal('0.006304')
+
+
+class LabCredential:
+    def __init__(self,value): self._value=value
+    def reveal(self): return self._value
+    def __repr__(self): return '<LabCredential redacted>'
+
+
+def preflight(data):
+    if not isinstance(data,dict) or data.get('is_management_key') is not False or data.get('is_provisioning_key') is not False:
+        raise ProbeError('inference_only_key_required')
+    if data.get('limit') is None or not 0<money(data['limit'])<=18 or data.get('limit_reset')!='monthly':
+        raise ProbeError('monthly_key_limit_required')
+    day=money(data.get('usage_daily'))+money(data.get('byok_usage_daily',0))
+    month=money(data.get('usage_monthly'))+money(data.get('byok_usage_monthly',0))
+    if day+RUN_ALLOWANCE>Decimal('0.50') or month+RUN_ALLOWANCE>18 or money(data.get('limit_remaining'))<RUN_ALLOWANCE:
+        raise ProbeError('comparison_budget_unavailable')
+    return dict(day_used_usd=str(day),month_used_usd=str(month),run_reservation_usd=str(RUN_ALLOWANCE))
+
+
+def body_for(model,packet):
+    body=dict(model=model,messages=[dict(role='system',content=PROMPT),
+              dict(role='user',content=canonical(dict(question=packet['question'],observations=packet['observations'])).decode())],**parameters(model))
+    if len(canonical(body))>7000: raise ProbeError('comparison_input_limit')
+    return body
+
+
+def usage_for(reply,model):
+    if not isinstance(reply,dict) or reply.get('model')!=model or reply.get('provider')!=ROUTES[model][0]:
+        raise ProbeError('unexpected_model_or_provider')
+    usage=reply.get('usage')
+    if not isinstance(usage,dict): raise ProbeError('actual_usage_missing')
+    for key,maximum in [('prompt_tokens',8000),('completion_tokens',768)]:
+        if type(usage.get(key)) is not int or not 0<=usage[key]<=maximum:
+            raise ProbeError('actual_token_limit_exceeded')
+    cost=money(usage.get('cost'))
+    if cost>CALL_RESERVATION: raise ProbeError('actual_call_cost_exceeded')
+    return cost
+
+
+def record_for(reply,model,packet,body,elapsed):
+    cost=usage_for(reply,model)
+    choices=reply.get('choices')
+    if not isinstance(choices,list) or len(choices)!=1 or choices[0].get('finish_reason')!='stop':
+        raise ProbeError('incomplete_provider_answer')
+    message=choices[0].get('message',{})
+    if message.get('tool_calls') or not isinstance(message.get('content'),str): raise ProbeError('invalid_provider_answer')
+    decision=decode(message['content'])
+    config=dict(provider='openrouter',model=model,endpoint_policy='lab-zdr-exact-v1',
+        prompt_sha256=sha256(PROMPT.encode()).hexdigest(),adapter_version='pinned-development-v1',
+        redaction_version='generated-only-v1',compression_version='none-v1',
+        parameters={k:v for k,v in body.items() if k not in {'model','messages'}})
+    run=dict(case_id=packet['case_id'],input_sha256=packet['input_sha256'],configuration_sha256=digest(config),
+        origin='live_provider',generation_id=reply.get('id'),latency_ms=elapsed,cost_usd=float(cost),
+        input_tokens=reply['usage']['prompt_tokens'],output_tokens=reply['usage']['completion_tokens'],decision=decision)
+    validate_run(run,packet)
+    if decision['requested_actions']: raise ProbeError('external_action_requested')
+    return dict(configuration=config,run=run,provider_response_digest=digest(reply))
+
+
+def compare(client,corpus,checkpoint=lambda event:None):
+    if digest(corpus)!=CORPUS_DIGEST: raise ProbeError('pinned_generated_corpus_required')
+    selected={p['case_id']:p for p in packets(corpus,'development') if p['case_id'] in CASES}
+    labels={c['id']:c['label']['acceptable_decisions'] for c in corpus['cases'] if c['id'] in CASES}
+    report=dict(version='bounded-multi-model-lab-v1',results=[],routes=[],failures=[],attempted_calls=0,
+        validated_calls=0,reported_cost_usd='0',unknown_cost_possible=False,quality_qualified=False,production_admission=False,
+        limitations=['Known generated development examples, not sealed holdout or analyst adjudication.',
+                    'Catalog ZDR classification and reported costs are not independent provider/billing attestations.',
+                    'No production data, model activation, tools, retries or automatic fallback.',
+                    'Other account/key consumers are outside this serialized batch accounting.'])
+    total=Decimal(0)
+    for model in ROUTES:
+        try:
+            preflight(client.request('GET','/api/v1/key').get('data'))
+            route=eligible(client.request('GET','/api/v1/endpoints/zdr'),model)
+            report['routes'].append(route)
+        except Exception as error:
+            report['failures'].append(dict(model=model,case_id=None,stage='preflight',reason=error.args[0] if isinstance(error,(ProbeError,RouteError)) else 'preflight_unresolved'))
+            continue
+        for case_id in CASES:
+            packet=selected[case_id]
+            body=body_for(model,packet)
+            if CALL_RESERVATION*(report['attempted_calls']+1)>RUN_ALLOWANCE:
+                raise ProbeError('batch_reservation_exhausted')
+            try:
+                preflight(client.request('GET','/api/v1/key').get('data'))
+            except Exception:
+                report['failures'].append(dict(model=model,case_id=case_id,stage='preflight',reason='comparison_budget_or_key_unavailable'))
+                return report
+            report['attempted_calls']+=1
+            checkpoint(dict(event='dispatch_started',model=model,case_id=case_id,attempted_calls=report['attempted_calls'],
+                            reserved_usd=str(CALL_RESERVATION),unknown_cost_possible=True))
+            started=time.monotonic()
+            try:
+                reply=client.request('POST','/api/v1/chat/completions',body)
+                cost=usage_for(reply,model)
+            except Exception:
+                report['unknown_cost_possible']=True
+                report['failures'].append(dict(model=model,case_id=case_id,stage='dispatch',reason='charge_or_response_unresolved_no_retry'))
+                checkpoint(dict(event='dispatch_unresolved',model=model,case_id=case_id,unknown_cost_possible=True))
+                return report
+            total+=cost
+            report['reported_cost_usd']=str(total)
+            try:
+                result=record_for(reply,model,packet,body,int((time.monotonic()-started)*1000))
+                result['matched_development_label']=result['run']['decision']['disposition'] in labels[case_id]
+                report['results'].append(result)
+                report['validated_calls']+=1
+                checkpoint(dict(event='response_validated',model=model,case_id=case_id,cost_usd=str(cost)))
+            except Exception:
+                report['failures'].append(dict(model=model,case_id=case_id,stage='contract',reason='decision_contract_rejected_known_reported_cost'))
+                checkpoint(dict(event='response_rejected',model=model,case_id=case_id,cost_usd=str(cost),unknown_cost_possible=False))
+                break
+    return report
+
+
+def main():
+    secret=os.environ.pop('OPENROUTER_API_KEY','')
+    def emit(event):
+        raw=canonical(event)
+        if secret and secret.encode() in raw: raise ProbeError('credential_output_rejected')
+        print(raw.decode(),flush=True)
+    try:
+        if sys.argv[1:]: raise ProbeError('comparison_arguments_denied')
+        report=compare(OpenRouterTransport(LabCredential(secret)),load_json('/app/development_corpus.json'),emit)
+        emit(dict(event='comparison_final',report=report))
+        return 2 if report['unknown_cost_possible'] else 0
+    except Exception:
+        emit(dict(event='comparison_unresolved',quality_qualified=False,production_admission=False))
+        return 2
+
+
+if __name__=='__main__': raise SystemExit(main())

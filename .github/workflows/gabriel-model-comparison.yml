@@ -1,0 +1,57 @@
+name: Gabriel bounded multi-model comparison
+on:
+  pull_request:
+    paths:
+      - 'gabriel/identity/model_routes.py'
+      - 'gabriel/identity/model_transport.py'
+      - 'gabriel/identity/model_lab.py'
+      - 'gabriel/model_lab/**'
+      - 'testing/gabriel_identity/test_model_lab.py'
+      - '.github/workflows/gabriel-model-comparison.yml'
+permissions:
+  contents: read
+jobs:
+  software:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: docker build -f gabriel/model_lab/Dockerfile --target test -t gabriel-model-lab-tests .
+      - run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m gabriel-model-lab-tests
+  live-generated-comparison:
+    needs: software
+    if: github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/gabriel-model-worker'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: gabriel-live-openrouter-key
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: docker build -f gabriel/model_lab/Dockerfile --target runtime -t gabriel-model-lab .
+      - name: One authorized generated-data batch; no retries or fallback
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          status=0
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 -e OPENROUTER_API_KEY gabriel-model-lab > "$RUNNER_TEMP/gabriel-model-comparison.jsonl" || status=$?
+          python - "$RUNNER_TEMP/gabriel-model-comparison.jsonl" <<'PY'
+          import json,sys
+          rows=[json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+          final=rows[-1] if rows else {}
+          report=final.get('report',{})
+          print(json.dumps({k:report.get(k) for k in ['attempted_calls','validated_calls','reported_cost_usd','unknown_cost_possible','quality_qualified','production_admission']}))
+          PY
+          exit "$status"
+      - name: Retain generated-only checkpoint journal and final results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-generated-model-comparison
+          path: ${{ runner.temp }}/gabriel-model-comparison.jsonl
+          if-no-files-found: error
+          retention-days: 14
