@@ -14,12 +14,13 @@ from urllib.parse import urlsplit
 
 from gabriel.identity.browser_sessions import approved_context,browser_digest
 from gabriel.identity.browser_observations import BrowserObservationService
+from gabriel.identity.browser_navigation import BrowserNavigationService
 from gabriel.identity.checkpoints import read_document,write_document,_unique,_invalid_number
 from gabriel.identity.cli import read_secret
 from gabriel.identity.service import AccessDenied,IdentityError,IdentityUnavailable,_digest,connection
 
 MAX_BODY = 262144
-OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect'}
+OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-prepare','navigation-complete'}
 
 
 def endpoint(value):
@@ -78,6 +79,7 @@ class BrowserGateway:
         self._human=human_token
         self._peer=peer_token
         self.context=approved_context(configuration['context'])
+        self._initial_context=dict(self.context)
         self.target=endpoint(configuration['endpoint'])
         self.origin=extension_origin(configuration['extension_origin'])
         self.lease_id=configuration['lease_id']
@@ -90,16 +92,20 @@ class BrowserGateway:
         self._window=time.monotonic()
         self._calls=0
 
-    def _bound(self,*,pending=False):
+    def _bound(self,*,pending=False,sync_context=True):
         with connection(self.service._dsn) as conn:
             p=self.service._principal(conn,self._human)
             hint=conn.execute('SELECT organization_id,human_session_digest FROM gabriel_identity.browser_leases WHERE token_digest=%s',
                 (browser_digest(self._peer),)).fetchone()
             if not hint or hint['organization_id']!=p.organization_id or hint['human_session_digest']!=_digest(self._human):
                 raise AccessDenied('gateway_original_session_required')
-            _,lease=self.service._browser(conn,self._peer,pending=pending)
+            principal,lease=self.service._browser(conn,self._peer,pending=pending)
             if str(lease['id'])!=self.lease_id:
                 raise AccessDenied('gateway_lease_mismatch')
+            if sync_context:
+                if isinstance(self.service,BrowserNavigationService):
+                    self.context=self.service.gateway_context(conn,principal,lease,self._initial_context)
+                else: self.service._browser_context(lease,self.context)
             return lease
 
     def dispatch(self,operation,body,authorization):
@@ -125,12 +131,23 @@ class BrowserGateway:
                     case_id=str(lease['case_id']),task_id=str(lease['task_id']))
             if not self._claimed or not isinstance(authorization,str) or not hmac.compare_digest(authorization,'Bearer '+self._peer):
                 raise AccessDenied('gateway_peer_required')
-            self._bound()
+            self._bound(sync_context=operation!='disconnect')
             if operation=='disconnect':
                 if body!={}: raise ValueError('invalid_disconnect')
                 self.service.disconnect_browser(self._peer)
                 self._claimed=False
                 return {'disconnected':True}
+            if operation in {'navigation-prepare','navigation-complete'}:
+                if not isinstance(self.service,BrowserNavigationService):
+                    raise AccessDenied('navigation_service_required')
+                if operation=='navigation-prepare':
+                    if set(body)!={'context','request_id','destination_url'} or approved_context(body['context'])!=self.context:
+                        raise AccessDenied('gateway_scope_changed')
+                    return self.service.prepare_navigation(self._human,self._peer,body['request_id'],body['destination_url'])
+                if set(body)!={'intent_id','context'}: raise ValueError('invalid_navigation_completion')
+                result=self.service.complete_navigation(self._human,self._peer,body['intent_id'],body['context'])
+                self._bound()
+                return result
             if operation=='observe':
                 if body.get('context')!=self.context: raise AccessDenied('gateway_scope_changed')
                 return self.service.observe_browser(self._human,self._peer,body)
@@ -151,7 +168,7 @@ class BrowserGateway:
                 ('Access-Control-Allow-Methods','POST, OPTIONS')])
         status='403 Forbidden'
         operation=environ.get('PATH_INFO','').removeprefix('/v1/browser/')
-        result={'status':'denied','outcome':'not_confirmed' if operation=='observe' else 'denied'}
+        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete'} else 'denied'}
         try:
             if (environ.get('wsgi.url_scheme')!='https' or environ.get('HTTP_HOST')!=urlsplit(self.target).netloc
                     or origin!=self.origin or environ.get('QUERY_STRING') or environ.get('HTTP_FORWARDED')
@@ -198,7 +215,7 @@ def load_gateway(path):
     if peer['lease_id']!=configuration['lease_id']: raise ValueError('gateway_lease_mismatch')
     from gabriel.identity.evidence_store import EvidenceKeys,LocalEvidenceStore
     store=LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT'],EvidenceKeys.from_file(os.environ['GABRIEL_EVIDENCE_KEYRING_FILE']))
-    service=BrowserObservationService(read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE']),store)
+    service=BrowserNavigationService(read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE']),store)
     app=BrowserGateway(service,human,peer['token'],configuration)
     app._bound(pending=True)
     # Worker/process restart cannot reuse a bootstrap or resurrect its original claim authority.

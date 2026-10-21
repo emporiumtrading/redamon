@@ -2,7 +2,8 @@
 
 This increment adds a PostgreSQL-backed service protocol. It does not drive a
 browser. The installed 0.1.0 extension still disconnects on navigation. The
-network gateway does not expose navigation operations. No production console
+network gateway exposes only prepare/complete transitions, not browser driving
+or grant creation. No production console
 contract is registered: `browser_navigation.CONTRACTS` is empty.
 
 ## Authority and transitions
@@ -40,8 +41,15 @@ not acceptance evidence. The physical restart/restore fixture also checks a
 completed receipt, an unresolved second move, capture denial and terminal Stop;
 execution evidence for these new checks is pending.
 
-Next: wire narrowly scoped gateway operations, a local executor and extension
-handling, then admit a simulated console adapter with page/account checks and
+The gateway updates its context only from a committed receipt linked to its
+original configuration anchor and the current reviewed contract. Stale captures
+are denied; Disconnect remains available after contract withdrawal or missing
+receipt. Process restart still invalidates the original bootstrap rather than
+resuming authority automatically. New route tests exercise WSGI boundaries and
+real PostgreSQL, while existing native-TLS regressions cover the HTTPS server.
+
+Next: wire a local executor and extension handling, provide a private operator
+grant UI/CLI, then admit a simulated console adapter with page/account checks and
 postconditions. Real Palo Alto support requires its own adapter and testing.
 Configuration writes, Commit/Apply actions and external sign-in remain outside
 this read-only navigation protocol. There is no arbitrary Playwright/CDP port
