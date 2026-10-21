@@ -4,11 +4,20 @@ from psycopg.types.json import Jsonb
 
 from gabriel.identity.cases import iso
 from gabriel.identity.evidence_store import canonical
-from gabriel.identity.specialist_contracts import digest
+from gabriel.identity.specialist_contracts import ROLES,digest
 from gabriel.identity.service import AccessDenied,InvalidIdentityInput,_audit,connection,identifier
 
 PLAN='local-coordinator-v1'
 OPERATIONS=('evidence_inventory','telemetry_health')
+SPECIALIST_PLAN='local-specialist-coordinator-v2'
+
+
+def operations(row):
+    if row['plan_version']==PLAN and row['input_evidence_id'] is None:
+        return OPERATIONS
+    if row['plan_version']==SPECIALIST_PLAN and row['input_evidence_id'] is not None:
+        return ROLES
+    raise AccessDenied('coordinator_plan_integrity_failed')
 
 
 def sources(service,conn,p,case_id,*,_exclude_ingestion=None):
@@ -69,7 +78,7 @@ def snapshot(conn,row):
         LEFT JOIN gabriel_identity.coordinator_results r USING(organization_id,run_id,sequence)
         WHERE s.organization_id=%s AND s.run_id=%s ORDER BY s.sequence''',
         (row['organization_id'],row['id'])).fetchall()
-    if [step['operation'] for step in steps]!=list(OPERATIONS[:row['max_steps']]):
+    if [step['operation'] for step in steps]!=list(operations(row)[:row['max_steps']]):
         raise AccessDenied('coordinator_plan_integrity_failed')
     for step in steps:
         if step['result'] is not None and digest(step['result'])!=step['result_digest']:
@@ -78,7 +87,8 @@ def snapshot(conn,row):
     status=('stopped' if row['stopped'] else 'authority_lost' if not row['creator_current']
             else 'expired' if row['expired'] else 'local_plan_complete' if completed==row['max_steps'] else 'pending_local_steps')
     return dict(id=str(row['id']),case_id=str(row['case_id']),requested_by=str(row['requested_by']),plan_version=row['plan_version'],
-        source_digest=row['source_digest'],created_at=iso(row['created_at']),expires_at=iso(row['expires_at']),
+        source_digest=row['source_digest'],input_evidence_id=str(row['input_evidence_id']) if row['input_evidence_id'] else None,
+        created_at=iso(row['created_at']),expires_at=iso(row['expires_at']),
         status=status,max_steps=row['max_steps'],completed_steps=completed,
         steps=[dict(sequence=step['sequence'],operation=step['operation'],claimed_at=iso(step['claimed_at']),
             completed_at=iso(step['completed_at']),result_digest=step['result_digest'],result=step['result']) for step in steps],
@@ -86,18 +96,22 @@ def snapshot(conn,row):
         coverage='partial',current_source_authority_checked=False)
 
 
-def begin(service,token,case_id,request_id,*,max_steps=2,ttl_seconds=900):
+def begin(service,token,case_id,request_id,*,max_steps=None,ttl_seconds=900,input_evidence_id=None):
     case_id,request_id=identifier(case_id),identifier(request_id)
-    if type(max_steps) is not int or not 1<=max_steps<=2 or type(ttl_seconds) is not int or not 60<=ttl_seconds<=900:
+    input_evidence_id=identifier(input_evidence_id) if input_evidence_id is not None else None
+    maximum=len(ROLES) if input_evidence_id else 2
+    if max_steps is None: max_steps=maximum
+    if (type(max_steps) is not int or not 1<=max_steps<=maximum or input_evidence_id and max_steps!=len(ROLES)
+            or type(ttl_seconds) is not int or not 60<=ttl_seconds<=900):
         raise InvalidIdentityInput('invalid_coordinator_limits')
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True)
         case=service._case(conn,p,case_id,open_only=True)
-        old=conn.execute('''SELECT id,case_id,requested_by,max_steps,
+        old=conn.execute('''SELECT id,case_id,requested_by,max_steps,input_evidence_id,
             extract(epoch FROM expires_at-created_at)::integer AS ttl FROM gabriel_identity.coordinator_runs
             WHERE organization_id=%s AND request_id=%s''',(p.organization_id,request_id)).fetchone()
         if old:
-            if (old['case_id'],old['requested_by'],old['max_steps'],old['ttl'])!=(case_id,p.user_id,max_steps,ttl_seconds):
+            if (old['case_id'],old['requested_by'],old['max_steps'],old['ttl'],old['input_evidence_id'])!=(case_id,p.user_id,max_steps,ttl_seconds,input_evidence_id):
                 raise AccessDenied('coordinator_request_conflict')
             _audit(conn,'coordinator.plan_replayed',p,old['id'])
             return snapshot(conn,load(conn,p,old['id']))
@@ -106,16 +120,23 @@ def begin(service,token,case_id,request_id,*,max_steps=2,ttl_seconds=900):
         if count>=128:
             raise AccessDenied('coordinator_case_plan_limit')
         selected=sources(service,conn,p,case['id'])
+        if input_evidence_id:
+            from gabriel.identity.specialist_analysis_runs import verified_input
+            verified_input(service,conn,p,case,input_evidence_id)
+            n=conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_runs WHERE organization_id=%s AND case_id=%s',
+                (p.organization_id,case_id)).fetchone()['n']
+            if n+len(ROLES)>128: raise AccessDenied('case_specialist_run_limit')
         rid=uuid4()
         conn.execute('''INSERT INTO gabriel_identity.coordinator_runs
-            (organization_id,id,case_id,request_id,requested_by,plan_version,source_digest,max_steps,created_at,expires_at)
-            SELECT %s,%s,%s,%s,%s,%s,%s,%s,t,t+%s*interval '1 second'
+            (organization_id,id,case_id,request_id,requested_by,plan_version,source_digest,max_steps,created_at,expires_at,input_evidence_id)
+            SELECT %s,%s,%s,%s,%s,%s,%s,%s,t,t+%s*interval '1 second',%s
             FROM (SELECT clock_timestamp() AS t) admitted''',
-            (p.organization_id,rid,case_id,request_id,p.user_id,PLAN,digest(selected),max_steps,ttl_seconds))
+            (p.organization_id,rid,case_id,request_id,p.user_id,SPECIALIST_PLAN if input_evidence_id else PLAN,
+             digest(selected),max_steps,ttl_seconds,input_evidence_id))
         for source in selected:
             conn.execute('''INSERT INTO gabriel_identity.coordinator_sources VALUES (%s,%s,%s,%s,%s)''',
                 (p.organization_id,rid,case_id,source['evidence_id'],source['digest']))
-        for sequence,operation in enumerate(OPERATIONS[:max_steps],1):
+        for sequence,operation in enumerate((ROLES if input_evidence_id else OPERATIONS)[:max_steps],1):
             conn.execute('''INSERT INTO gabriel_identity.coordinator_steps VALUES (%s,%s,%s,%s,%s)''',
                 (p.organization_id,rid,sequence,operation,uuid4()))
         _audit(conn,'coordinator.plan_created',p,rid)
@@ -158,6 +179,15 @@ def stop(service,token,run_id):
 
 
 def execute_local(service,token,row,step,selected):
+    if row['plan_version']==SPECIALIST_PLAN:
+        from gabriel.identity.specialist_analysis_runs import run
+        def admitted(conn):
+            p=service._human(conn,token,write=True)
+            current=load(conn,p,row['id'])
+            active(service,conn,p,current)
+        result=run(service,token,row['case_id'],step['request_id'],step['operation'],row['input_evidence_id'],_admission=admitted)
+        return dict(operation=step['operation'],specialist_id=result['id'],
+                    specialist_result_digest=result['result_digest'],incident_assessment='bounded_rule_review')
     if step['operation']=='evidence_inventory':
         return dict(operation='evidence_inventory',sources=selected,content_integrity='not_checked',
                     source_authenticity='unverified',independent_corroboration='not_established')
@@ -169,11 +199,13 @@ def execute_local(service,token,row,step,selected):
 
 
 def advance(service,token,run_id,*,expected_sequence=None):
-    if expected_sequence is not None and (type(expected_sequence) is not int or expected_sequence not in {1,2}):
+    if expected_sequence is not None and (type(expected_sequence) is not int or not 1<=expected_sequence<=len(ROLES)):
         raise InvalidIdentityInput('invalid_coordinator_sequence')
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True)
         row=load(conn,p,run_id)
+        if expected_sequence is not None and expected_sequence>row['max_steps']:
+            raise InvalidIdentityInput('invalid_coordinator_sequence')
         selected=active(service,conn,p,row)
         snapshot(conn,row)
         step=conn.execute('''SELECT s.* FROM gabriel_identity.coordinator_steps s
@@ -197,17 +229,20 @@ def advance(service,token,run_id,*,expected_sequence=None):
         p=service._human(conn,token,write=True)
         row=load(conn,p,run_id)
         current=active(service,conn,p,row)
-        if step['operation']=='evidence_inventory':
+        if row['plan_version']==PLAN and step['operation']=='evidence_inventory':
             expected=dict(operation='evidence_inventory',sources=current,content_integrity='not_checked',
                 source_authenticity='unverified',independent_corroboration='not_established')
             if result!=expected:
                 raise AccessDenied('coordinator_result_binding_failed')
         else:
             specialist=conn.execute('''SELECT id,result_digest FROM gabriel_identity.specialist_runs
-                WHERE organization_id=%s AND case_id=%s AND request_id=%s AND role='telemetry_health' ''',
-                (p.organization_id,row['case_id'],step['request_id'])).fetchone()
-            if not specialist or result!=dict(operation='telemetry_health',specialist_id=str(specialist['id']),
-                    specialist_result_digest=specialist['result_digest'],incident_assessment='not_performed'):
+                WHERE organization_id=%s AND case_id=%s AND request_id=%s AND role=%s
+                    AND (%s::uuid IS NULL OR packet->>'input_evidence_id'=%s)''',
+                (p.organization_id,row['case_id'],step['request_id'],step['operation'],row['input_evidence_id'],
+                 str(row['input_evidence_id']) if row['input_evidence_id'] else None)).fetchone()
+            if not specialist or result!=dict(operation=step['operation'],specialist_id=str(specialist['id']),
+                    specialist_result_digest=specialist['result_digest'],
+                    incident_assessment='bounded_rule_review' if row['plan_version']==SPECIALIST_PLAN else 'not_performed'):
                 raise AccessDenied('coordinator_result_binding_failed')
         receipt=conn.execute('''SELECT 1 FROM gabriel_identity.coordinator_results
             WHERE organization_id=%s AND run_id=%s AND sequence=%s''',
@@ -218,3 +253,12 @@ def advance(service,token,run_id,*,expected_sequence=None):
                 (p.organization_id,row['id'],step['sequence'],Jsonb(result),digest(result),p.user_id))
             _audit(conn,'coordinator.local_step_completed',p,row['id'])
         return snapshot(conn,load(conn,p,row['id']))
+
+
+def complete(service,token,run_id):
+    """Bounded local drain; each step rechecks durable Stop and current authority."""
+    for _ in range(len(ROLES)):
+        value=get(service,token,run_id)
+        if value['status']!='pending_local_steps': return value
+        advance(service,token,run_id,expected_sequence=value['completed_steps']+1)
+    return get(service,token,run_id)

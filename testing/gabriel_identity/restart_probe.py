@@ -229,6 +229,11 @@ if sys.argv[1] == 'before':
     for role,_,_,_,_ in specialist_examples:
         run=cases.run_specialist(token,typed_case['id'],uuid4(),role,input_evidence_id=typed['id'])
         typed_specialists[role]=dict(id=run['id'],digest=run['result_digest'])
+    specialist_plan=cases.begin_coordinator(token,typed_case['id'],uuid4(),input_evidence_id=typed['id'])
+    for sequence in range(1,5):
+        specialist_progress=cases.advance_coordinator(token,specialist_plan['id'],expected_sequence=sequence)
+    stopped_specialist_plan=cases.begin_coordinator(token,typed_case['id'],uuid4(),input_evidence_id=typed['id'])
+    cases.stop_coordinator(token,stopped_specialist_plan['id'])
     report_snapshot = cases.case_report(token,case['id'])['snapshot']
     specialist=cases.run_specialist(token,case['id'],uuid4(),'telemetry_health')
     coordinated=cases.begin_coordinator(token,case['id'],uuid4())
@@ -356,6 +361,8 @@ if sys.argv[1] == 'before':
         'workflow_assignment':assignment['id'],'workflow_question':question,
         'specialist_id':specialist['id'],'specialist_digest':specialist['result_digest'],'typed_specialists':typed_specialists,
         'typed_specialist_case':str(typed_case['id']),
+        'specialist_plan_id':specialist_plan['id'],'specialist_plan_steps':specialist_progress['steps'][:4],
+        'stopped_specialist_plan_id':stopped_specialist_plan['id'],
         'coordinator_id':coordinated['id'],'coordinator_first_digest':first_step['steps'][0]['result_digest'],
         'stopped_coordinator_id':stopped_coordinator['id'],
         'memory_id':memory['id'],'memory_source_digest':memory['source_digest'],'old_memory_id':prior_memory['id'],
@@ -518,6 +525,15 @@ elif sys.argv[1] in {'after','restored'}:
         assert run['result']['attack_status']=='unknown' and not run['result']['external_actions_authorized']
         assert run['packet']['fact_count']==12 and not run['grants_authority']
     print('PASS: all twelve source-bound local specialist reviews survived recovery without external execution')
+    progress=cases.get_coordinator(saved['token'],saved['specialist_plan_id'])
+    assert progress['completed_steps']==4 and progress['steps'][:4]==saved['specialist_plan_steps']
+    completed=cases.complete_coordinator(saved['token'],saved['specialist_plan_id'])
+    assert completed['completed_steps']==12 and completed['status']=='local_plan_complete'
+    assert completed['steps'][:4]==saved['specialist_plan_steps']
+    assert cases.complete_coordinator(saved['token'],completed['id'])==completed
+    assert cases.complete_coordinator(saved['token'],saved['stopped_specialist_plan_id'])['status']=='stopped'
+    assert not completed['model_enabled'] and not completed['external_actions_enabled']
+    print('PASS: twelve-specialist plan resumed four saved steps to twelve without duplicate reviews; terminal Stop survived recovery')
     specialist=cases.get_specialist_run(saved['token'],saved['case_id'],saved['specialist_id'])
     assert specialist['result_digest']==saved['specialist_digest'] and specialist['result']['attack_status']=='unknown'
     assert not specialist['grants_authority'] and specialist['result']['execution']['model'] is None
