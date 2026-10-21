@@ -211,14 +211,16 @@ if sys.argv[1] == 'before':
     memory=cases.propose_memory(token,case['id'],evidence['id'],uuid4(),'fact','case','recovery.current',ttl_seconds=3600)
     cases.review_memory(token,memory['id'],'approved',memory['source_digest'],True)
     from testing.gabriel_identity.test_specialist_analysis import CASES as specialist_examples
-    facts=[dict(id=str(uuid4()),type=kind,evidence_id=str(evidence['id']),evidence_digest=evidence['digest'],
+    typed_case=cases.create_case(token,'Generated twelve-specialist recovery case')
+    typed_source=cases.acquire(token,typed_case['id'],uuid4(),'Generated specialist source bytes','Generated specialist source',approved=True)
+    facts=[dict(id=str(uuid4()),type=kind,evidence_id=str(typed_source['id']),evidence_digest=typed_source['digest'],
         entity_id=str(uuid4()),event_time='2026-10-20T11:00:00Z',data=data)
         for _,kind,data,_,_ in specialist_examples]
-    typed=cases.acquire(token,case['id'],uuid4(),json.dumps(dict(version='specialist-facts-v1',case_id=str(case['id']),
+    typed=cases.acquire(token,typed_case['id'],uuid4(),json.dumps(dict(version='specialist-facts-v1',case_id=str(typed_case['id']),
         as_of='2026-10-20T12:00:00Z',facts=facts)),'Generated twelve-specialist recovery facts',approved=True)
     typed_specialists={}
     for role,_,_,_,_ in specialist_examples:
-        run=cases.run_specialist(token,case['id'],uuid4(),role,input_evidence_id=typed['id'])
+        run=cases.run_specialist(token,typed_case['id'],uuid4(),role,input_evidence_id=typed['id'])
         typed_specialists[role]=dict(id=run['id'],digest=run['result_digest'])
     report_snapshot = cases.case_report(token,case['id'])['snapshot']
     specialist=cases.run_specialist(token,case['id'],uuid4(),'telemetry_health')
@@ -312,6 +314,7 @@ if sys.argv[1] == 'before':
         'report_evidence':report_snapshot['evidence'],'report_timeline':report_snapshot['timeline'],
         'workflow_assignment':assignment['id'],'workflow_question':question,
         'specialist_id':specialist['id'],'specialist_digest':specialist['result_digest'],'typed_specialists':typed_specialists,
+        'typed_specialist_case':str(typed_case['id']),
         'coordinator_id':coordinated['id'],'coordinator_first_digest':first_step['steps'][0]['result_digest'],
         'stopped_coordinator_id':stopped_coordinator['id'],
         'memory_id':memory['id'],'memory_source_digest':memory['source_digest'],'old_memory_id':prior_memory['id'],
@@ -436,7 +439,7 @@ elif sys.argv[1] in {'after','restored'}:
     assert report_snapshot['assessment']=='not_performed' and report_snapshot['content_integrity']=='not_checked'
     assert cases.case_graph(saved['token'],saved['case_id'])['digest']==saved['provenance_digest']
     for role,expected in saved['typed_specialists'].items():
-        run=cases.get_specialist_run(saved['token'],saved['case_id'],expected['id'])
+        run=cases.get_specialist_run(saved['token'],saved['typed_specialist_case'],expected['id'])
         assert run['role']==role and run['result_digest']==expected['digest']
         assert run['result']['attack_status']=='unknown' and not run['result']['external_actions_authorized']
         assert run['packet']['fact_count']==12 and not run['grants_authority']
