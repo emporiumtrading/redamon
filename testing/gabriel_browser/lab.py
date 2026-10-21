@@ -129,6 +129,11 @@ def console_app(environ,start_response):
 
 
 def native_popup(cdp,console_target,origin):
+    existing=next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None)
+    if existing:
+        session=cdp.attach(existing['targetId'])
+        wait_for(lambda:cdp.evaluate(session,"Boolean(document.getElementById('select'))"))
+        return session
     def visible_window():
         cdp.send('Target.activateTarget',{'targetId':console_target})
         windows=subprocess.run(['xdotool','search','--onlyvisible','--name','Generated Gabriel Lab Console'],capture_output=True,text=True,timeout=5)
