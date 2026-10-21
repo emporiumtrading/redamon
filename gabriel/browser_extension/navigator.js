@@ -23,8 +23,14 @@ export function inspectNavigationIdentity(account) {
   if (document.readyState !== "complete" || marker?.content !== "generated-console-v1" ||
       label?.getAttribute("data-gabriel-account") !== account || label.hidden || label.closest('[hidden],[aria-hidden="true"]'))
     throw new Error("Console identity or account is unconfirmed.");
-  const style = getComputedStyle(label);
-  if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0 || !label.getClientRects().length)
-    throw new Error("Console account is not visible.");
+  for (let element = label; element; element = element.parentElement) {
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0)
+      throw new Error("Console account is not visible.");
+  }
+  const box = label.getBoundingClientRect();
+  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+  if (box.width <= 0 || box.height <= 0 || box.top < 0 || box.left < 0 || box.bottom > innerHeight || box.right > innerWidth || !hit || !label.contains(hit))
+    throw new Error("Console account is covered or outside the visible page.");
   return {page_url: location.href, account_label: account};
 }

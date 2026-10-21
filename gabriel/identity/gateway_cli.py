@@ -29,9 +29,12 @@ def main():
             from pathlib import Path
             configuration=Path(args.configuration)
             if not configuration.is_absolute() or '..' in configuration.parts: raise ValueError('private_configuration_required')
-            read_document(configuration,private=True)
+            configured=read_document(configuration,private=True)
             human=read_document(configuration.parent/'human.json',private=True)['token']
-            peer=read_document(configuration.parent/'peer.json',private=True)['token']
+            credential=read_document(configuration.parent/'peer.json',private=True)
+            if (configured.get('schema_version')!=1 or configured.get('purpose')!='gabriel-browser-gateway-v1'
+                    or credential['lease_id']!=configured['lease_id']): raise ValueError('gateway_lease_mismatch')
+            peer=credential['token']
             plan=read_document(args.navigation_file)
             if not isinstance(plan,dict) or set(plan)!={'request_id','contract_version','destinations','max_moves'}:
                 raise ValueError('invalid_navigation_grant')

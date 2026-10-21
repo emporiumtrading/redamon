@@ -150,7 +150,7 @@ def text(cdp,popup,identifier):
     return cdp.evaluate(popup,'document.getElementById('+json.dumps(identifier)+').textContent')
 
 
-def navigation_journey(cdp,family,service,human,tls,root,env,console_target,console_session,console_origin,extension_origin):
+def navigation_journey(cdp,family,service,human,tls,root,env,console_target,console_session,console_origin,extension_origin,port):
     checks=[]
     navigation=BrowserNavigationService(service._dsn,service.store)
     for scenario in ('success','wrong_account','redirect','stop'):
@@ -165,7 +165,7 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
         click(cdp,popup,'select')
         scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
         assert scope['extension_version']=='0.2.0'
-        port=free_port();endpoint='https://localhost:'+str(port)
+        endpoint='https://localhost:'+str(port)
         assert cdp.evaluate(popup,'chrome.permissions.contains({origins:['+json.dumps(endpoint+'/*')+']})')
         case=navigation.create_case(human,'Generated navigation '+scenario+' case')
         task=navigation.create_browser_task(human,'Generated navigation '+scenario+' task',900,10)
@@ -520,8 +520,9 @@ def run_browser(family,executable,output):
             log.flush(); gateway_log.flush()
             assert all(secret not in (root/'browser.log').read_text()+(root/'gateway.log').read_text() for secret in (human,peer,ticket))
             workbench_journey(cdp,family,service,human,case,tls,root,env,output,preview)
+            gateway.terminate();gateway.wait(timeout=10);gateway=None
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
-                'https://localhost:'+str(server.server_port),origin)
+                'https://localhost:'+str(server.server_port),origin,gateway_port)
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
