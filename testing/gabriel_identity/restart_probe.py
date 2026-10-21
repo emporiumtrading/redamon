@@ -23,6 +23,7 @@ from gabriel.identity.checkpoint_policy import CheckpointPolicyService
 from gabriel.identity.evidence_keys import EvidenceKeyService
 from gabriel.identity.browser_sessions import BrowserSessionService
 from gabriel.identity.browser_observations import BrowserObservationService
+from gabriel.identity.browser_navigation import BrowserNavigationService,CONTRACTS,pending_navigation
 from gabriel.identity.checkpoints import canonical,fingerprint,new_keypair,public_fingerprint,read_document,seal,write_document
 from gabriel.identity.cases import custody_hash
 from datetime import datetime,timedelta,timezone
@@ -43,6 +44,9 @@ retention = RetentionService(app_dsn,cases.store)
 checkpoints = CheckpointPolicyService(app_dsn,cases.store)
 browsers = BrowserSessionService(app_dsn,cases.store)
 observations = BrowserObservationService(app_dsn,cases.store)
+navigation = BrowserNavigationService(app_dsn,cases.store)
+assert not CONTRACTS
+CONTRACTS['generated-recovery-navigation-v1']={'/security','/traffic'}
 budget = ModelBudgetService(app_dsn)
 
 
@@ -55,6 +59,8 @@ def counts():
               'checkpoint_keys','checkpoint_key_revocations','checkpoint_policies','checkpoint_captures','checkpoint_receipts',
               'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
               'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
+              'browser_navigation_grants','browser_navigation_intents','browser_navigation_receipts',
+              'browser_navigation_commits','browser_navigation_stops',
               'memory_records','memory_reviews','memory_invalidations','memory_resets',
               'model_budget_policies','model_price_quotes','model_investigations','model_reservations',
               'model_dispatch_claims','model_settlements','model_investigation_stops','model_answer_intents','model_answer_receipts',
@@ -307,7 +313,19 @@ if sys.argv[1] == 'before':
     finally:
         model_worker.OpenRouterTransport=old_transport;model_routes.PRODUCTION_CONFIGURATIONS=old_admission
         provider_onboarding.OpenRouterTransport=old_onboarding_transport
+    navigation_case=navigation.create_case(observation_token,'Separate generated navigation recovery case')
+    navigation_task=navigation.create_browser_task(observation_token,'Generated navigation recovery task',3600,10)
+    navigation_lease=navigation.issue_browser_lease(observation_token,navigation_task['id'],navigation_case['id'],browser_context,share_observations=True)
+    navigation.connect_browser(navigation_lease.token,browser_context)
+    navigation.grant_navigation(observation_token,navigation_lease.token,uuid4(),'generated-recovery-navigation-v1',
+        ['https://generated-recovery-console.invalid/traffic',browser_context['page_url']],max_moves=2)
+    navigation_intent=navigation.prepare_navigation(observation_token,navigation_lease.token,uuid4(),'https://generated-recovery-console.invalid/traffic')
+    navigation_context=dict(browser_context,page_url=navigation_intent['destination_url'],document_id=str(uuid4()))
+    navigation.complete_navigation(observation_token,navigation_lease.token,navigation_intent['id'],navigation_context)
+    navigation_pending=navigation.prepare_navigation(observation_token,navigation_lease.token,uuid4(),browser_context['page_url'])
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
+        'navigation_peer':navigation_lease.token,'navigation_intent':navigation_intent['id'],
+        'navigation_pending':navigation_pending['id'],'navigation_context':navigation_context,
         'answer_token':answer_token,'answer_reservation':answer_reservation['reservation_id'],
         'pending_answer_reservation':pending_answer['reservation_id'],
         'answer_run':answer_plan['id'],'answer_input':str(answer_input['id']),'answer_digest':sha256(answer_result.reveal()).hexdigest(),
@@ -382,6 +400,25 @@ elif sys.argv[1] in {'after','restored'}:
         raise AssertionError('stopped model dispatch became claimable after recovery')
     budget.settle(saved['token'],saved['model_reservation_id'],700,'d'*64)
     assert budget.status(saved['token'])['usage']==dict(month_used=700,day_used=700,held_slots=0)
+    replayed_navigation=navigation.complete_navigation(saved['observation_token'],saved['navigation_peer'],
+        saved['navigation_intent'],saved['navigation_context'])
+    assert replayed_navigation['replayed'] and replayed_navigation['current']
+    with connection(app_dsn) as conn:
+        principal,lease=navigation._browser(conn,saved['navigation_peer'])
+        assert str(pending_navigation(conn,principal.organization_id,lease['id'])['id'])==saved['navigation_pending']
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.browser_navigation_commits WHERE organization_id=%s',
+                            (principal.organization_id,)).fetchone()['n']==1
+    try:
+        navigation.observe_browser(saved['observation_token'],saved['navigation_peer'],
+            dict(saved['observation_payload'],request_id=str(uuid4()),context=saved['navigation_context']))
+    except AccessDenied as exc:
+        assert str(exc)=='browser_navigation_outcome_unresolved'
+    else: raise AssertionError('unresolved navigation allowed evidence capture after recovery')
+    navigation.stop_navigation(saved['observation_token'],saved['navigation_peer'])
+    try: navigation.heartbeat_browser(saved['navigation_peer'],saved['navigation_context'])
+    except AuthenticationDenied: pass
+    else: raise AssertionError('navigation Stop failed after recovery')
+    print('PASS: navigation receipt replay and unresolved move survived recovery without dispatch, rewind or evidence capture; Stop remained terminal')
     observations.heartbeat_browser(saved['observation_peer'],saved['browser_context'])
     replay = observations.observe_browser(saved['observation_token'],saved['observation_peer'],saved['observation_payload'])
     assert json.loads(json.dumps(replay,default=str))==saved['observation_receipt']
