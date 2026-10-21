@@ -23,6 +23,16 @@ Unknown consoles can receive explicitly granted limited observation and evidence
 
 ## 3. Models and confidentiality
 
+Owner update: every customer organization supplies its own OpenRouter and/or
+NVIDIA API key through private onboarding. Never ship, share or fall back to
+development/CI credentials. OpenRouter setup requires at least $18 account credit
+and $18 remaining key allowance; the dedicated key is capped at $18/month. This
+is the initial setup threshold; normal subsequent use may reduce available
+credit. Current dispatch checks and durable limits continue to apply. NVIDIA
+requires its own account/entitlement/privacy/cost validation without an invented
+OpenRouter-equivalent dollar balance. See [customer-key implementation and open
+acceptance](GABRIEL_CUSTOMER_KEYS.md). A stored key alone never qualifies a model.
+
 Initial evaluation candidates:
 - OpenRouter `google/gemini-2.5-flash-lite`: routine extraction, classification and bounded summaries.
 - OpenRouter `google/gemini-2.5-flash`: bounded escalation for difficult correlations and review.

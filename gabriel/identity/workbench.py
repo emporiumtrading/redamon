@@ -71,9 +71,12 @@ def table(columns,rows):
 
 
 class Workbench:
-    def __init__(self,service,token,configuration):
+    def __init__(self,service,token,configuration,*,provider_vault=None):
         if not isinstance(service,CaseService): raise ValueError('case_service_required')
         self.service,self._token=service,token
+        if provider_vault is not None and provider_vault._dsn!=service._dsn:
+            raise ValueError('same_backend_provider_vault_required')
+        self._provider_vault=provider_vault
         self.target=endpoint(configuration['endpoint'])
         self._ticket=configuration['ticket_digest']
         if not isinstance(self._ticket,str) or not re.fullmatch('[a-f0-9]{64}',self._ticket): raise ValueError('invalid_ticket_digest')
@@ -101,6 +104,7 @@ class Workbench:
             navigation='<p id="team-scope">Organization '+e(principal.organization_id)+' · Role '+e(principal.role)+'</p><nav><a href="/cases">Cases</a><a href="/sources">Browser health</a><a href="/spending">AI spending</a>'
             if principal.role!='viewer': navigation+='<a href="/cases/new">New case</a>'
             if principal.role!='viewer': navigation+='<a href="/audit">Audit</a>'
+            if principal.role in {'owner','admin'}: navigation+='<a href="/providers">Your AI keys</a>'
             navigation+=self._form('/disconnect','Disconnect workbench')+'</nav>'
         return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+e(title)+' · Gabriel</title><style>'+STYLE+'</style></head><body><header><a href="/cases">Gabriel — The Defender</a>'+navigation+'</header><main id="main"><h1>'+e(title)+'</h1>'+body+'</main></body></html>').encode()
 
@@ -147,6 +151,31 @@ class Workbench:
             self._claimed=True
             return '303 See Other',b'',[('Location','/cases'),('Set-Cookie',COOKIE+'='+self._cookie+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=600')]
         principal=self._authenticate(environ)
+        if path in {'/providers','/providers/save','/providers/revoke'}:
+            if principal.role not in {'owner','admin'}: raise AccessDenied('provider_admin_required')
+            if self._provider_vault is None:
+                if method!='GET' or path!='/providers': raise AccessDenied('provider_vault_not_configured')
+                return '200 OK',self._page('Your AI keys','<p class="notice">Private key storage must be configured on this Gabriel host before adding your own provider keys. No shared development key is available.</p>',principal),[]
+            from gabriel.identity.provider_onboarding import CustomerProviders
+            providers=CustomerProviders(self._provider_vault)
+            if method=='POST':
+                expected={'csrf','provider','api_key'} if path=='/providers/save' else {'csrf','provider'}
+                if path=='/providers' or set(fields)!=expected or fields['provider'] not in {'openrouter','nvidia'}:
+                    raise AccessDenied('invalid_provider_form')
+                if path=='/providers/save': providers.configure(self._token,fields['provider'],fields['api_key'])
+                else: self._provider_vault.revoke(self._token,fields['provider'])
+                return '303 See Other',b'',[('Location','/providers')]
+            if method!='GET' or path!='/providers': raise AccessDenied('workbench_route_denied')
+            rows=providers.status(self._token)
+            body='<p>Use your organization’s own provider accounts. Gabriel has no shared API key and does not top up accounts automatically.</p>'
+            body+='<p>OpenRouter setup requires at least $18 account credit and $18 remaining on a dedicated inference key capped at $18 per month. After setup, normal usage may reduce the balance; daily and investigation limits still apply.</p>'
+            body+='<p class="notice">Adding a key does not enable an unqualified model. NVIDIA validation and production routing remain pending. Balance checks show historical provider reports.</p>'
+            body+=table(['Provider','Setup status','Last checked'],[(e(r['provider']),e(r['status'].replace('_',' ')),e(r['checked_at'] or 'Not checked')) for r in rows])
+            for provider,label in [('openrouter','OpenRouter'),('nvidia','NVIDIA')]:
+                body+='<h2>'+label+'</h2>'+self._form('/providers/save','Save your '+label+' key',
+                    '<input type="hidden" name="provider" value="'+provider+'"><label>Your '+label+' API key<input type="password" name="api_key" autocomplete="off" spellcheck="false" maxlength="512" required></label>')
+                body+=self._form('/providers/revoke','Remove '+label+' key','<input type="hidden" name="provider" value="'+provider+'">')
+            return '200 OK',self._page('Your AI keys',body,principal),[]
         if path in {'/spending','/spending/limits'}:
             budget=ModelBudgetService(self.service._dsn)
             if method=='POST' and path=='/spending/limits':
@@ -450,7 +479,12 @@ def load_workbench(path):
         raise ValueError('invalid_workbench_configuration')
     token=read_document(path.parent/'human.json',private=True)['token']
     store=LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT'],EvidenceKeys.from_file(os.environ['GABRIEL_EVIDENCE_KEYRING_FILE']))
-    app=Workbench(CaseService(read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE']),store),token,config)
+    dsn=read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE'])
+    provider_vault=None
+    if os.environ.get('GABRIEL_PROVIDER_KEYRING_FILE'):
+        from gabriel.identity.vault import ProviderKeyRing,ProviderVault
+        provider_vault=ProviderVault(dsn,ProviderKeyRing.from_file(os.environ['GABRIEL_PROVIDER_KEYRING_FILE']))
+    app=Workbench(CaseService(dsn,store),token,config,provider_vault=provider_vault)
     app.service.whoami(token)
     parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
     try:

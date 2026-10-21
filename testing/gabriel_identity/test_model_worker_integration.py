@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from gabriel.identity import model_routes,model_worker
+from gabriel.identity import model_routes,model_worker,provider_onboarding
 from gabriel.identity.model_evaluation import digest
 from gabriel.identity.model_worker import ModelWorker,configuration
 from gabriel.identity.provider_probe import ProbeError
@@ -24,7 +24,6 @@ MODEL='openai/gpt-4.1-mini'
 def setup(tenant,cases,case,evidence,monkeypatch):
     vault=ProviderVault(tenant.db.app,fresh_ring())
     secret='generated-worker-'+secrets.token_urlsafe(30)
-    vault.put(tenant.token,'openrouter',secret)
     record=dict(record_id=str(uuid4()),evidence_id=str(evidence['id']),evidence_digest=evidence['digest'],
         event_time='2026-10-20T12:00:00Z',kind='authentication',outcome='failure',
         actor='GENERATED_PRIVATE_PRINCIPAL',asset='GENERATED_PRIVATE_ASSET',address=None,count=2)
@@ -42,6 +41,7 @@ def setup(tenant,cases,case,evidence,monkeypatch):
         def request(self,method,path,payload=None):
             if path=='/api/v1/endpoints/zdr': return catalog()
             if path=='/api/v1/key': return dict(data=key_data())
+            if path=='/api/v1/credits': return dict(data=dict(total_credits=20,total_usage=0))
             assert method=='POST'
             raw=json.dumps(payload)
             assert all(value not in raw for value in [secret,'GENERATED_PRIVATE_PRINCIPAL','GENERATED_PRIVATE_ASSET',str(tenant.org),str(case['id']),str(evidence['id'])])
@@ -54,6 +54,8 @@ def setup(tenant,cases,case,evidence,monkeypatch):
             return dict(id='fixture-generation',model=MODEL,provider='Azure',choices=[dict(finish_reason='stop',message=dict(content=json.dumps(answer)))],
                         usage=dict(prompt_tokens=299,completion_tokens=227,cost=0.0002))
     monkeypatch.setattr(model_worker,'OpenRouterTransport',Client)
+    monkeypatch.setattr(provider_onboarding,'OpenRouterTransport',Client)
+    provider_onboarding.CustomerProviders(vault).configure(tenant.token,'openrouter',secret)
     return dict(worker=worker,vault=vault,secret=secret,holder=holder,plan=plan,calls=calls,client=Client)
 
 
@@ -63,6 +65,16 @@ def reserve(tenant,setup):
 
 def dispatch(tenant,setup,reservation):
     return setup['worker'].dispatch(tenant.token,setup['plan']['id'],setup['holder']['id'],reservation['reservation_id'])
+
+
+def test_unchecked_replacement_never_uses_env_key_or_claims_cost(tenant,setup,monkeypatch):
+    row=reserve(tenant,setup)
+    monkeypatch.setenv('OPENROUTER_API_KEY',setup['secret'])
+    setup['vault'].put(tenant.token,'openrouter','generated-unchecked-replacement-key')
+    with pytest.raises(AccessDenied,match='onboarding_required'): dispatch(tenant,setup,row)
+    assert not setup['calls']
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.model_dispatch_claims WHERE reservation_id=%s',(row['reservation_id'],)).fetchone()['n']==0
 
 
 def test_default_admission_denies_before_vault_or_budget(tenant,setup,monkeypatch):
@@ -164,6 +176,7 @@ def test_receipt_commit_failure_recovers_without_new_provider_or_vault_access(te
     assert len(setup['calls'])==1
     def forbidden(*args,**kwargs): raise AssertionError('recovery attempted credential/provider access')
     monkeypatch.setattr(setup['vault'],'resolve_for_backend',forbidden)
+    monkeypatch.setattr(provider_onboarding.CustomerProviders,'resolve',forbidden)
     recovered=setup['worker'].recover_answer(tenant.token,row['reservation_id'])
     assert recovered.metadata['result_persisted'] and recovered.metadata['review_status']=='unreviewed'
     replay=setup['worker'].recover_answer(tenant.token,row['reservation_id'])

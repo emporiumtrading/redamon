@@ -48,7 +48,7 @@ budget = ModelBudgetService(app_dsn)
 
 def counts():
     tables = ('organizations','users','memberships','sessions','service_grants','audit_events',
-              'provider_secrets','provider_key_registry','provider_key_state','investigation_tasks','task_executions',
+              'provider_onboarding_checks','provider_secrets','provider_key_registry','provider_key_state','investigation_tasks','task_executions',
               'cases','case_tasks','evidence_objects','custody_events','evidence_exports','evidence_key_registry',
               'action_policies','action_policy_state','action_requests','action_approvals','action_decisions','action_executions',
               'retention_policies','case_hold_versions','legal_holds','hold_releases','purge_requests','purge_approvals','purge_attempts','retention_events',
@@ -237,7 +237,7 @@ if sys.argv[1] == 'before':
     budget.stop(token,model_job['id'])
     assert budget.status(token)['usage']==dict(month_used=1400,day_used=1400,held_slots=1)
     # A separate generated tenant preserves the existing budget checkpoint's exact assertions.
-    from gabriel.identity import model_routes,model_worker
+    from gabriel.identity import model_routes,model_worker,provider_onboarding
     from gabriel.identity.model_worker import ModelWorker,configuration
     from gabriel.identity.model_evaluation import digest as model_digest
     from testing.gabriel_identity.test_model_lab import catalog,key_data
@@ -245,7 +245,6 @@ if sys.argv[1] == 'before':
     answer_org,_=provision_organization(owner_dsn,'Generated answer recovery','answer-owner',answer_password)
     answer_token=service.login(answer_org,'answer-owner',answer_password).token
     answer_secret='generated-answer-key-'+secrets.token_urlsafe(30)
-    vault.put(answer_token,'openrouter',answer_secret)
     answer_case=cases.create_case(answer_token,'Generated durable answer case')
     answer_source=cases.acquire(answer_token,answer_case['id'],uuid4(),'Generated normalized source','Generated answer source',approved=True)
     record=dict(record_id=str(uuid4()),evidence_id=str(answer_source['id']),evidence_digest=answer_source['digest'],
@@ -260,6 +259,7 @@ if sys.argv[1] == 'before':
         def __init__(self,credential): assert credential.reveal()==answer_secret
         def request(self,method,path,payload=None):
             if path=='/api/v1/key': return dict(data=key_data())
+            if path=='/api/v1/credits': return dict(data=dict(total_credits=20,total_usage=0))
             if path=='/api/v1/endpoints/zdr': return catalog()
             assert method=='POST';answer_calls.append(1)
             decision=dict(disposition='abstain',claims=[dict(id='claim-1',statement='Generated partial source.',references=['o1'])],
@@ -269,8 +269,11 @@ if sys.argv[1] == 'before':
                 choices=[dict(finish_reason='stop',message=dict(content=json.dumps(decision)))],
                 usage=dict(prompt_tokens=300,completion_tokens=200,cost=0.0002))
     old_transport,old_admission=model_worker.OpenRouterTransport,model_routes.PRODUCTION_CONFIGURATIONS
+    old_onboarding_transport=provider_onboarding.OpenRouterTransport
     try:
         model_worker.OpenRouterTransport=GeneratedTransport
+        provider_onboarding.OpenRouterTransport=GeneratedTransport
+        provider_onboarding.CustomerProviders(vault).configure(answer_token,'openrouter',answer_secret)
         model_routes.PRODUCTION_CONFIGURATIONS=frozenset({model_digest(configuration(model))})
         answer_worker=ModelWorker(cases,vault)
         answer_reservation=answer_worker.reserve(answer_token,answer_plan['id'],answer_input['id'],uuid4(),model)
@@ -291,6 +294,7 @@ if sys.argv[1] == 'before':
         assert len(answer_calls)==2
     finally:
         model_worker.OpenRouterTransport=old_transport;model_routes.PRODUCTION_CONFIGURATIONS=old_admission
+        provider_onboarding.OpenRouterTransport=old_onboarding_transport
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'answer_token':answer_token,'answer_reservation':answer_reservation['reservation_id'],
         'pending_answer_reservation':pending_answer['reservation_id'],

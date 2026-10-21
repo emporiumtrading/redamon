@@ -134,6 +134,13 @@ def remove_v17(conn):
 
 
 def remove_v18(conn):
+    remove_v19(conn)
     if conn.execute("SELECT to_regclass('gabriel_identity.model_answer_intents') AS t").fetchone()['t'] is not None:
         conn.execute('DROP TABLE gabriel_identity.model_answer_receipts,gabriel_identity.model_answer_intents')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=18')
+
+
+def remove_v19(conn):
+    if conn.execute("SELECT to_regclass('gabriel_identity.provider_onboarding_checks') AS t").fetchone()['t'] is not None:
+        conn.execute('DROP TABLE gabriel_identity.provider_onboarding_checks')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=19')

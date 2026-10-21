@@ -1,0 +1,157 @@
+"""Real tenant vault/receipts; generated provider responses do not prove live access."""
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+import json
+import secrets
+
+import psycopg
+import pytest
+
+from gabriel.identity import provider_onboarding
+from gabriel.identity.provider_onboarding import CustomerProviders, funding, dispatch_credit
+from gabriel.identity.model_protocol import ProbeError
+from gabriel.identity.service import AccessDenied, AuthenticationDenied, IdentityUnavailable, provision_organization
+from gabriel.identity.vault import ProviderVault
+from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
+from testing.gabriel_identity.test_vault_integration import fresh_ring
+from testing.gabriel_identity.test_model_lab import key_data
+
+pytestmark=pytest.mark.integration
+
+
+def key_reply():
+    data=key_data()
+    data['limit_remaining']=18
+    return dict(data=data)
+
+
+@pytest.fixture
+def customer(tenant,monkeypatch):
+    vault=ProviderVault(tenant.db.app,fresh_ring())
+    calls=[]
+    class Client:
+        key=key_reply()
+        credits=dict(data=dict(total_credits=20,total_usage=0))
+        callback=None
+        def __init__(self,credential):
+            assert credential.reveal().startswith('generated-customer-')
+        def request(self,method,path,payload=None):
+            calls.append((method,path))
+            assert method=='GET' and payload is None
+            if type(self).callback: type(self).callback()
+            return deepcopy(type(self).key if path=='/api/v1/key' else type(self).credits)
+    monkeypatch.setattr(provider_onboarding,'OpenRouterTransport',Client)
+    return CustomerProviders(vault),calls,Client
+
+
+def secret(): return 'generated-customer-'+secrets.token_urlsafe(32)
+
+
+def test_customer_key_is_encrypted_scoped_and_funding_receipt_bound_to_revision(tenant,customer):
+    service,calls,_=customer
+    value=secret()
+    result=service.configure(tenant.token,'openrouter',value)
+    assert result['status']=='funding_verified' and not result['model_enabled'] and not result['inference_performed']
+    assert calls==[('GET','/api/v1/key'),('GET','/api/v1/credits')]
+    credential,binding=service.resolve(tenant.token,'openrouter')
+    assert credential.reveal()==value and binding[1]==1
+    status=service.status(tenant.token)
+    assert status[0]['account_available_microusd']==20000000 and status[0]['balance_is_historical']
+    with owner_connection(tenant.db) as conn:
+        row=conn.execute('SELECT * FROM gabriel_identity.provider_secrets WHERE organization_id=%s',(tenant.org,)).fetchone()
+        audits=conn.execute('SELECT * FROM gabriel_identity.audit_events WHERE organization_id=%s',(tenant.org,)).fetchall()
+    assert value.encode() not in bytes(row['ciphertext'])
+    assert value not in repr(audits)+json.dumps(status)+repr(result)+repr(credential)
+    service.vault.put(tenant.token,'openrouter',secret())
+    assert service.status(tenant.token)[0]['status']=='setup_required'
+    with pytest.raises(AccessDenied,match='onboarding_required'): service.resolve(tenant.token,'openrouter')
+
+
+@pytest.mark.parametrize('change',['balance','allowance','unlimited','wrong_reset','management','nan','bool','missing'])
+def test_insufficient_or_unverifiable_funding_never_stores_candidate_key(tenant,customer,change):
+    service,_,client=customer
+    client.key=deepcopy(client.key);client.credits=deepcopy(client.credits)
+    if change=='balance': client.credits['data']['total_usage']='2.000001'
+    elif change=='allowance': client.key['data']['limit_remaining']='17.999999'
+    elif change=='unlimited': client.key['data']['limit']=None
+    elif change=='wrong_reset': client.key['data']['limit_reset']='daily'
+    elif change=='management': client.key['data']['is_management_key']=True
+    elif change=='nan': client.credits['data']['total_usage']='NaN'
+    elif change=='bool': client.credits['data']['total_credits']=True
+    else: client.credits={}
+    with pytest.raises(ProbeError): service.configure(tenant.token,'openrouter',secret())
+    assert not service.vault.list_secrets(tenant.token)
+
+
+def test_nvidia_credential_is_customer_owned_but_entitlement_and_dispatch_remain_unverified(tenant,customer):
+    service,calls,_=customer
+    value=secret()
+    result=service.configure(tenant.token,'nvidia',value)
+    assert result['status']=='validation_pending' and not calls
+    assert service.vault.resolve_for_backend(tenant.token,'nvidia').reveal()==value
+    assert service.status(tenant.token)[0]['account_available_microusd'] is None
+    with pytest.raises(AccessDenied): service.resolve(tenant.token,'nvidia')
+
+
+def test_other_tenant_and_environment_cannot_supply_missing_key(tenant,customer,monkeypatch):
+    service,calls,_=customer
+    service.configure(tenant.token,'openrouter',secret())
+    password=secrets.token_urlsafe(24)
+    org,_=provision_organization(tenant.db.owner,'Generated BYOK outsider','owner',password)
+    token=service.vault.login(org,'owner',password).token
+    monkeypatch.setenv('OPENROUTER_API_KEY',secret())
+    monkeypatch.setenv('NVIDIA_API_KEY',secret())
+    assert service.status(token)==[]
+    with pytest.raises(AccessDenied): service.resolve(token,'openrouter')
+    assert len(calls)==2
+
+
+@pytest.mark.parametrize('role',['analyst','viewer'])
+def test_non_admin_cannot_validate_store_read_status_or_resolve(tenant,customer,role):
+    service,calls,_=customer
+    password=secrets.token_urlsafe(24)
+    service.vault.create_member(tenant.token,'generated-provider-member',password,role)
+    token=service.vault.login(tenant.org,'generated-provider-member',password).token
+    for operation in (lambda:service.configure(token,'openrouter',secret()), lambda:service.status(token),lambda:service.resolve(token,'openrouter')):
+        with pytest.raises(AccessDenied): operation()
+    assert not calls
+
+
+def test_logout_during_validation_does_not_store_key(tenant,customer):
+    service,_,client=customer
+    client.callback=lambda:service.vault.logout(tenant.token)
+    with pytest.raises(AuthenticationDenied): service.configure(tenant.token,'openrouter',secret())
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.provider_secrets WHERE organization_id=%s',(tenant.org,)).fetchone()['n']==0
+
+
+def test_failed_replacement_preserves_previous_customer_key(tenant,customer):
+    service,_,client=customer
+    old=secret();service.configure(tenant.token,'openrouter',old)
+    client.credits=dict(data=dict(total_credits=1,total_usage=0))
+    with pytest.raises(ProbeError): service.configure(tenant.token,'openrouter',secret())
+    assert service.resolve(tenant.token,'openrouter')[0].reveal()==old
+
+
+def test_revocation_denies_onboarded_key_immediately(tenant,customer):
+    service,_,_=customer
+    service.configure(tenant.token,'openrouter',secret())
+    service.vault.revoke(tenant.token,'openrouter')
+    assert service.status(tenant.token)[0]['status']=='revoked'
+    with pytest.raises(AccessDenied): service.resolve(tenant.token,'openrouter')
+
+
+@pytest.mark.parametrize('verb',['UPDATE','DELETE'])
+def test_runtime_cannot_rewrite_funding_receipts(tenant,customer,verb):
+    service,_,_=customer
+    service.configure(tenant.token,'openrouter',secret())
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            conn.execute('DELETE FROM gabriel_identity.provider_onboarding_checks' if verb=='DELETE' else
+                         "UPDATE gabriel_identity.provider_onboarding_checks SET status='validation_pending'")
+
+
+def test_dispatch_can_use_balance_below_setup_minimum_but_not_below_reserved_cost():
+    assert dispatch_credit(dict(data=dict(total_credits=18,total_usage=17)),6304) is None
+    with pytest.raises(ProbeError,match='credit_unavailable'):
+        dispatch_credit(dict(data=dict(total_credits=18,total_usage='17.999')),6304)
