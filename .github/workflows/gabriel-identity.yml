@@ -12,6 +12,7 @@ on:
       - 'tooling/scripts/gabriel_provider_keys.py'
       - 'tooling/scripts/gabriel_evidence_keys.py'
       - 'tooling/scripts/gabriel_identity_check.sh'
+      - 'tooling/scripts/gabriel_candidate_export.py'
       - 'compose.gabriel-identity.yml'
       - 'gabriel.sh'
       - '.github/workflows/gabriel-identity.yml'
@@ -26,6 +27,7 @@ on:
       - 'tooling/scripts/gabriel_provider_keys.py'
       - 'tooling/scripts/gabriel_evidence_keys.py'
       - 'tooling/scripts/gabriel_identity_check.sh'
+      - 'tooling/scripts/gabriel_candidate_export.py'
       - 'compose.gabriel-identity.yml'
       - 'gabriel.sh'
       - '.github/workflows/gabriel-identity.yml'
@@ -51,6 +53,21 @@ jobs:
         run: bash tooling/scripts/gabriel_runtime_check.sh "$RUNNER_TEMP/gabriel-runtime-evidence"
       - name: Foundation regression
         run: bash tooling/scripts/gabriel_foundation_check.sh "$RUNNER_TEMP/gabriel-foundation-evidence"
+      - name: Export the existing checked AMD64 images
+        run: >-
+          python3 tooling/scripts/gabriel_candidate_export.py
+          --output "$RUNNER_TEMP/gabriel-core-candidate-amd64"
+          --identity-evidence "$RUNNER_TEMP/gabriel-identity-evidence"
+          --runtime-evidence "$RUNNER_TEMP/gabriel-runtime-evidence"
+          --foundation-evidence "$RUNNER_TEMP/gabriel-foundation-evidence"
+      - name: Retain the AMD64 core test candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-core-candidate-amd64
+          path: ${{ runner.temp }}/gabriel-core-candidate-amd64
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
       - name: Retain identity evidence without credential checkpoint files
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
