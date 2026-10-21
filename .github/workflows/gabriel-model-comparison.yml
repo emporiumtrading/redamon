@@ -5,6 +5,7 @@ on:
       - 'gabriel/identity/model_routes.py'
       - 'gabriel/identity/model_transport.py'
       - 'gabriel/identity/model_lab.py'
+      - 'gabriel/identity/model_protocol.py'
       - 'gabriel/model_lab/**'
       - 'testing/gabriel_identity/test_model_lab.py'
       - '.github/workflows/gabriel-model-comparison.yml'
@@ -23,7 +24,7 @@ jobs:
   live-generated-comparison:
     needs: software
     # The exact-before exception recovers a software-only failure; no paid job ran.
-    if: (github.event.action == 'opened' || (github.event.action == 'synchronize' && github.event.before == 'a7206b289231a1a2df381092b40dbcae35613b8a' && github.head_ref == 'feature/gabriel-model-comparison-remaining')) && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feature/gabriel-model-worker' || github.head_ref == 'feature/gabriel-model-comparison-remaining')
+    if: (github.event.action == 'opened' || (github.event.action == 'synchronize' && github.event.before == 'a7206b289231a1a2df381092b40dbcae35613b8a' && github.head_ref == 'feature/gabriel-model-comparison-remaining')) && github.event.pull_request.head.repo.full_name == github.repository && (github.head_ref == 'feature/gabriel-model-worker' || github.head_ref == 'feature/gabriel-model-comparison-remaining' || github.head_ref == 'feature/gabriel-model-protocol-v2')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
@@ -38,10 +39,12 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GABRIEL_COMPARISON_REMAINING: ${{ github.head_ref == 'feature/gabriel-model-comparison-remaining' }}
+          GABRIEL_COMPARISON_PROTOCOL_V2: ${{ github.head_ref == 'feature/gabriel-model-protocol-v2' }}
         run: |
           status=0
           mode_args=()
           if [[ "$GABRIEL_COMPARISON_REMAINING" == true ]]; then mode_args+=(--remaining-after-checkpoint); fi
+          if [[ "$GABRIEL_COMPARISON_PROTOCOL_V2" == true ]]; then mode_args+=(--protocol-v2-development); fi
           docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 -e OPENROUTER_API_KEY gabriel-model-lab "${mode_args[@]}" > "$RUNNER_TEMP/gabriel-model-comparison.jsonl" || status=$?
           python - "$RUNNER_TEMP/gabriel-model-comparison.jsonl" <<'PY'
           import json,sys

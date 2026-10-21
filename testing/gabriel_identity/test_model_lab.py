@@ -11,6 +11,8 @@ from gabriel.identity.model_lab import CASES,CORPUS_DIGEST,compare,preflight
 from gabriel.identity.model_routes import ROUTES,RouteError,eligible,parameters
 from gabriel.identity.model_transport import OpenRouterTransport
 from gabriel.identity.model_protocol import ProbeError
+from gabriel.identity.model_protocol import PROMPT,PROMPT_V2
+from gabriel.identity.model_lab import invalid_identifier_fields
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -160,3 +162,40 @@ def test_failure_diagnostics_expose_structure_and_code_without_provider_text():
     assert failure['diagnostic_code']=='unknown_reference'
     assert 'claims' in failure['shape']['decision_keys']
     assert 'Generated software fixture claim.' not in json.dumps(failure)
+
+
+def test_versioned_protocol_binds_actual_prompt_and_excludes_unresolved_route():
+    client=Client(); report=compare(client,corpus(),protocol_v2=True)
+    assert len(client.posts)==report['validated_calls']==21
+    assert {p['model'] for p in client.posts}==set(ROUTES)-{tuple(ROUTES)[1]}
+    assert all(p['messages'][0]['content']==PROMPT_V2 for p in client.posts)
+    assert PROMPT!=PROMPT_V2
+    from hashlib import sha256
+    assert all(r['configuration']['prompt_sha256']==sha256(PROMPT_V2.encode()).hexdigest() for r in report['results'])
+    assert report['carried_reported_cost_usd']=='0.005710488'
+    assert report['carried_reserved_usd']=='0.006304' and report['unknown_cost_possible']
+    assert not report['new_unknown_cost_possible'] and not report['quality_qualified']
+
+
+def test_identifier_diagnostics_name_fields_without_rejected_values():
+    reply=dict(id='generated-valid-id',choices=[dict(message=dict(content=json.dumps(dict(
+        claims=[dict(id=1,references=['bad identifier'])],reported_gaps=['Private rejected gap text'],requested_actions=[]))))])
+    paths=invalid_identifier_fields(reply)
+    assert paths==['reported_gaps[0]','claims[0].id','claims[0].references[0]']
+    assert 'Private' not in json.dumps(paths) and 'bad identifier' not in json.dumps(paths)
+    reply['id']=None
+    assert invalid_identifier_fields(reply)[0]=='generation_id'
+
+
+def test_protocol_schedule_cannot_mix_stages_or_accept_arbitrary_flags():
+    client=Client()
+    for options in [dict(remaining=True,protocol_v2=True),dict(protocol_v2='true')]:
+        with pytest.raises(ProbeError,match='comparison_schedule_denied'): compare(client,corpus(),**options)
+    assert not client.posts
+
+
+def test_v2_unknown_charge_stops_and_keeps_prior_hold():
+    client=Client();client.unknown=True
+    report=compare(client,corpus(),protocol_v2=True)
+    assert len(client.posts)==1 and report['unresolved_comparison_calls']==2
+    assert report['new_unknown_cost_possible'] and report['carried_reserved_usd']=='0.006304'
