@@ -7,13 +7,15 @@ from datetime import timezone
 import re
 from uuid import uuid4
 
+from gabriel.identity.model_routes import ROUTES
+
 from gabriel.identity.service import (
     AccessDenied, IdentityService, InvalidIdentityInput, _audit, connection, identifier,
 )
 
 DEFAULTS = dict(enabled=True, month_microusd=18000000, day_microusd=500000,
                 investigation_microusd=50000)
-MODELS = {'openrouter': {'google/gemini-2.5-flash-lite', 'google/gemini-2.5-flash'},
+MODELS = {'openrouter': set(ROUTES)|{'google/gemini-2.5-flash-lite', 'google/gemini-2.5-flash'},
           'nvidia': {'nvidia/nemotron-3-super-120b-a12b'}}
 
 
@@ -244,13 +246,14 @@ class ModelBudgetService(IdentityService):
             _audit(conn,'model_budget.cost_reserved',principal,row['id'])
             return public(row)
 
-    def claim(self, token, reservation_id):
+    def claim(self, token, reservation_id, *, _guard=None):
         with connection(self._dsn) as conn:
             principal=self._principal(conn,token,lock=True)
             if principal.role not in {'owner','admin','analyst'}:
                 raise AccessDenied('operation_not_permitted')
             row=reservation(conn,principal,reservation_id)
             investigation(conn,principal,row['investigation_id'],active=True)
+            if _guard is not None: _guard(conn,principal)
             if row['outcome'] is not None:
                 raise AccessDenied('model_reservation_settled')
             if row['claim_id']:

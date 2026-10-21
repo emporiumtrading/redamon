@@ -2,7 +2,7 @@ FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/__init__.py /app/gabriel/
-COPY gabriel/identity/__init__.py gabriel/identity/model_evaluation.py gabriel/identity/provider_probe.py /app/gabriel/identity/
+COPY gabriel/identity/__init__.py gabriel/identity/model_evaluation.py gabriel/identity/model_protocol.py gabriel/identity/provider_probe.py /app/gabriel/identity/
 COPY testing/gabriel_model_lab/development_corpus.json /app/development_corpus.json
 RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for p in pathlib.Path('/app/gabriel').rglob('*.py')]"
 USER 10001:10001
