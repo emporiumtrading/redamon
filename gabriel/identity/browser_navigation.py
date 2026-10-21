@@ -53,6 +53,21 @@ def public_intent(row,committed=False):
 
 
 class BrowserNavigationService(BrowserObservationService):
+    def gateway_context(self,conn,p,lease,initial_context):
+        current=context_of(lease)
+        if current==initial_context: return current
+        grant,_=self._grant(conn,p,lease)
+        if grant['initial_context_digest']!=digest(initial_context):
+            raise AccessDenied('gateway_navigation_anchor_mismatch')
+        receipt=conn.execute('''SELECT r.context,r.context_digest FROM gabriel_identity.browser_navigation_commits c
+            JOIN gabriel_identity.browser_navigation_receipts r USING (organization_id,intent_id)
+            JOIN gabriel_identity.browser_navigation_intents i ON (i.organization_id,i.id)=(c.organization_id,c.intent_id)
+            WHERE i.organization_id=%s AND i.grant_id=%s ORDER BY i.sequence DESC LIMIT 1''',
+            (p.organization_id,grant['id'])).fetchone()
+        if not receipt or receipt['context']!=current or receipt['context_digest']!=digest(current):
+            raise AccessDenied('gateway_navigation_receipt_required')
+        return current
+
     def _actor(self,conn,human,peer):
         preliminary=self._principal(conn,human)
         from gabriel.identity.browser_sessions import browser_digest
