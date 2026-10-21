@@ -256,7 +256,8 @@ class CaseService(IdentityService):
                 _audit(conn,'case.task_linked',principal,case['id'])
 
     def acquire(self,token,case_id,ingestion_id,content,source_label,*,approved=False,event_time=None,
-                redaction_state='not_redacted',parent_id=None):
+                redaction_state='not_redacted',parent_id=None,_model_generated=False):
+        if type(_model_generated) is not bool: raise InvalidIdentityInput('invalid_evidence_origin')
         if approved is not True:
             raise AccessDenied('evidence_approval_required')
         try:
@@ -272,11 +273,18 @@ class CaseService(IdentityService):
         ingestion_id,event_time = identifier(ingestion_id),timestamp(event_time)
         parent_id = identifier(parent_id) if parent_id is not None else None
         digest = sha256(data).hexdigest()
-        intake_digest = sha256(canonical([digest,len(data),source_label,iso(event_time),redaction_state,str(parent_id) if parent_id else None])).hexdigest()
+        intake_fields=[digest,len(data),source_label,iso(event_time),redaction_state,str(parent_id) if parent_id else None]
+        if _model_generated: intake_fields.append('model-generated-json-v1')
+        intake_digest = sha256(canonical(intake_fields)).hexdigest()
         # This durable intent precedes object creation; interrupted writes stay visible.
         with connection(self._dsn) as conn:
             principal = self._human(conn,token,write=True)
             case = self._case(conn,principal,case_id)
+            if _model_generated and not conn.execute('''SELECT 1 FROM gabriel_identity.model_answer_intents
+                WHERE organization_id=%s AND case_id=%s AND ingestion_id=%s AND created_by=%s
+                AND normalized_evidence_id=%s AND payload_digest=%s''',
+                (principal.organization_id,case['id'],ingestion_id,principal.user_id,parent_id,digest)).fetchone():
+                raise AccessDenied('model_answer_intent_required')
             row = conn.execute('''SELECT * FROM gabriel_identity.evidence_objects
                 WHERE organization_id=%s AND case_id=%s AND ingestion_id=%s FOR UPDATE''',
                 (principal.organization_id,case['id'],ingestion_id)).fetchone()
@@ -313,9 +321,11 @@ class CaseService(IdentityService):
                 row = conn.execute('''INSERT INTO gabriel_identity.evidence_objects
                     (organization_id,id,case_id,ingestion_id,intake_digest,object_id,acquired_by,digest,byte_length,key_id,
                      source_kind,source_label,source_event_time,observed_at,schema_version,parser_version,redaction_state,parent_id,acquisition_hash)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'user_supplied_text',%s,%s,%s,1,'supplied-utf8-v1',%s,%s,%s) RETURNING *''',
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s,%s,%s,%s) RETURNING *''',
                     (principal.organization_id,evidence_id,case['id'],ingestion_id,intake_digest,uuid4(),principal.user_id,
-                     digest,len(data),key_id,source_label,event_time,observed,redaction_state,parent_id,acquisition_hash)).fetchone()
+                     digest,len(data),key_id,'model_generated_text' if _model_generated else 'user_supplied_text',
+                     source_label,event_time,observed,'model-json-v1' if _model_generated else 'supplied-utf8-v1',
+                     redaction_state,parent_id,acquisition_hash)).fetchone()
                 conn.execute('INSERT INTO gabriel_identity.custody_events VALUES (%s,%s,1,%s,%s,%s,%s,%s)',
                     (principal.organization_id,evidence_id,principal.user_id,'acquisition_intent',ZERO_HASH,acquisition_hash,observed))
                 _audit(conn,'evidence.acquisition_started',principal,evidence_id)

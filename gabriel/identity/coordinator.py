@@ -11,10 +11,11 @@ PLAN='local-coordinator-v1'
 OPERATIONS=('evidence_inventory','telemetry_health')
 
 
-def sources(service,conn,p,case_id):
+def sources(service,conn,p,case_id,*,_exclude_ingestion=None):
     rows=conn.execute('''SELECT * FROM gabriel_identity.evidence_objects
-        WHERE organization_id=%s AND case_id=%s ORDER BY id LIMIT 65''',
-        (p.organization_id,case_id)).fetchall()
+        WHERE organization_id=%s AND case_id=%s
+        AND (%s::uuid IS NULL OR ingestion_id<>%s::uuid) ORDER BY id LIMIT 65''',
+        (p.organization_id,case_id,_exclude_ingestion,_exclude_ingestion)).fetchall()
     if len(rows)>64:
         raise AccessDenied('coordinator_source_limit')
     values=[]
@@ -44,13 +45,13 @@ def control(p,row):
         raise AccessDenied('coordinator_control_denied')
 
 
-def active(service,conn,p,row):
+def active(service,conn,p,row,*,_exclude_ingestion=None):
     control(p,row)
     service._case(conn,p,row['case_id'],open_only=True)
     at=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
     if row['stopped'] or not row['creator_current'] or row['expires_at']<=at:
         raise AccessDenied('coordinator_not_active')
-    current=sources(service,conn,p,row['case_id'])
+    current=sources(service,conn,p,row['case_id'],_exclude_ingestion=_exclude_ingestion)
     recorded=conn.execute('''SELECT evidence_id,digest FROM gabriel_identity.coordinator_sources
         WHERE organization_id=%s AND run_id=%s ORDER BY evidence_id''',
         (p.organization_id,row['id'])).fetchall()

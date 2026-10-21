@@ -9,3 +9,23 @@ At most 20 serial calls reserve $0.12608. Two prior unresolved comparison calls 
 The dedicated same-repository branch can run one paid job on initial PR opening only, after its isolated Docker software gate passes. Later code/document pushes cannot repeat paid calls. The output records exact model/provider/prompt/configuration, decisions/references, usage/cost, bounded diagnostics and label matches. All quality/admission flags remain false. Three new behavior tests cover the exact 20-call schedule/carry holds, first-new-unknown stop and mixed-stage denial. Full inherited software/recovery regressions and actual wider outcomes are pending until exact-source evidence is recorded.
 
 Development matches guide further evaluation, not model activation. Labels remain provisional, the author-seen corpus is not independently sealed holdout, and a qualified analyst must adjudicate claims and realistic workload. No model is admitted to production; durable storage is developed separately. Subsequent evaluation should be chosen from observed failures and measured cost, rather than assuming a more expensive model is better.
+
+
+## Actual wider result
+
+Comparison source `f34f2daf4fa6924c03b27fa532fba5a2e452befe`, tree `cba7bab8a30b514de658b0758a5e5664cb4f19ac`, passed the isolated 31-test software gate in run 39525445734. Actual live job 118979029086 made 18 calls and validated 17 answers for **$0.009227293** current reported cost, without any new unknown outcome. Prior unknowns remain held. It stopped GPT-4.1 mini's remaining examples when the authorized-administration answer omitted `requested_actions`, retaining the rejection and known charge rather than repairing the answer. Every contract-valid answer matched its provisional expected development decision.
+
+| Model / provider | Wider contract-valid / planned | Wider decisions matched | Wider reported cost | Combined v2 decisions matched / tested | Combined v2 validated-answer cost | Mean observed v2 latency |
+| --- | --- | --- | --- | --- | --- | --- |
+| GPT-4.1 mini / Azure | 2/5 | 2/2 valid | $0.0014504 including rejected answer | 5/6 attempted; two later cases not sent | $0.0024648 valid answers only | 2,240 ms |
+| Nemotron 3 Super / Crusoe | 5/5 | 5/5 | $0.0031185 | 8/8 | $0.0049413 | 1,346 ms |
+| GPT-OSS-120B / Cerebras | 5/5 | 5/5 | $0.00220705 | 8/8 | $0.00347855 | 341 ms |
+| Llama 3.3 70B / Cloudflare | 5/5 | 5/5 | $0.002451343 | 8/8 | $0.003741460 | 3,830 ms |
+
+Combined configurations/prompt hashes were verified identical across the two v2 rounds for each model. The initial three cases and these five cases are distinct. GPT-OSS-120B/Cerebras is the leading development candidate based on these observed answers, latency and reported cost. Nemotron and Llama remain comparison candidates. This is a provisional engineering selection, not production admission, a population accuracy estimate, repeatability/SLA evidence or independent adjudication. Eight small authored examples remain insufficient for qualification.
+
+The generated artifact 12313765881 was independently downloaded and its ZIP SHA256 verified as `e9a69a618552801df77abb404d9c9f812aecf728419fa3c712ccee209c1a2445`. Its complete journal is preserved as `testing/gabriel_model_lab/results/openrouter-v2-wider-20261021.jsonl`. Known reported comparison costs across all four batches total $0.020903898; this is not total account usage, authenticated provider billing or a statement that historical errors were free. The two comparison unknowns still reserve $0.012608, plus the separate $0.01 historical Gemini hold.
+
+## Integrated worker candidate
+
+The wider-comparison branch now incorporates the encrypted answer/recovery increment and the v2 evidence records. No subsequent push may repeat paid calls. Integrated x86/ARM64/restart/restore/browser/software acceptance must be recorded at the combined source, rather than inferring it from separate branch results. Model comparisons and recovery fixtures remain separate evidence. Production admission remains empty. Earlier source-specific results remain preserved.

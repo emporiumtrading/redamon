@@ -82,11 +82,13 @@ def test_admitted_test_fixture_dispatch_is_private_and_remains_reserved(tenant,s
     private=json.loads(report.reveal())
     assert private['result']['decision']['disposition']=='urgent_inconclusive'
     assert private['local_manifest']['identity_map']
-    assert report.metadata['cost_reconciliation_required'] and not report.metadata['result_persisted']
+    assert report.metadata['cost_reconciliation_required'] and report.metadata['result_persisted']
     assert not report.metadata['production_admission'] and not report.metadata['quality_qualified']
     assert worker.budget.status(tenant.token)['usage']['held_slots']==1
     with pytest.raises(AccessDenied,match='already_claimed_no_resend'): dispatch(tenant,setup,row)
     assert len(setup['calls'])==1
+    restored=ModelWorker(cases=worker.cases,vault=setup['vault']).get_answer(tenant.token,row['reservation_id'])
+    assert restored.reveal()==report.reveal() and restored.metadata['historical']
 
 
 def test_unknown_outcome_survives_fresh_worker_without_resend(tenant,setup,cases):
@@ -145,3 +147,163 @@ def test_referenced_source_ciphertext_must_still_verify_before_dispatch(tenant,s
     from gabriel.identity.evidence_store import EvidenceError
     with pytest.raises(EvidenceError): dispatch(tenant,setup,row)
     assert not setup['calls']
+
+
+def answer_receipt_permission(tenant,enabled):
+    with owner_connection(tenant.db) as conn:
+        conn.execute(('GRANT INSERT ON' if enabled else 'REVOKE INSERT ON')+
+            ' gabriel_identity.model_answer_receipts '+('TO' if enabled else 'FROM')+' gabriel_identity_app')
+
+
+def test_receipt_commit_failure_recovers_without_new_provider_or_vault_access(tenant,setup,monkeypatch):
+    row=reserve(tenant,setup)
+    answer_receipt_permission(tenant,False)
+    try:
+        with pytest.raises(IdentityUnavailable): dispatch(tenant,setup,row)
+    finally: answer_receipt_permission(tenant,True)
+    assert len(setup['calls'])==1
+    def forbidden(*args,**kwargs): raise AssertionError('recovery attempted credential/provider access')
+    monkeypatch.setattr(setup['vault'],'resolve_for_backend',forbidden)
+    recovered=setup['worker'].recover_answer(tenant.token,row['reservation_id'])
+    assert recovered.metadata['result_persisted'] and recovered.metadata['review_status']=='unreviewed'
+    replay=setup['worker'].recover_answer(tenant.token,row['reservation_id'])
+    assert replay.reveal()==recovered.reveal() and len(setup['calls'])==1
+    assert setup['worker'].budget.status(tenant.token)['usage']['held_slots']==1
+
+
+def test_ciphertext_written_before_database_rollback_is_recoverable(tenant,setup,cases,monkeypatch):
+    row=reserve(tenant,setup); original=cases._custody
+    def interrupted(conn,p,value,event):
+        if event=='acquired': raise RuntimeError('generated interruption after encryption')
+        return original(conn,p,value,event)
+    monkeypatch.setattr(cases,'_custody',interrupted)
+    with pytest.raises(RuntimeError,match='generated interruption'): dispatch(tenant,setup,row)
+    monkeypatch.setattr(cases,'_custody',original)
+    answer=setup['worker'].recover_answer(tenant.token,row['reservation_id'])
+    assert answer.metadata['result_persisted'] and len(setup['calls'])==1
+    _,path=row_and_file(tenant,cases,dict(id=answer.metadata['answer_evidence_id']))
+    raw=path.read_bytes()
+    assert b'GENERATED_PRIVATE_PRINCIPAL' not in raw and setup['secret'].encode() not in raw
+
+
+def test_missing_ciphertext_cannot_be_recovered_by_resending(tenant,setup,cases,monkeypatch):
+    row=reserve(tenant,setup); original=cases.store.write
+    def interrupted(*args,**kwargs): raise RuntimeError('generated interruption before encryption')
+    monkeypatch.setattr(cases.store,'write',interrupted)
+    with pytest.raises(RuntimeError): dispatch(tenant,setup,row)
+    monkeypatch.setattr(cases.store,'write',original)
+    from gabriel.identity.evidence_store import EvidenceError
+    with pytest.raises(EvidenceError): setup['worker'].recover_answer(tenant.token,row['reservation_id'])
+    with pytest.raises(AccessDenied,match='already_claimed_no_resend'): dispatch(tenant,setup,row)
+    assert len(setup['calls'])==1
+
+
+@pytest.mark.parametrize('change',['stop','new_source','pause'])
+def test_incomplete_receipt_recovery_rechecks_live_scope(tenant,setup,cases,case,change):
+    row=reserve(tenant,setup);answer_receipt_permission(tenant,False)
+    try:
+        with pytest.raises(IdentityUnavailable): dispatch(tenant,setup,row)
+    finally: answer_receipt_permission(tenant,True)
+    if change=='stop': cases.stop_coordinator(tenant.token,setup['plan']['id'])
+    elif change=='new_source': cases.acquire(tenant.token,case['id'],uuid4(),'Generated source after model answer','Generated fixture',approved=True)
+    else: setup['worker'].budget.configure(tenant.token,enabled=False)
+    with pytest.raises(AccessDenied): setup['worker'].recover_answer(tenant.token,row['reservation_id'])
+    assert len(setup['calls'])==1
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.model_answer_receipts WHERE organization_id=%s',(tenant.org,)).fetchone()['n']==0
+
+
+def test_completed_answer_is_historical_after_stop_and_does_not_need_model_admission(tenant,setup,cases,monkeypatch):
+    row=reserve(tenant,setup);answer=dispatch(tenant,setup,row)
+    cases.stop_coordinator(tenant.token,setup['plan']['id'])
+    monkeypatch.setattr(model_routes,'PRODUCTION_CONFIGURATIONS',frozenset())
+    replay=setup['worker'].get_answer(tenant.token,row['reservation_id'])
+    assert replay.reveal()==answer.reveal() and replay.metadata['historical']
+    assert len(setup['calls'])==1 and not replay.metadata['production_admission']
+
+
+def test_answer_ciphertext_and_original_sources_must_verify_on_read(tenant,setup,cases,evidence):
+    row=reserve(tenant,setup);dispatch(tenant,setup,row)
+    _,path=row_and_file(tenant,cases,evidence);path.chmod(0o600);path.write_bytes(b'generated-corruption')
+    from gabriel.identity.evidence_store import EvidenceError
+    with pytest.raises(EvidenceError): setup['worker'].get_answer(tenant.token,row['reservation_id'])
+    assert len(setup['calls'])==1
+
+
+def test_answer_read_requires_transactional_audit(tenant,setup):
+    row=reserve(tenant,setup);dispatch(tenant,setup,row);audit_permission(tenant,False)
+    try:
+        with pytest.raises(IdentityUnavailable): setup['worker'].get_answer(tenant.token,row['reservation_id'])
+    finally: audit_permission(tenant,True)
+
+
+def test_unreviewed_model_answer_cannot_be_reused_as_source_evidence(tenant,setup,cases,case):
+    row=reserve(tenant,setup);answer=dispatch(tenant,setup,row)
+    answer_id=answer.metadata['answer_evidence_id']
+    data=json.loads(cases.read_evidence(tenant.token,setup['holder']['id']).reveal())
+    data['records'][0]['evidence_id']=answer_id
+    data['records'][0]['evidence_digest']=cases.read_evidence(tenant.token,answer_id).metadata['digest']
+    holder=cases.acquire(tenant.token,case['id'],uuid4(),json.dumps(data),'Generated attempted answer reuse',approved=True)
+    plan=cases.begin_coordinator(tenant.token,case['id'],uuid4())
+    cases.advance_coordinator(tenant.token,plan['id']);cases.advance_coordinator(tenant.token,plan['id'])
+    with pytest.raises(AccessDenied,match='unreviewed_model_answer_is_not_source_evidence'):
+        setup['worker'].reserve(tenant.token,plan['id'],holder['id'],uuid4(),MODEL)
+    assert len(setup['calls'])==1
+
+
+def test_answer_receipts_are_append_only_and_case_bound(tenant,setup):
+    from gabriel.identity.service import connection
+    row=reserve(tenant,setup);dispatch(tenant,setup,row)
+    for table in ['model_answer_intents','model_answer_receipts']:
+        with pytest.raises(IdentityUnavailable):
+            with connection(tenant.db.app) as conn:
+                conn.execute('DELETE FROM gabriel_identity.'+table)
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.model_answer_receipts WHERE organization_id=%s',(tenant.org,)).fetchone()['n']==1
+
+
+def test_answer_is_not_accessible_from_another_tenant(tenant,setup,cases):
+    from gabriel.identity.service import provision_organization
+    row=reserve(tenant,setup);dispatch(tenant,setup,row)
+    password=secrets.token_urlsafe(24)
+    org,_=provision_organization(tenant.db.owner,'Generated foreign answer reader','owner',password)
+    token=cases.login(org,'owner',password).token
+    with pytest.raises(AccessDenied): setup['worker'].get_answer(token,row['reservation_id'])
+    with pytest.raises(AccessDenied): setup['worker'].recover_answer(token,row['reservation_id'])
+
+
+def test_answer_schema_upgrade_failure_is_atomic(tenant,monkeypatch):
+    from pathlib import Path
+    from gabriel.identity.service import migrate
+    from testing.gabriel_identity.db_history import remove_v18
+    with owner_connection(tenant.db) as conn: remove_v18(conn)
+    original=Path.read_text
+    def interrupted(path,*args,**kwargs):
+        value=original(path,*args,**kwargs)
+        return value+'\nSELECT 1/0;' if path.name=='schema_v18.sql' else value
+    monkeypatch.setattr(Path,'read_text',interrupted)
+    with pytest.raises(IdentityUnavailable): migrate(tenant.db.owner)
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute("SELECT to_regclass('gabriel_identity.model_answer_intents') AS t").fetchone()['t'] is None
+        assert conn.execute('SELECT max(version) AS v FROM gabriel_identity.migrations').fetchone()['v']==17
+    monkeypatch.setattr(Path,'read_text',original);migrate(tenant.db.owner)
+
+
+def test_model_origin_requires_a_backend_staging_intent(tenant,cases,case):
+    with pytest.raises(AccessDenied,match='model_answer_intent_required'):
+        cases.acquire(tenant.token,case['id'],uuid4(),'Generated fabricated model origin','Generated fixture',
+                      approved=True,_model_generated=True)
+
+
+def test_concurrent_recovery_publishes_one_receipt_without_resending(tenant,setup):
+    from concurrent.futures import ThreadPoolExecutor
+    row=reserve(tenant,setup);answer_receipt_permission(tenant,False)
+    try:
+        with pytest.raises(IdentityUnavailable): dispatch(tenant,setup,row)
+    finally: answer_receipt_permission(tenant,True)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        values=list(pool.map(lambda _:setup['worker'].recover_answer(tenant.token,row['reservation_id']),range(3)))
+    assert len({value.reveal() for value in values})==1 and len(setup['calls'])==1
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.model_answer_receipts WHERE organization_id=%s',
+                            (tenant.org,)).fetchone()['n']==1
