@@ -29,6 +29,7 @@ def key_data():
 
 
 class Client:
+    dispositions={'auth-1':'escalate','backup-1':'benign','logout-1':'abstain'}
     def __init__(self): self.posts=[]; self.invalid=False; self.unknown=False; self.route_catalog=catalog()
     def request(self,method,path,payload=None):
         if path=='/api/v1/key': return dict(data=key_data())
@@ -38,7 +39,7 @@ class Client:
         if self.unknown: raise ProbeError('provider_transport_unresolved')
         packet=json.loads(payload['messages'][1]['content'])
         obs=packet['observations'][0]['id']
-        disposition={'auth-1':'escalate','backup-1':'benign','logout-1':'abstain'}[obs]
+        disposition=self.dispositions[obs]
         decision=dict(disposition=disposition,claims=[dict(id='claim-1',statement='Generated software fixture claim.',references=[obs])],
             alternatives=['Generated alternative.'],contradictions=['Generated contradiction review.'],uncertainty=['Generated uncertainty.'],
             reported_gaps=['source-unavailable'] if obs=='logout-1' else [],requested_actions=[])
@@ -199,3 +200,34 @@ def test_v2_unknown_charge_stops_and_keeps_prior_hold():
     report=compare(client,corpus(),protocol_v2=True)
     assert len(client.posts)==1 and report['unresolved_comparison_calls']==2
     assert report['new_unknown_cost_possible'] and report['carried_reserved_usd']=='0.006304'
+
+
+class WiderClient(Client):
+    @property
+    def dispositions(self):
+        return {c['observations'][0]['id']:'abstain' for c in corpus()['cases']}
+
+
+def test_wider_schedule_is_fixed_twenty_calls_and_carries_both_unknowns():
+    from gabriel.identity.model_lab import WIDER_CASES,WIDER_MODELS
+    client=WiderClient();report=compare(client,corpus(),wider=True)
+    assert len(client.posts)==report['validated_calls']==20
+    assert {r['run']['case_id'] for r in report['results']}==set(WIDER_CASES)
+    assert {p['model'] for p in client.posts}==set(WIDER_MODELS)
+    assert report['carried_reserved_usd']=='0.012608' and report['unresolved_comparison_calls']==2
+    assert report['carried_reported_cost_usd']=='0.011676605'
+    assert report['unknown_cost_possible'] and not report['new_unknown_cost_possible']
+    assert not report['quality_qualified'] and not report['production_admission']
+
+
+def test_wider_unknown_stops_at_one_new_call():
+    client=WiderClient();client.unknown=True
+    report=compare(client,corpus(),wider=True)
+    assert len(client.posts)==1 and report['unresolved_comparison_calls']==3
+    assert report['new_unknown_cost_possible']
+
+
+def test_wider_schedule_does_not_accept_mixed_modes():
+    client=WiderClient()
+    with pytest.raises(ProbeError,match='comparison_schedule_denied'): compare(client,corpus(),wider=True,protocol_v2=True)
+    assert not client.posts
