@@ -208,7 +208,10 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                 request_start=len(CONSOLE_REQUESTS)
                 click(cdp,popup,'navigation-run')
                 if scenario=='success':
-                    observations=wait_for(lambda:(lambda values:values if len(values)==2 else None)(navigation.list_browser_observations(human,enrollment['lease_id'])['observations']),20)
+                    def captured_sections():
+                        values=navigation.list_browser_observations(human,enrollment['lease_id'])['observations']
+                        return values if len(values)==2 and all(item['state']=='captured' and item['evidence_id'] for item in values) else None
+                    observations=wait_for(captured_sections,20)
                     values=[navigation.read_evidence(human,item['evidence_id']).reveal().decode() for item in observations]
                     assert any('Generated traffic: repeated connection failures.' in value for value in values)
                     assert any('Generated threat: suspicious file activity.' in value for value in values)
