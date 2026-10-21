@@ -1,0 +1,32 @@
+# Versioned development protocol correction
+
+The owner authorized continued engineering and budgeted model selection without repeated prompts. This increment clarifies the response contract before spending on a new declared configuration. It preserves the original protocol, original corpus, acceptance assertions and previous live journals. It never turns a fixture or development match into model qualification.
+
+## Changes and bounded evaluation
+
+`PROMPT_V2` states the existing ASCII/string identifier rules, exact observation references, nonempty reasoning arrays and empty requested actions. It defines abstention when current evidence is unavailable behind sign-in, bounded benign classification only with supporting evidence, escalation with observable incident evidence, and urgent-inconclusive only with observable urgent impact. It supplies a shape example without any corpus answer/label. No validator or expected decision is relaxed. Failure diagnostics add fixed paths for invalid identifiers, without recording rejected values or raw completion text.
+
+The new fixed CLI mode `--protocol-v2-development` compares seven candidate routes on the same three known fictional examples. Qwen-35B/DeepInfra is excluded because the prior charge remains unresolved; Gemini's approved route remains unavailable. The seven candidates include the six known-cost routes and GPT-4.1 mini/Azure with a new prompt hash. These are new configuration evaluations, not retries of unresolved calls. Each exact route still requires current catalog ZDR, parameter support and the existing $0.50/M input and $3/M output price ceilings. There is no fallback or retry.
+
+At most 21 serial POSTs reserve $0.132384. The $0.006304 prior comparison hold and $0.005710488 prior reported comparison cost remain recorded; together these total at most $0.144398488 within the $0.16 comparison envelope. The historical $0.01 Gemini hold remains separately reserved in account preflight. Actual account usage is checked before every call, preserving $18/month dispatch, $0.50/day and $0.05/model-investigation limits. Other account consumers remain outside this serialized CI accounting. No key/account metadata/private evidence is retained.
+
+The paid job runs only on initial opening of the dedicated same-repository protocol-v2 branch after its isolated Docker software gate. Ordinary follow-up pushes do not repeat paid calls. An unknown new outcome halts the batch immediately and retains all prior holds. Exact model/provider, actual prompt hash, usage/cost, generated decisions and bounded diagnostics are recorded. Earlier journals remain unchanged. All quality/admission flags remain false, including for a 3/3 development result.
+
+## Acceptance and next work
+
+Matching-image tests must verify the 21-call schedule, actual prompt binding, exclusion of the unresolved route, carried reservations, stage argument denial, unknown-cost stop and bounded field diagnostics, plus the unchanged original comparison behaviors. Full PostgreSQL/restart/restore and browser/runtime regression gates remain required. Host pytest is not used. Actual model outcomes are separate from fixtures; execution results are pending until recorded with their exact source/artifact.
+
+If candidates pass this development protocol check, use a controlled wider development/validation comparison before choosing a default. Independent analyst review and sealed holdout remain necessary for qualification. Next backend work is durable encrypted model answers/lineage, idempotent retrieval and recovery while preserving full claimed-cost holds until reconciliation. No workbench AI action or production admission is enabled here.
+
+
+## Actual v2 outcome and regression checkpoint
+
+Code `536d0ffea5b29f3589dd0e6798dcbf06356ae5b6`, tree `abfcc945ba29e5e513937ccdfecf94ff521a4549`, passed 28 isolated software tests in job 118974005817. Its live job 118974137379 in run 39523913543 made 14 calls and validated 12 answers, reporting **$0.005966117** current cost. GPT-4.1 mini/Azure, Nemotron 3 Super/Crusoe, GPT-OSS-120B/Cerebras and Llama 3.3 70B/Cloudflare each matched all three development decisions, including abstention when sign-in blocked visibility. All remain unqualified: three author-seen examples with provisional labels cannot establish production suitability.
+
+Mistral Small 3.2/Mistral returned an empty contradictions array (`missing_reasoning`); its remaining examples stopped without relaxing the assertion. DeepSeek V3.2/SiliconFlow had `provider_transport_unresolved`, stopping the entire batch immediately; possible charge remains held and it was not retried. Qwen-122B was not attempted in this version. The older Qwen-35B hold and historical Gemini hold remain separate. Two comparison unknowns now retain $0.012608 together, plus the historical $0.01. Combined known comparison cost through this run is $0.011676605; this excludes unrelated account usage and does not assume either unknown was free. A later wider comparison excludes both uncertain routes and uses only different development examples on the four complete configurations.
+
+Generated artifact 12311618705 was independently downloaded and ZIP SHA256 verified as `1d220c6e9d92dfc29b1a31a4cc03faea549acbc48d0b75c9bdc7ce97b3b54ff6`. The full journal is preserved as `testing/gabriel_model_lab/results/openrouter-protocol-v2-20261021.jsonl`. The workflow's failed status reflects the unknown transport/cost stop, not twelve invented failures or absence of useful model evidence.
+
+Native ARM64 run 39523913518 and x86 39523913479 each passed **808 component + 49 runtime + 21 foundation = 878 tests**, zero failures/errors/skips, plus real PostgreSQL restart/fresh dump-restore. Browser 39523913497 passed 40 checks each in Chrome and Brave; separate runtime 39523913514 passed. All three evidence ZIPs were independently downloaded/hash-verified: ARM64 artifact 12311674808 (`a447135dbd4c5a6d3ea7f33c90315f516c621f6b16bba3cab51b399df51a3cbc`), x86 12313490048 (`82c2fbddec0670bc830a07c3c920670fabb767ff85b0f65dbfed03b530c68a3a`), browser 12311943635 (`bea3a693326c1eb011eb8db72d7623dfe25606dbd2fe9a8521e71722c8049d51`). Checkout `fd68f73875c83062921f10c1bff7134ed7981192` has exactly the candidate tree. Software regressions and fixtures remain separate from actual generated model behavior. No production activation, merge, deployment or human UAT is claimed.
+
+Preserved v2 JSONL SHA256: `50d39bbf583ae229e67926deb99e8e6c6b0b807cc3959e32a0329d2a70a2ffbf`.

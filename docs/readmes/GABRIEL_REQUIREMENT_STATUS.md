@@ -5,6 +5,9 @@ Verified component source: `207954a297dcc8443088fd9ad8b677ac30b89275` passed **8
 New worker source `c42478bb892c1918eb42a241d4696137644d73c3` additionally passed 871 tests per architecture and recovery/browser gates. The restricted network kernel is present but default-denied and has no durable answer storage. Actual six-model continuation at `796adfdb0987d20957711c7d3a9883080cc8bf2e` passed 874 tests per architecture, restart/fresh restore and 40 Chrome/Brave checks each, and made 12 calls for $0.005203688 reported cost: nine contract-valid answers; no model matched all three development decisions and none is quality-qualified. Earlier possible-charge holds remain intact. See [exact worker/comparison evidence and limitations](GABRIEL_RESTRICTED_MODEL_WORKER.md). These later results do not convert any complete release requirement to accepted.
 
 
+Later protocol-v2 source `536d0ffea5b29f3589dd0e6798dcbf06356ae5b6` passed 878 tests per architecture and recovery/browser gates. Four configurations (GPT-4.1 mini/Azure, Nemotron 3 Super/Crusoe, GPT-OSS-120B/Cerebras, Llama 3.3 70B/Cloudflare) matched all three known development decisions after explicit protocol clarification. Mistral failed nonempty reasoning and DeepSeek had an unresolved transport outcome with no retry. No model is qualified/admitted; wider development, independent adjudication/sealed holdout and production controls remain open. See [exact v2 evidence](GABRIEL_MODEL_PROTOCOL_V2.md).
+
+
 | Requirement | Implemented evidence / remaining work |
 | --- | --- |
 | GAB-001 | Static tracked-tree inventory exists; complete inherited disposition review and full-stack baseline remain open. |
