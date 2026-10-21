@@ -156,7 +156,10 @@ class BrowserNavigationService(BrowserObservationService):
     def stop_navigation(self,human,peer):
         with connection(self._dsn) as conn:
             p,lease=self._actor(conn,human,peer)
-            grant,_=self._grant(conn,p,lease)
+            # Withdrawing a contract must never prevent the operator from stopping.
+            grant=conn.execute('SELECT * FROM gabriel_identity.browser_navigation_grants WHERE organization_id=%s AND lease_id=%s',
+                (p.organization_id,lease['id'])).fetchone()
+            if not grant: raise AccessDenied('navigation_grant_not_accessible')
             conn.execute('INSERT INTO gabriel_identity.browser_navigation_stops (organization_id,grant_id,stopped_by) VALUES (%s,%s,%s)',
                 (p.organization_id,grant['id'],p.user_id))
             conn.execute("UPDATE gabriel_identity.browser_leases SET state='disconnected' WHERE organization_id=%s AND id=%s",(p.organization_id,lease['id']))

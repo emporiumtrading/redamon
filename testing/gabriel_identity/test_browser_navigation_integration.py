@@ -158,6 +158,9 @@ def test_current_authority_required_to_complete(tenant,browser,grant,navigation,
         TaskService(tenant.db.app).end_task(tenant.token,lease['task_id'],'cancelled')
     with pytest.raises((AccessDenied,AuthenticationDenied)): complete(tenant,browser,grant,intent,context)
     assert not rows(tenant,'browser_navigation_commits')
+    if loss=='contract_revoked':
+        assert browser.stop_navigation(tenant.token,grant.token)['stopped']
+        with pytest.raises(AuthenticationDenied): browser.heartbeat_browser(grant.token,context)
 
 
 def test_application_cannot_rewrite_scope_or_forge_commit(tenant,browser,grant,navigation):
