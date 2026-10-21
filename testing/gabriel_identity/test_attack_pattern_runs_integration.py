@@ -76,8 +76,10 @@ def test_unverified_or_wrongly_bound_inputs_never_publish(tenant,cases,case,evid
         _,path=row_and_file(tenant,cases,evidence);path.chmod(0o600);path.write_bytes(b'generated-corrupt-security-source')
     elif attack=='duplicate_json': holder=cases.acquire(tenant.token,case['id'],uuid4(),'{"version":1,"version":2}','Generated duplicate JSON',approved=True)
     elif attack=='model_source':
-        generated=cases.acquire(tenant.token,case['id'],uuid4(),'Generated model answer','Generated model answer',approved=True,_model_generated=True)
-        for event in document['events']: event.update(evidence_id=str(generated['id']),evidence_digest=generated['digest'])
+        # Construct a historical origin fixture; normal intake correctly requires a model intent.
+        with owner_connection(tenant.db) as conn:
+            conn.execute("UPDATE gabriel_identity.evidence_objects SET source_kind='model_generated_text' WHERE organization_id=%s AND id=%s",
+                (tenant.org,evidence['id']))
     elif attack=='conflicting_digest': document['events'][1]['evidence_digest']='f'*64
     if holder is None: _,holder=intake(tenant,cases,case,evidence,document)
     with pytest.raises((AccessDenied,InvalidIdentityInput,EvidenceError)): cases.run_attack_review(tenant.token,case['id'],uuid4(),holder['id'])
