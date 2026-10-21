@@ -1,5 +1,6 @@
 import {inspectPage} from "./collector.js";
 import {inspectNavigationIdentity, validatePlan} from "./navigator.js";
+import {inspectEventSection} from "./events.js";
 
 const trusted = chrome.runtime.getURL("popup.html");
 let busy = false;
@@ -65,7 +66,8 @@ async function request(session, operation, body) {
     const raw = await response.text();
     if (raw.length > 1500000) throw new Error("Gateway response exceeded its limit.");
     const value = JSON.parse(raw);
-    if (!response.ok || value.status !== "ok") throw new Error(operation === "observe" ? "Capture outcome is unconfirmed. Inspect receipts before retrying." : "Gateway denied access. Check scope, expiry and human session.");
+    if (!response.ok || value.status !== "ok") throw new Error(operation === "observe" ? "Capture outcome is unconfirmed. Inspect receipts before retrying." :
+      operation === "events-review" ? "Event review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
     return value.result;
   } finally { clearTimeout(timer); inflight.delete(controller); }
 }
@@ -189,7 +191,11 @@ async function handle(message) {
         }
         await navigationIdentity(selected.tab_id, selected.page_url, selected.account_label);
         await request(session, "heartbeat", {context: wireContext(selected)});
-        const view = await current(selected, true);
+        await current(selected);
+        const structured = await chrome.scripting.executeScript({target: {tabId: selected.tab_id, documentIds: [selected.document_id]}, func: inspectEventSection, args: [selected.account_label]});
+        if (structured.length !== 1 || structured[0].frameId !== 0 || structured[0].documentId !== selected.document_id || structured[0].result === undefined)
+          throw new Error("Event document changed during collection.");
+        const view = structured[0].result === null ? await current(selected, true) : structured[0].result;
         const payload = {schema_version: 1, operation: "browser.observe", request_id: crypto.randomUUID(), sequence: session.sequence + 1,
           context: wireContext(selected), observed_at: new Date().toISOString(), visibility: "partial", client_minimized: true, content: view.content};
         await persist({pending: {request_id: payload.request_id, sequence: payload.sequence}}, revision);
@@ -201,11 +207,20 @@ async function handle(message) {
         tour.sections.push({page_url: selected.page_url, intent_id: intent?.id, observation_id: receipt.observation_id, evidence_id: receipt.evidence_id});
         await persist({session, tour}, revision);
         await chrome.storage.session.remove("pending");
+        if (view.normalization_kind === "generated-browser-events-v1") {
+          const analyzed = await request(session, "events-review", {context: wireContext(selected), observation_id: receipt.observation_id});
+          stillCurrent(revision);
+          tour.latest_review_id = analyzed.review_id;
+          tour.candidate_count = analyzed.candidate_count;
+          tour.sections.at(-1).review = analyzed;
+          await persist({tour}, revision);
+        }
       }
       tour.state = "complete";
       await persist({tour}, revision);
       return {tour, context: selected, extension_origin: "chrome-extension://" + chrome.runtime.id,
-        message: "Approved section tour complete. " + tour.sections.length + " encrypted evidence receipts confirmed."};
+        message: "Approved section tour complete. " + tour.sections.length + " encrypted evidence receipts confirmed." +
+          (tour.latest_review_id ? " " + tour.candidate_count + " suspected pattern" + (tour.candidate_count === 1 ? " requires" : "s require") + " analyst review; confidence is unqualified." : "")};
     }
     if (message.operation === "receipts") {
       await current(selected);

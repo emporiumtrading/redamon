@@ -176,5 +176,11 @@ def remove_v22(conn):
 
 
 def remove_v23(conn):
+    remove_v24(conn)
     conn.execute('DROP TABLE IF EXISTS gabriel_identity.attack_pattern_runs')
     conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=23')
+
+
+def remove_v24(conn):
+    conn.execute('DROP TABLE IF EXISTS gabriel_identity.browser_event_snapshots')
+    conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=24')

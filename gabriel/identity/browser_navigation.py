@@ -53,6 +53,10 @@ def public_intent(row,committed=False):
 
 
 class BrowserNavigationService(BrowserObservationService):
+    def review_browser_events(self,human,peer,context,observation_id):
+        from gabriel.identity.browser_events import process
+        return process(self,human,peer,context,observation_id)
+
     def navigation_plan(self,human,peer,context):
         with connection(self._dsn) as conn:
             p,lease=self._actor(conn,human,peer)
@@ -129,6 +133,9 @@ class BrowserNavigationService(BrowserObservationService):
             p,lease=self._actor(conn,human,peer)
             grant,at=self._grant(conn,p,lease)
             if destination_url not in grant['destinations']: raise AccessDenied('navigation_destination_not_granted')
+            if conn.execute("SELECT 1 FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s AND state='prepared'",
+                            (p.organization_id,lease['id'])).fetchone():
+                raise AccessDenied('browser_capture_outcome_unresolved')
             old=conn.execute('SELECT * FROM gabriel_identity.browser_navigation_intents WHERE organization_id=%s AND grant_id=%s AND request_id=%s',
                 (p.organization_id,grant['id'],request_id)).fetchone()
             if old:
