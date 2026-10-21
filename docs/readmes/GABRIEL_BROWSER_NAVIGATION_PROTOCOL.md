@@ -36,8 +36,9 @@ Generated PostgreSQL integration tests cover bounded transitions, concurrent
 replay, stale-page denial, unresolved/expired outcomes, audit rollback, current
 authority, immutable scope, restricted database privileges and atomic upgrade
 from schema 20 to 21. Docker CI execution is required; authored tests alone are
-not acceptance evidence. Physical restart/restore admission for this new
-protocol is still pending.
+not acceptance evidence. The physical restart/restore fixture also checks a
+completed receipt, an unresolved second move, capture denial and terminal Stop;
+execution evidence for these new checks is pending.
 
 Next: wire narrowly scoped gateway operations, a local executor and extension
 handling, then admit a simulated console adapter with page/account checks and
