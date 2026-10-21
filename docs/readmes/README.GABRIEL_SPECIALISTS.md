@@ -1,5 +1,10 @@
 # Gabriel specialist contracts and telemetry health
 
+Current implementation is extended by [twelve persisted typed local reviews](GABRIEL_TWELVE_SPECIALISTS.md).
+The original telemetry-only increment and its evidence are retained below as
+history. Qualified AI reasoning and autonomous browser investigation remain open;
+see the [browser executor contract](GABRIEL_BROWSER_INVESTIGATION_EXECUTOR.md).
+
 This C07 increment adds the first executable local specialist: a deterministic assessment of the case's recorded browser-session coverage. It uses real authoritative session/task/human checks, immutable PostgreSQL records and audited operator requests. It does not run a model, detect an attacker, browse a vendor console, execute a query or initiate response. The twelve PRD role identifiers are registered; eleven have contracts only and execution is explicitly denied. Registry presence is not an implemented AI capability.
 
 ## Operation and controls
