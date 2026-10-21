@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import zipfile
 
-FILES={'manifest.json','worker.js','collector.js','navigator.js','popup.html','popup.js','popup.css'}
+FILES={'manifest.json','worker.js','collector.js','navigator.js','events.js','popup.html','popup.js','popup.css'}
 
 
 def package(source,output):

@@ -47,6 +47,7 @@ observations = BrowserObservationService(app_dsn,cases.store)
 navigation = BrowserNavigationService(app_dsn,cases.store)
 assert not CONTRACTS
 CONTRACTS['generated-recovery-navigation-v1']={'/security','/traffic'}
+CONTRACTS['generated-console-v1']={'/security','/traffic','/threats'}
 budget = ModelBudgetService(app_dsn)
 
 
@@ -60,7 +61,7 @@ def counts():
               'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
               'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
               'browser_navigation_grants','browser_navigation_intents','browser_navigation_receipts',
-              'browser_navigation_commits','browser_navigation_stops','attack_pattern_runs',
+              'browser_navigation_commits','browser_navigation_stops','attack_pattern_runs','browser_event_snapshots',
               'memory_records','memory_reviews','memory_invalidations','memory_resets',
               'model_budget_policies','model_price_quotes','model_investigations','model_reservations',
               'model_dispatch_claims','model_settlements','model_investigation_stops','model_answer_intents','model_answer_receipts',
@@ -329,7 +330,22 @@ if sys.argv[1] == 'before':
     attack_input=cases.acquire(token,attack_case['id'],uuid4(),json.dumps(event_document(attack_case['id'],attack_source)),
         'Generated attack review snapshot',approved=True)
     attack_review=cases.run_attack_review(token,attack_case['id'],uuid4(),attack_input['id'])
+    from testing.gabriel_identity.test_browser_events_integration import browser_document
+    pipeline_case=navigation.create_case(observation_token,'Generated browser event pipeline recovery case')
+    pipeline_task=navigation.create_browser_task(observation_token,'Generated pipeline recovery task',3600,10)
+    pipeline_lease=navigation.issue_browser_lease(observation_token,pipeline_task['id'],pipeline_case['id'],browser_context,share_observations=True)
+    navigation.connect_browser(pipeline_lease.token,browser_context)
+    navigation.grant_navigation(observation_token,pipeline_lease.token,uuid4(),'generated-console-v1',[browser_context['page_url']],max_moves=1)
+    pipeline_document=event_document(pipeline_case['id'],dict(id=uuid4(),digest='a'*64))
+    for offset in (0,5):
+        pipeline_capture=navigation.observe_browser(observation_token,pipeline_lease.token,dict(observation_payload,
+            request_id=str(uuid4()),sequence=1+offset//5,observed_at=datetime.now(timezone.utc).isoformat(),
+            content=json.dumps(browser_document(pipeline_document,offset),separators=(',',':'))))
+        pipeline_review=navigation.review_browser_events(observation_token,pipeline_lease.token,browser_context,pipeline_capture['observation_id'])
+    assert pipeline_review['candidate_count']==1 and pipeline_review['unique_event_count']==10
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
+        'pipeline_peer':pipeline_lease.token,'pipeline_case_id':str(pipeline_case['id']),
+        'pipeline_observation':str(pipeline_capture['observation_id']),'pipeline_review':pipeline_review,
         'attack_case_id':str(attack_case['id']),'attack_review_id':attack_review['id'],'attack_review_digest':attack_review['result_digest'],
         'navigation_peer':navigation_lease.token,'navigation_intent':navigation_intent['id'],
         'navigation_pending':navigation_pending['id'],'navigation_context':navigation_context,
@@ -413,6 +429,14 @@ elif sys.argv[1] in {'after','restored'}:
     for ref in attack_review['packet']['references']:
         assert sha256(cases.read_evidence(saved['token'],ref['record_id']).reveal()).hexdigest()==ref['digest']
     print('PASS: persisted attack candidate review and verified source bytes survived recovery without model access or response authority')
+    pipeline_review=navigation.review_browser_events(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
+    assert pipeline_review==saved['pipeline_review'] and pipeline_review['candidate_count']==1 and pipeline_review['model_cost_usd']=='0'
+    assert len(navigation.list_attack_reviews(saved['observation_token'],saved['pipeline_case_id'])['runs'])==2
+    navigation.disconnect_browser(saved['pipeline_peer'])
+    try: navigation.review_browser_events(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
+    except AuthenticationDenied: pass
+    else: raise AssertionError('browser event review survived terminal Stop')
+    print('PASS: frozen browser-event snapshots and cross-capture review survived recovery without new captures, duplicate reviews or model charges; Stop denied replay')
     replayed_navigation=navigation.complete_navigation(saved['observation_token'],saved['navigation_peer'],
         saved['navigation_intent'],saved['navigation_context'])
     assert replayed_navigation['replayed'] and replayed_navigation['current']

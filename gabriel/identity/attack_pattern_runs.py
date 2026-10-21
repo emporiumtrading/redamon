@@ -92,10 +92,11 @@ def public(row):
         time_basis='historical_supplied_event_snapshot',grants_authority=False,model_cost_usd='0')
 
 
-def run(service,token,case_id,request_id,input_evidence_id):
+def run(service,token,case_id,request_id,input_evidence_id,*,_admission=None):
     request_id,input_evidence_id=identifier(request_id),identifier(input_evidence_id)
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True)
+        if _admission is not None: _admission(conn)
         case=service._case(conn,p,case_id,open_only=True)
         old=conn.execute('SELECT * FROM gabriel_identity.attack_pattern_runs WHERE organization_id=%s AND case_id=%s AND request_id=%s',
             (p.organization_id,case['id'],request_id)).fetchone()
