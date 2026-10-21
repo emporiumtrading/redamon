@@ -3,10 +3,11 @@ from decimal import Decimal
 from hashlib import sha256
 import json
 import os
+import re
 import sys
 import time
 
-from gabriel.identity.model_evaluation import canonical,digest,load_json,packets,validate_run
+from gabriel.identity.model_evaluation import canonical,digest,load_json,packets,validate_run,EvaluationError
 from gabriel.identity.model_routes import ROUTES,RouteError,eligible,parameters
 from gabriel.identity.model_transport import OpenRouterTransport
 from gabriel.identity.model_protocol import PROMPT,ProbeError,decode,money
@@ -15,6 +16,10 @@ CORPUS_DIGEST='0fd9f635db6d97c36a6fd9ffb9f7d35ba0f528d638d39dbe82ee7b165cec0a0f'
 CASES=('dev-auth-attack','dev-backup','dev-logout')
 RUN_ALLOWANCE=Decimal('0.16')
 CALL_RESERVATION=Decimal('0.006304')
+PRIOR_RESERVED=Decimal('0.006304')
+PRIOR_REPORTED=Decimal('0.0005068')
+HISTORICAL_PROBE_RESERVED=Decimal('0.01')
+PRIOR_ARTIFACT_SHA256='3b92f975f9dccca501b2b8fd70117899eb928b60b1bf79f3bead2d73c0baf0d1'
 
 
 class LabCredential:
@@ -30,9 +35,9 @@ def preflight(data):
         raise ProbeError('monthly_key_limit_required')
     day=money(data.get('usage_daily'))+money(data.get('byok_usage_daily',0))
     month=money(data.get('usage_monthly'))+money(data.get('byok_usage_monthly',0))
-    if day+RUN_ALLOWANCE>Decimal('0.50') or month+RUN_ALLOWANCE>18 or money(data.get('limit_remaining'))<RUN_ALLOWANCE:
+    if day+RUN_ALLOWANCE+HISTORICAL_PROBE_RESERVED>Decimal('0.50') or month+RUN_ALLOWANCE+HISTORICAL_PROBE_RESERVED>18 or money(data.get('limit_remaining'))<RUN_ALLOWANCE+HISTORICAL_PROBE_RESERVED:
         raise ProbeError('comparison_budget_unavailable')
-    return dict(day_used_usd=str(day),month_used_usd=str(month),run_reservation_usd=str(RUN_ALLOWANCE))
+    return dict(day_used_usd=str(day),month_used_usd=str(month),run_reservation_usd=str(RUN_ALLOWANCE),historical_probe_reserved_usd=str(HISTORICAL_PROBE_RESERVED))
 
 
 def body_for(model,packet):
@@ -75,18 +80,43 @@ def record_for(reply,model,packet,body,elapsed):
     return dict(configuration=config,run=run,provider_response_digest=digest(reply))
 
 
-def compare(client,corpus,checkpoint=lambda event:None):
+def diagnostic(error):
+    code=str(error) if isinstance(error,(ProbeError,EvaluationError,RouteError)) else 'comparison_unresolved'
+    return code if re.fullmatch('[a-z0-9_]{1,80}',code) else 'comparison_unresolved'
+
+
+def shape(reply):
+    try:
+        decision=decode(reply['choices'][0]['message']['content'])
+        def names(value):
+            return sorted(k if isinstance(k,str) and re.fullmatch('[a-z_]{1,40}',k) else 'unexpected_field_name'
+                          for k in value) if isinstance(value,dict) else []
+        claims=decision.get('claims',[]) if isinstance(decision,dict) else []
+        return dict(decision_keys=names(decision),claim_shapes=[names(v) for v in claims[:3]] if isinstance(claims,list) else [],
+                    reasoning_counts={k:len(decision[k]) if isinstance(decision.get(k),list) else None
+                                      for k in ['alternatives','contradictions','uncertainty']} if isinstance(decision,dict) else {})
+    except Exception: return dict(decision_shape='unreadable')
+
+
+def compare(client,corpus,checkpoint=lambda event:None,*,remaining=False):
+    if type(remaining) is not bool: raise ProbeError('comparison_schedule_denied')
     if digest(corpus)!=CORPUS_DIGEST: raise ProbeError('pinned_generated_corpus_required')
     selected={p['case_id']:p for p in packets(corpus,'development') if p['case_id'] in CASES}
     labels={c['id']:c['label']['acceptable_decisions'] for c in corpus['cases'] if c['id'] in CASES}
     report=dict(version='bounded-multi-model-lab-v1',results=[],routes=[],failures=[],attempted_calls=0,
-        validated_calls=0,reported_cost_usd='0',unknown_cost_possible=False,quality_qualified=False,production_admission=False,
+        validated_calls=0,reported_cost_usd='0',unknown_cost_possible=remaining,new_unknown_cost_possible=False,
+        unresolved_comparison_calls=1 if remaining else 0,carried_reserved_usd=str(PRIOR_RESERVED) if remaining else '0',
+        carried_reported_cost_usd=str(PRIOR_REPORTED) if remaining else '0',
+        prior_artifact_sha256=PRIOR_ARTIFACT_SHA256 if remaining else None,
+        historical_probe_reserved_usd=str(HISTORICAL_PROBE_RESERVED),
+        quality_qualified=False,production_admission=False,
         limitations=['Known generated development examples, not sealed holdout or analyst adjudication.',
                     'Catalog ZDR classification and reported costs are not independent provider/billing attestations.',
                     'No production data, model activation, tools, retries or automatic fallback.',
                     'Other account/key consumers are outside this serialized batch accounting.'])
     total=Decimal(0)
-    for model in ROUTES:
+    models=tuple(ROUTES)[2:] if remaining else tuple(ROUTES)
+    for model in models:
         try:
             preflight(client.request('GET','/api/v1/key').get('data'))
             route=eligible(client.request('GET','/api/v1/endpoints/zdr'),model)
@@ -97,7 +127,7 @@ def compare(client,corpus,checkpoint=lambda event:None):
         for case_id in CASES:
             packet=selected[case_id]
             body=body_for(model,packet)
-            if CALL_RESERVATION*(report['attempted_calls']+1)>RUN_ALLOWANCE:
+            if CALL_RESERVATION*(report['attempted_calls']+1)+(PRIOR_RESERVED+PRIOR_REPORTED+HISTORICAL_PROBE_RESERVED if remaining else HISTORICAL_PROBE_RESERVED)>RUN_ALLOWANCE:
                 raise ProbeError('batch_reservation_exhausted')
             try:
                 preflight(client.request('GET','/api/v1/key').get('data'))
@@ -111,9 +141,11 @@ def compare(client,corpus,checkpoint=lambda event:None):
             try:
                 reply=client.request('POST','/api/v1/chat/completions',body)
                 cost=usage_for(reply,model)
-            except Exception:
+            except Exception as error:
                 report['unknown_cost_possible']=True
-                report['failures'].append(dict(model=model,case_id=case_id,stage='dispatch',reason='charge_or_response_unresolved_no_retry'))
+                report['new_unknown_cost_possible']=True
+                report['unresolved_comparison_calls']+=1
+                report['failures'].append(dict(model=model,case_id=case_id,stage='dispatch',reason='charge_or_response_unresolved_no_retry',diagnostic_code=diagnostic(error)))
                 checkpoint(dict(event='dispatch_unresolved',model=model,case_id=case_id,unknown_cost_possible=True))
                 return report
             total+=cost
@@ -124,8 +156,8 @@ def compare(client,corpus,checkpoint=lambda event:None):
                 report['results'].append(result)
                 report['validated_calls']+=1
                 checkpoint(dict(event='response_validated',model=model,case_id=case_id,cost_usd=str(cost)))
-            except Exception:
-                report['failures'].append(dict(model=model,case_id=case_id,stage='contract',reason='decision_contract_rejected_known_reported_cost'))
+            except Exception as error:
+                report['failures'].append(dict(model=model,case_id=case_id,stage='contract',reason='decision_contract_rejected_known_reported_cost',diagnostic_code=diagnostic(error),response_digest=digest(reply),shape=shape(reply)))
                 checkpoint(dict(event='response_rejected',model=model,case_id=case_id,cost_usd=str(cost),unknown_cost_possible=False))
                 break
     return report
@@ -138,10 +170,10 @@ def main():
         if secret and secret.encode() in raw: raise ProbeError('credential_output_rejected')
         print(raw.decode(),flush=True)
     try:
-        if sys.argv[1:]: raise ProbeError('comparison_arguments_denied')
-        report=compare(OpenRouterTransport(LabCredential(secret)),load_json('/app/development_corpus.json'),emit)
+        if sys.argv[1:] not in ([],['--remaining-after-checkpoint']): raise ProbeError('comparison_arguments_denied')
+        report=compare(OpenRouterTransport(LabCredential(secret)),load_json('/app/development_corpus.json'),emit,remaining=bool(sys.argv[1:]))
         emit(dict(event='comparison_final',report=report))
-        return 2 if report['unknown_cost_possible'] else 0
+        return 2 if report['new_unknown_cost_possible'] else 0
     except Exception:
         emit(dict(event='comparison_unresolved',quality_qualified=False,production_admission=False))
         return 2

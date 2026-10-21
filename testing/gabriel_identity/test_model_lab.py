@@ -134,3 +134,29 @@ def test_transport_does_not_follow_redirects_or_expose_response_or_key():
             OpenRouterTransport(Credential()).request('POST','/api/v1/chat/completions',{'model':'fixture'})
         assert conn.request.call_count==1 and conn.close.call_count==1
         connection.assert_called_once()
+
+
+def test_remaining_batch_never_retries_prior_models_and_carries_unknown_reservation():
+    client=Client()
+    report=compare(client,corpus(),remaining=True)
+    assert len(client.posts)==18 and report['validated_calls']==18
+    assert {p['model'] for p in client.posts}==set(tuple(ROUTES)[2:])
+    assert report['carried_reserved_usd']=='0.006304' and report['unresolved_comparison_calls']==1
+    assert report['unknown_cost_possible'] and not report['new_unknown_cost_possible']
+    assert not report['production_admission']
+
+
+def test_second_unknown_stops_remaining_batch_without_retry():
+    client=Client(); client.unknown=True
+    report=compare(client,corpus(),remaining=True)
+    assert len(client.posts)==1 and report['unresolved_comparison_calls']==2
+    assert report['unknown_cost_possible'] and report['new_unknown_cost_possible']
+
+
+def test_failure_diagnostics_expose_structure_and_code_without_provider_text():
+    client=Client(); client.invalid=True
+    report=compare(client,corpus())
+    failure=report['failures'][0]
+    assert failure['diagnostic_code']=='unknown_reference'
+    assert 'claims' in failure['shape']['decision_keys']
+    assert 'Generated software fixture claim.' not in json.dumps(failure)
