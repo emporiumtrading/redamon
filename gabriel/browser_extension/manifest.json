@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gabriel — The Defender",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minimum_chrome_version": "120",
   "description": "Share selected console evidence and run explicitly approved, bounded section tours with Gabriel.",
   "permissions": ["activeTab", "scripting", "storage"],

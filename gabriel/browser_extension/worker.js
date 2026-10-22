@@ -67,7 +67,7 @@ async function request(session, operation, body) {
     if (raw.length > 1500000) throw new Error("Gateway response exceeded its limit.");
     const value = JSON.parse(raw);
     if (!response.ok || value.status !== "ok") throw new Error(operation === "observe" ? "Capture outcome is unconfirmed. Inspect receipts before retrying." :
-      operation === "events-review" ? "Event review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
+      ["events-review", "specialists-review"].includes(operation) ? "Local review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
     return value.result;
   } finally { clearTimeout(timer); inflight.delete(controller); }
 }
@@ -214,13 +214,20 @@ async function handle(message) {
           tour.candidate_count = analyzed.candidate_count;
           tour.sections.at(-1).review = analyzed;
           await persist({tour}, revision);
+          const specialists = await request(session, "specialists-review", {context: wireContext(selected), observation_id: receipt.observation_id});
+          stillCurrent(revision);
+          tour.sections.at(-1).specialists = specialists;
+          tour.specialist_count = specialists.specialist_count;
+          tour.abstained_count = specialists.abstained_count;
+          await persist({tour}, revision);
         }
       }
       tour.state = "complete";
       await persist({tour}, revision);
       return {tour, context: selected, extension_origin: "chrome-extension://" + chrome.runtime.id,
         message: "Approved section tour complete. " + tour.sections.length + " encrypted evidence receipts confirmed." +
-          (tour.latest_review_id ? " " + tour.candidate_count + " suspected pattern" + (tour.candidate_count === 1 ? " requires" : "s require") + " analyst review; confidence is unqualified." : "")};
+          (tour.latest_review_id ? " " + tour.candidate_count + " suspected pattern" + (tour.candidate_count === 1 ? " requires" : "s require") + " analyst review; confidence is unqualified." : "") +
+          (tour.specialist_count ? " " + tour.specialist_count + " local specialist reviews recorded; " + tour.abstained_count + " abstained for missing facts." : "")};
     }
     if (message.operation === "receipts") {
       await current(selected);

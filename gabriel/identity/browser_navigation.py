@@ -53,6 +53,10 @@ def public_intent(row,committed=False):
 
 
 class BrowserNavigationService(BrowserObservationService):
+    def review_browser_specialists(self,human,peer,context,observation_id):
+        from gabriel.identity.browser_specialists import process
+        return process(self,human,peer,context,observation_id)
+
     def review_browser_events(self,human,peer,context,observation_id):
         from gabriel.identity.browser_events import process
         return process(self,human,peer,context,observation_id)

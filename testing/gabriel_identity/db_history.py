@@ -188,6 +188,7 @@ def remove_v24(conn):
 
 
 def remove_v25(conn):
+    remove_v26(conn)
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=25').fetchone():
         for table in ('coordinator_results','coordinator_claims','coordinator_steps','coordinator_sources','coordinator_stops'):
             conn.execute('DELETE FROM gabriel_identity.'+table+" WHERE (organization_id,run_id) IN (SELECT organization_id,id FROM gabriel_identity.coordinator_runs WHERE plan_version='local-specialist-coordinator-v2')")
@@ -200,3 +201,12 @@ def remove_v25(conn):
         conn.execute('ALTER TABLE gabriel_identity.coordinator_steps ADD CONSTRAINT coordinator_steps_sequence_check CHECK (sequence BETWEEN 1 AND 2)')
         conn.execute("ALTER TABLE gabriel_identity.coordinator_steps ADD CONSTRAINT coordinator_steps_check CHECK ((sequence=1 AND operation='evidence_inventory') OR (sequence=2 AND operation='telemetry_health'))")
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=25')
+
+
+def remove_v26(conn):
+    conn.execute('DROP TABLE IF EXISTS gabriel_identity.browser_specialist_suites')
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=26').fetchone():
+        conn.execute('ALTER TABLE gabriel_identity.browser_event_snapshots DROP CONSTRAINT browser_snapshot_case_observation')
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
+        conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version IN ('0.1.0','0.2.0'))")
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=26')

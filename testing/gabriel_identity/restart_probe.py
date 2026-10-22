@@ -61,7 +61,7 @@ def counts():
               'evidence_key_epochs','evidence_rewraps','evidence_rewrap_results','browser_leases',
               'browser_observations','browser_observation_receipts','case_assignments','case_questions','case_question_answers','specialist_runs',
               'browser_navigation_grants','browser_navigation_intents','browser_navigation_receipts',
-              'browser_navigation_commits','browser_navigation_stops','attack_pattern_runs','browser_event_snapshots',
+              'browser_navigation_commits','browser_navigation_stops','attack_pattern_runs','browser_event_snapshots','browser_specialist_suites',
               'memory_records','memory_reviews','memory_invalidations','memory_resets',
               'model_budget_policies','model_price_quotes','model_investigations','model_reservations',
               'model_dispatch_claims','model_settlements','model_investigation_stops','model_answer_intents','model_answer_receipts',
@@ -347,10 +347,12 @@ if sys.argv[1] == 'before':
             request_id=str(uuid4()),sequence=1+offset//5,observed_at=datetime.now(timezone.utc).isoformat(),
             content=json.dumps(browser_document(pipeline_document,offset),separators=(',',':'))))
         pipeline_review=navigation.review_browser_events(observation_token,pipeline_lease.token,browser_context,pipeline_capture['observation_id'])
+        pipeline_specialists=navigation.review_browser_specialists(observation_token,pipeline_lease.token,browser_context,pipeline_capture['observation_id'])
     assert pipeline_review['candidate_count']==1 and pipeline_review['unique_event_count']==10
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'pipeline_peer':pipeline_lease.token,'pipeline_case_id':str(pipeline_case['id']),
         'pipeline_observation':str(pipeline_capture['observation_id']),'pipeline_review':pipeline_review,
+        'pipeline_specialists':pipeline_specialists,
         'attack_case_id':str(attack_case['id']),'attack_review_id':attack_review['id'],'attack_review_digest':attack_review['result_digest'],
         'navigation_peer':navigation_lease.token,'navigation_intent':navigation_intent['id'],
         'navigation_pending':navigation_pending['id'],'navigation_context':navigation_context,
@@ -439,7 +441,14 @@ elif sys.argv[1] in {'after','restored'}:
     pipeline_review=navigation.review_browser_events(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
     assert pipeline_review==saved['pipeline_review'] and pipeline_review['candidate_count']==1 and pipeline_review['model_cost_usd']=='0'
     assert len(navigation.list_attack_reviews(saved['observation_token'],saved['pipeline_case_id'])['runs'])==2
+    suite=navigation.review_browser_specialists(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
+    assert suite==saved['pipeline_specialists'] and suite['specialist_count']==12 and suite['unique_event_count']==10
+    assert len(navigation.list_specialist_runs(saved['observation_token'],saved['pipeline_case_id'])['runs'])==24
     navigation.disconnect_browser(saved['pipeline_peer'])
+    try: navigation.review_browser_specialists(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
+    except AuthenticationDenied: pass
+    else: raise AssertionError('browser specialist replay survived terminal Stop')
+    print('PASS: browser event projection and twelve-role suite survived recovery with exact source/result bindings, no duplicate work or model charge; Stop denied replay')
     try: navigation.review_browser_events(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
     except AuthenticationDenied: pass
     else: raise AssertionError('browser event review survived terminal Stop')

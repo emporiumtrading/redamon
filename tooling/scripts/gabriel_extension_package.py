@@ -15,7 +15,7 @@ def package(source,output):
     if any((source/name).is_symlink() or not (source/name).is_file() for name in FILES):
         raise ValueError('regular_extension_sources_required')
     manifest=json.loads((source/'manifest.json').read_text())
-    if (manifest.get('manifest_version')!=3 or manifest.get('version')!='0.2.0'
+    if (manifest.get('manifest_version')!=3 or manifest.get('version')!='0.3.0'
             or set(manifest.get('permissions',[]))!={'activeTab','scripting','storage'}
             or manifest.get('host_permissions') or manifest.get('externally_connectable')
             or manifest.get('optional_host_permissions')!=['https://*/*']):

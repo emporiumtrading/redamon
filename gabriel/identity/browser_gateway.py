@@ -20,7 +20,7 @@ from gabriel.identity.cli import read_secret
 from gabriel.identity.service import AccessDenied,IdentityError,IdentityUnavailable,_digest,connection
 
 MAX_BODY = 262144
-OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review'}
+OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review','specialists-review'}
 
 
 def endpoint(value):
@@ -154,10 +154,11 @@ class BrowserGateway:
             if operation=='observe':
                 if body.get('context')!=self.context: raise AccessDenied('gateway_scope_changed')
                 return self.service.observe_browser(self._human,self._peer,body)
-            if operation=='events-review':
+            if operation in {'events-review','specialists-review'}:
                 if (not isinstance(self.service,BrowserNavigationService) or set(body)!={'context','observation_id'}
                         or approved_context(body['context'])!=self.context): raise AccessDenied('gateway_scope_changed')
-                return self.service.review_browser_events(self._human,self._peer,body['context'],body['observation_id'])
+                method=self.service.review_browser_events if operation=='events-review' else self.service.review_browser_specialists
+                return method(self._human,self._peer,body['context'],body['observation_id'])
             if set(body)!={'context'} or approved_context(body['context'])!=self.context:
                 raise AccessDenied('gateway_scope_changed')
             if operation=='heartbeat': return self.service.heartbeat_browser(self._peer,self.context)
@@ -175,7 +176,7 @@ class BrowserGateway:
                 ('Access-Control-Allow-Methods','POST, OPTIONS')])
         status='403 Forbidden'
         operation=environ.get('PATH_INFO','').removeprefix('/v1/browser/')
-        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','events-review'} else 'denied'}
+        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','events-review','specialists-review'} else 'denied'}
         try:
             if (environ.get('wsgi.url_scheme')!='https' or environ.get('HTTP_HOST')!=urlsplit(self.target).netloc
                     or origin!=self.origin or environ.get('QUERY_STRING') or environ.get('HTTP_FORWARDED')
