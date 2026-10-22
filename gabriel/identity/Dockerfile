@@ -24,7 +24,7 @@ COPY gabriel/identity/model_evaluation.py gabriel/identity/model_protocol.py gab
 COPY gabriel/identity/model_input.py /app/gabriel/identity/
 COPY gabriel/identity/attack_patterns.py /app/gabriel/identity/
 COPY gabriel/identity/attack_pattern_runs.py gabriel/identity/schema_v23.sql /app/gabriel/identity/
-COPY gabriel/identity/browser_events.py gabriel/identity/schema_v24.sql /app/gabriel/identity/
+COPY gabriel/identity/browser_events.py gabriel/identity/browser_specialists.py gabriel/identity/schema_v24.sql gabriel/identity/schema_v26.sql /app/gabriel/identity/
 COPY gabriel/identity/specialist_analysis_runs.py gabriel/identity/schema_v20.sql /app/gabriel/identity/
 COPY gabriel/identity/provider_onboarding.py gabriel/identity/schema_v19.sql gabriel/identity/specialist_analysis.py /app/gabriel/identity/
 COPY gabriel/identity/model_answers.py gabriel/identity/schema_v18.sql /app/gabriel/identity/

@@ -11,8 +11,8 @@ from gabriel.identity.service import (AccessDenied,AuthenticationDenied,InvalidI
     _audit,_digest,connection,identifier)
 from gabriel.identity.tasks import task_record,available
 
-VERSION = '0.2.0'
-SUPPORTED_VERSIONS = frozenset({'0.1.0',VERSION})
+VERSION = '0.3.0'
+SUPPORTED_VERSIONS = frozenset({'0.1.0','0.2.0',VERSION})
 CONTEXT_FIELDS = {'browser','extension_version','installation_id','tab_id','document_id','page_url','account_label'}
 
 

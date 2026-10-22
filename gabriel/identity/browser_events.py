@@ -31,15 +31,18 @@ def document(raw,artifact,case_id):
     return value
 
 
+def admitted(service,conn,human,peer,context):
+    p,lease,_=service._observer(conn,human,peer,context)
+    grant,_=service._grant(conn,p,lease)
+    if grant['contract_version']!='generated-console-v1': raise AccessDenied('browser_event_adapter_not_admitted')
+    if conn.execute("SELECT 1 FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s AND state='prepared'",
+                    (p.organization_id,lease['id'])).fetchone(): raise AccessDenied('browser_capture_outcome_unresolved')
+    return p,lease
+
+
 def process(service,human,peer,context,observation_id):
     observation_id=identifier(observation_id)
-    def bound(conn):
-        p,lease,_=service._observer(conn,human,peer,context)
-        grant,_=service._grant(conn,p,lease)
-        if grant['contract_version']!='generated-console-v1': raise AccessDenied('browser_event_adapter_not_admitted')
-        if conn.execute("SELECT 1 FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s AND state='prepared'",
-                        (p.organization_id,lease['id'])).fetchone(): raise AccessDenied('browser_capture_outcome_unresolved')
-        return p,lease
+    def bound(conn): return admitted(service,conn,human,peer,context)
     with connection(service._dsn) as conn:
         p,lease=bound(conn)
         target=service._observation(conn,p,observation_id)

@@ -125,37 +125,43 @@ def verified_input(service,conn,p,case,input_evidence_id):
 
 
 def run(service,token,case_id,request_id,role,input_evidence_id,*,_admission=None):
-    from gabriel.identity.specialists import _replay, public_run
     role=role_name(role)
     request_id,input_evidence_id=identifier(request_id),identifier(input_evidence_id)
-    started=time.monotonic()
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True)
         case=service._case(conn,p,case_id,open_only=True)
         if _admission is not None: _admission(conn)
-        old=_replay(conn,p,case,request_id,role)
-        if old:
-            if old['packet'].get('input_evidence_id')!=str(input_evidence_id):
-                raise AccessDenied('specialist_request_conflict')
-            _audit(conn,'specialist.run_replayed',p,old['id'])
-            return public_run(old)
-        n=conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_runs WHERE organization_id=%s AND case_id=%s',
-                       (p.organization_id,case['id'])).fetchone()['n']
-        if n>=128:
-            raise AccessDenied('case_specialist_run_limit')
-        original,document,refs=verified_input(service,conn,p,case,input_evidence_id)
-        packet=dict(schema_version=2,purpose='specialist-input-v2',contract_version=CONTRACT,role=role,
-            organization_id=str(p.organization_id),case_id=str(case['id']),
-            generated_at=iso(conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']),references=refs,
-            input_evidence_id=str(input_evidence_id),input_digest=original['digest'],facts_digest=digest(document['facts']),
-            fact_count=len(document['facts']),as_of=document['as_of'],coverage='partial',evidence_bodies_included=False,
-            source_authenticity='unverified',normalization_status='unverified_user_supplied')
-        result=analyze(role,document,'evidence/'+str(input_evidence_id))
-        result['execution']['elapsed_ms']=int((time.monotonic()-started)*1000)
-        validate_result(packet,result)
-        row=conn.execute('''INSERT INTO gabriel_identity.specialist_runs
-            (organization_id,id,case_id,request_id,requested_by,role,engine_version,packet,result,packet_digest,result_digest)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
-            (p.organization_id,uuid4(),case['id'],request_id,p.user_id,role,VERSION,Jsonb(packet),Jsonb(result),digest(packet),digest(result))).fetchone()
-        _audit(conn,'specialist.run_completed',p,row['id'])
-        return public_run(row)
+        return run_in_connection(service,conn,p,case,request_id,role,input_evidence_id)
+
+
+def run_in_connection(service,conn,p,case,request_id,role,input_evidence_id):
+    from gabriel.identity.specialists import _replay, public_run
+    role=role_name(role)
+    request_id,input_evidence_id=identifier(request_id),identifier(input_evidence_id)
+    started=time.monotonic()
+    old=_replay(conn,p,case,request_id,role)
+    if old:
+        if old['packet'].get('input_evidence_id')!=str(input_evidence_id):
+            raise AccessDenied('specialist_request_conflict')
+        _audit(conn,'specialist.run_replayed',p,old['id'])
+        return public_run(old)
+    n=conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_runs WHERE organization_id=%s AND case_id=%s',
+                   (p.organization_id,case['id'])).fetchone()['n']
+    if n>=128:
+        raise AccessDenied('case_specialist_run_limit')
+    original,document,refs=verified_input(service,conn,p,case,input_evidence_id)
+    packet=dict(schema_version=2,purpose='specialist-input-v2',contract_version=CONTRACT,role=role,
+        organization_id=str(p.organization_id),case_id=str(case['id']),
+        generated_at=iso(conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']),references=refs,
+        input_evidence_id=str(input_evidence_id),input_digest=original['digest'],facts_digest=digest(document['facts']),
+        fact_count=len(document['facts']),as_of=document['as_of'],coverage='partial',evidence_bodies_included=False,
+        source_authenticity='unverified',normalization_status='unverified_user_supplied')
+    result=analyze(role,document,'evidence/'+str(input_evidence_id))
+    result['execution']['elapsed_ms']=int((time.monotonic()-started)*1000)
+    validate_result(packet,result)
+    row=conn.execute('''INSERT INTO gabriel_identity.specialist_runs
+        (organization_id,id,case_id,request_id,requested_by,role,engine_version,packet,result,packet_digest,result_digest)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
+        (p.organization_id,uuid4(),case['id'],request_id,p.user_id,role,VERSION,Jsonb(packet),Jsonb(result),digest(packet),digest(result))).fetchone()
+    _audit(conn,'specialist.run_completed',p,row['id'])
+    return public_run(row)

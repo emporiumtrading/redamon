@@ -187,7 +187,7 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
         cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
         click(cdp,popup,'select')
         scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
-        assert scope['extension_version']=='0.2.0'
+        assert scope['extension_version']=='0.3.0'
         assert scope['page_url']==console_origin+'/security'
         endpoint='https://localhost:'+str(port)
         assert cdp.evaluate(popup,'chrome.permissions.contains({origins:['+json.dumps(endpoint+'/*')+']})')
@@ -256,9 +256,19 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                         review=navigation.get_attack_review(human,case['id'],last['review_id'])
                         assert set(review['result']['findings'][0]['references'])=={'evidence/'+str(item['evidence_id']) for item in observations}
                         assert len(navigation.list_attack_reviews(human,case['id'])['runs'])==2
+                        suites=[section['specialists'] for section in tour['sections']]
+                        assert all(suite['specialist_count']==12 and suite['abstained_count']==6 for suite in suites)
+                        assert suites[-1]['unique_event_count']==10
+                        assert not suites[-1]['quality_qualified'] and not suites[-1]['external_actions_authorized']
+                        assert len(navigation.list_specialist_runs(human,case['id'])['runs'])==24
+                        specialist=navigation.get_specialist_run(human,case['id'],suites[-1]['specialists']['identity_access']['id'])
+                        assert 'counts total: 10' in specialist['result']['observations'][0]['statement']
+                        assert len(specialist['packet']['references'])==4
                         wait_for(lambda:'1 suspected pattern requires analyst review' in (text(cdp,popup,'message') or ''))
+                        wait_for(lambda:'12 local specialist reviews recorded; 6 abstained' in (text(cdp,popup,'message') or ''))
                         checks.extend(['typed_rows_after_plan_consent','cross_section_auth_correlation','evidence_bound_candidate_review',
-                            'server_capture_to_review_interval','no_model_or_response_authority','visible_candidate_notice'])
+                            'server_capture_to_review_interval','no_model_or_response_authority','visible_candidate_notice',
+                            'automatic_twelve_specialist_reviews','specialist_source_bound_authentication_counts','visible_specialist_abstention'])
                     click(cdp,popup,'status')
                     wait_for(lambda:'heartbeat confirmed' in (text(cdp,popup,'message') or ''))
                     click(cdp,popup,'stop')
@@ -571,7 +581,7 @@ def run_browser(family,executable,output):
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
-                'extension_version':'0.2.0','extension_origin':origin,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
+                'extension_version':'0.3.0','extension_origin':origin,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
@@ -602,7 +612,7 @@ def main():
     mark('database-migrate')
     migrate(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']))
     mark('extension-package')
-    metadata=package(SOURCE,output/'gabriel-browser-0.2.0.zip')
+    metadata=package(SOURCE,output/'gabriel-browser-0.3.0.zip')
     (output/'package.json').write_text(json.dumps(metadata,indent=2))
     manager=subprocess.Popen(['openbox'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     try:
