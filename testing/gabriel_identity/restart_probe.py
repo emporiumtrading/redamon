@@ -349,10 +349,12 @@ if sys.argv[1] == 'before':
         pipeline_review=navigation.review_browser_events(observation_token,pipeline_lease.token,browser_context,pipeline_capture['observation_id'])
         pipeline_specialists=navigation.review_browser_specialists(observation_token,pipeline_lease.token,browser_context,pipeline_capture['observation_id'])
     assert pipeline_review['candidate_count']==1 and pipeline_review['unique_event_count']==10
+    pipeline_profile=navigation.environment_profile(observation_token,pipeline_case['id'],include_identifiers=True)
     state.write_text(json.dumps({'org':str(org),'user':str(user),'token':token,
         'pipeline_peer':pipeline_lease.token,'pipeline_case_id':str(pipeline_case['id']),
         'pipeline_observation':str(pipeline_capture['observation_id']),'pipeline_review':pipeline_review,
         'pipeline_specialists':pipeline_specialists,
+        'pipeline_profile':pipeline_profile,
         'attack_case_id':str(attack_case['id']),'attack_review_id':attack_review['id'],'attack_review_digest':attack_review['result_digest'],
         'navigation_peer':navigation_lease.token,'navigation_intent':navigation_intent['id'],
         'navigation_pending':navigation_pending['id'],'navigation_context':navigation_context,
@@ -444,7 +446,13 @@ elif sys.argv[1] in {'after','restored'}:
     suite=navigation.review_browser_specialists(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
     assert suite==saved['pipeline_specialists'] and suite['specialist_count']==12 and suite['unique_event_count']==10
     assert len(navigation.list_specialist_runs(saved['observation_token'],saved['pipeline_case_id'])['runs'])==24
+    profile=navigation.environment_profile(saved['observation_token'],saved['pipeline_case_id'],include_identifiers=True)
+    assert profile==saved['pipeline_profile'] and profile['profile']['source_bytes_checked']
+    assert len(profile['profile']['assets'])==2 and len(profile['profile']['identities'])==1
+    assert not profile['profile']['security_effectiveness_validated'] and not profile['profile']['compliance_assessed']
     navigation.disconnect_browser(saved['pipeline_peer'])
+    assert navigation.environment_profile(saved['observation_token'],saved['pipeline_case_id'],include_identifiers=True)==profile
+    print('PASS: historical environment view rebuilt from verified source bytes after recovery and Stop; control effectiveness and compliance remained separately unassessed')
     try: navigation.review_browser_specialists(saved['observation_token'],saved['pipeline_peer'],saved['browser_context'],saved['pipeline_observation'])
     except AuthenticationDenied: pass
     else: raise AssertionError('browser specialist replay survived terminal Stop')

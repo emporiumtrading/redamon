@@ -51,6 +51,10 @@ def metadata(row):
 
 
 class CaseService(IdentityService):
+    def environment_profile(self,token,case_id,*,include_identifiers=False):
+        from gabriel.identity.environment import view
+        return view(self,token,case_id,include_identifiers=include_identifiers)
+
     def begin_coordinator(self,token,case_id,request_id,**limits):
         from gabriel.identity.coordinator import begin
         return begin(self,token,case_id,request_id,**limits)

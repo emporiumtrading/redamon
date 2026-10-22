@@ -184,6 +184,22 @@ def test_spending_screen_changes_real_limits_and_pauses_reservations(tenant,serv
     assert 'New reservations paused' in call(server,'/spending',cookie=cookie)[1]
 
 
+def test_environment_profile_requires_explicit_content_view_and_separates_assessments(tenant,cases,case,evidence,server):
+    from testing.gabriel_identity.test_attack_pattern_runs_integration import intake
+    document,holder=intake(tenant,cases,case,evidence)
+    cases.run_attack_review(tenant.token,case['id'],uuid4(),holder['id'])
+    cookie,token,_=connect(server)
+    path='/cases/'+str(case['id'])+'/environment'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'Security-control effectiveness: Not validated' in html and 'Compliance coverage: Not assessed' in html
+    assert document['events'][0]['actor_id'] not in html and 'View reported asset and identity keys' in html
+    assert call(server,path+'/content',cookie=cookie)[0]==403
+    assert call(server,path+'/content',dict(csrf='generated-invalid'),cookie=cookie)[0]==403
+    code,html,_=call(server,path+'/content',dict(csrf=token),cookie=cookie)
+    assert code==200 and document['events'][0]['actor_id'] in html
+    assert 'Reported event paths' in html and str(evidence['id']) in html
+
+
 def test_twelve_specialist_plan_form_runs_all_roles_and_replay_is_stable(tenant,cases,case,evidence,server):
     from testing.gabriel_identity.test_specialist_analysis_integration import intake
     _,typed=intake(tenant,cases,case,evidence)

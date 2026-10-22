@@ -436,6 +436,38 @@ class Workbench:
                 body+=table(['Recorded','Specialty'],[(f'<a href="{path}/{e(row["id"])}">{e(row["created_at"])}</a>',e(row['role'].replace('_',' '))) for row in history['runs']]) if history['runs'] else '<p>No specialist assessments recorded.</p>'
                 body+='<p>Showing up to 50 most recent assessments.'+(' Older records are omitted.' if history['truncated'] else '')+'</p>'
             return '200 OK',self._page('Specialist assessments',body,principal),[]
+        environment=re.fullmatch('/cases/('+ID+')/environment(?:/(content))?',path)
+        if environment:
+            case_id,content=environment.groups()
+            base='/cases/'+case_id+'/environment'
+            if content:
+                if method!='POST' or set(fields)!={'csrf'}: raise AccessDenied('explicit_environment_content_view_required')
+            elif method!='GET': raise AccessDenied('workbench_route_denied')
+            bundle=self.service.environment_profile(self._token,case_id,include_identifiers=bool(content))
+            profile=bundle['profile'];snapshot=profile['snapshot']
+            body='<p class="notice">Partial historical view from the latest reviewed event snapshot. Reported identifiers do not verify an asset, identity, owner or live connection.</p>'
+            body+='<p id="environment-security">Security-control effectiveness: Not validated</p><p id="environment-compliance">Compliance coverage: Not assessed</p>'
+            body+='<p>Control configuration, ownership and recovery dependencies remain unknown.</p>'
+            if snapshot:
+                body+='<p>Supplied snapshot time '+e(snapshot['supplied_as_of'])+' · Recorded review '+e(snapshot['review_created_at'])+'</p>'
+                if profile['source_clock_ahead']: body+='<p class="notice">The supplied snapshot time is ahead of Gabriel’s server clock. Time-based interpretation needs review.</p>'
+                body+='<p>'+e(snapshot['unique_event_count'])+' distinct supplied events; '+e(snapshot['forwarded_duplicate_count'])+' forwarded copies excluded.</p>'
+                body+='<p><a href="/cases/'+case_id+'/attack-reviews/'+e(snapshot['review_id'])+'">Review source-linked assessment</a></p>'
+                if profile['older_snapshots_omitted']: body+='<p>Older snapshots are omitted from this bounded view.</p>'
+                if not content and principal.role!='viewer':
+                    body+=self._form(base+'/content','View reported asset and identity keys','<p>Displays source-derived identifiers in this private workbench after checking their current evidence bytes.</p>')
+                if content:
+                    def links(refs):
+                        return ', '.join('<a href="/cases/'+case_id+'/evidence/'+e(ref.removeprefix('evidence/'))+'">'+e(ref)+'</a>' for ref in refs)
+                    body+='<h2>Reported asset keys</h2>'+table(['Identifier','Event references','Source evidence'],[(e(row['id']),e(row['event_count']),links(row['references'])) for row in profile['assets']])
+                    body+='<h2>Reported identity keys</h2>'+table(['Identifier','Event references','Source evidence'],[(e(row['id']),e(row['event_count']),links(row['references'])) for row in profile['identities']])
+                    body+='<h2>Reported event paths</h2>'+table(['From','To','Supplied event kinds','Source evidence'],[(e(row['source']),e(row['target']),e(', '.join(row['event_kinds'])),links(row['references'])) for row in profile['relationships']])
+                    body+='<p>Source bytes and recorded custody checked on this read. Source truth and current environment coverage remain unverified.</p>'
+                else: body+='<p>Source contents and current availability have not been checked by this metadata view.</p>'
+            else: body+='<p id="environment-empty">No supported event snapshot has been reviewed. Environment coverage remains unknown.</p>'
+            body+='<h2>Visibility gaps and unknowns</h2>'+(''.join('<p>'+('Reported missing: ' if snapshot else 'Not established: ')+e(item.title())+'</p>' for item in profile['missing_sources']) or '<p>No gaps were declared by the source. Completeness remains unverified.</p>')
+            body+='<p>Profile checksum '+e(bundle['digest'])+'</p><p><a href="/cases/'+case_id+'">Back to case</a></p>'
+            return '200 OK',self._page('Environment and control profile',body,principal),[]
         projection=re.fullmatch('/cases/('+ID+')/(relationships|graph)',path)
         if projection:
             if method!='GET': raise AccessDenied('workbench_route_denied')
@@ -473,7 +505,7 @@ class Workbench:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
         body='<p>State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Specialist assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
-        body+='<p><a href="'+path+'/attack-reviews">Attack pattern review</a></p>'
+        body+='<p><a href="'+path+'/attack-reviews">Attack pattern review</a> · <a href="'+path+'/environment">Environment and control profile</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
         body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'

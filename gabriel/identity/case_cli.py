@@ -88,7 +88,7 @@ def export_file(service,token,evidence_id,path):
 
 def main():
     parser = argparse.ArgumentParser(description='Gabriel case and evidence operator')
-    parser.add_argument('command',choices=('coordinator-begin','coordinator-get','coordinator-next','coordinator-stop','coordinator-complete','create','list','get','report','graph','memory-propose','memory-review','memory-list','memory-check','memory-forget','memory-reset','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
+    parser.add_argument('command',choices=('environment-get','coordinator-begin','coordinator-get','coordinator-next','coordinator-stop','coordinator-complete','create','list','get','report','graph','memory-propose','memory-review','memory-list','memory-check','memory-forget','memory-reset','specialist-run','specialist-get','specialist-list','workflow-get','assign','question-add','question-answer','link-task','acquire','custody','verify','close','export','exports',
         'attack-run','attack-get','attack-list','policy-set','policy-get','propose-close','action-get','action-submit','action-approve','action-reject','action-cancel','action-execute',
         'retention-set','retention-get','hold-place','hold-release','governance','purge-propose','purge-get','purge-approve',
         'purge-prepare','purge-execute','purge-reconcile','purge-abort','purge-cancel','checkpoint-capture','checkpoint-verify',
@@ -129,6 +129,7 @@ def main():
     parser.add_argument('--answer')
     parser.add_argument('--specialist-role',default='telemetry_health')
     parser.add_argument('--run-id')
+    parser.add_argument('--include-identifiers',action='store_true')
     parser.add_argument('--max-steps',type=int)
     parser.add_argument('--memory-id')
     parser.add_argument('--memory-kind',choices=('fact','preference'),default='fact')
@@ -233,6 +234,8 @@ def main():
             result = service.case_report(token,args.case_id)
         elif args.command=='graph':
             result = service.case_graph(token,args.case_id)
+        elif args.command=='environment-get':
+            result = service.environment_profile(token,args.case_id,include_identifiers=args.include_identifiers)
         elif args.command=='coordinator-begin':
             result = service.begin_coordinator(token,args.case_id,args.request_id,max_steps=args.max_steps,ttl_seconds=args.ttl,input_evidence_id=args.evidence_id)
         elif args.command=='coordinator-get':

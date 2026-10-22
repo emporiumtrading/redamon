@@ -13,7 +13,7 @@ COPY gabriel/identity/browser_observations.py gabriel/identity/schema_v12.sql /a
 COPY gabriel/identity/browser_navigation.py gabriel/identity/schema_v21.sql /app/gabriel/identity/
 COPY gabriel/identity/schema_v22.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_gateway.py gabriel/identity/gateway_cli.py /app/gabriel/identity/
-COPY gabriel/identity/reports.py /app/gabriel/identity/
+COPY gabriel/identity/reports.py gabriel/identity/environment.py /app/gabriel/identity/
 COPY gabriel/identity/workbench.py gabriel/identity/workbench_cli.py /app/gabriel/identity/
 COPY gabriel/identity/analyst_views.py /app/gabriel/identity/
 COPY gabriel/identity/case_workflow.py gabriel/identity/schema_v13.sql /app/gabriel/identity/
