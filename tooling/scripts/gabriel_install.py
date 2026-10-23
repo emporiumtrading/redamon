@@ -23,7 +23,15 @@ COMPOSE=REPO/'compose.gabriel-installation.yml'
 def run(command,*,env=None,payload=None,output=None):
     completed=subprocess.run(command,cwd=REPO,env=env,input=payload,stdout=output if output is not None else subprocess.PIPE,
         stderr=subprocess.PIPE,check=False)
-    if completed.returncode: raise ValueError('docker_operation_failed; inspect the local Docker service and installation state')
+    if completed.returncode:
+        try:
+            diagnostic=json.loads(completed.stdout or b'{}')
+            if diagnostic.get('code')=='installation_operation_denied':
+                phase=diagnostic.get('phase','unknown');kind=diagnostic.get('kind','unknown')
+                if re.fullmatch(r'[a-z_]{1,64}',phase) and re.fullmatch(r'[A-Za-z]{1,64}',kind):
+                    raise ValueError('installation denied at '+phase+' ('+kind+'); no secret values logged')
+        except (json.JSONDecodeError,UnicodeError): pass
+        raise ValueError('docker_operation_failed; inspect the local Docker service and installation state')
     return completed.stdout
 
 
@@ -223,7 +231,7 @@ def main():
                 else: result=installation.restore(external(args.backup),external(args.keys_from))
         print(json.dumps({'status':'ok','result':result}))
         return 0
-    except (OSError,ValueError,TypeError,KeyError,subprocess.SubprocessError):
+    except (OSError,ValueError,TypeError,KeyError,RuntimeError,subprocess.SubprocessError):
         print(json.dumps({'status':'denied','code':'installation_command_failed; existing state retained for inspection'}))
         return 1
 

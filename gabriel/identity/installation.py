@@ -20,6 +20,7 @@ from gabriel.identity.service import AuthenticationDenied,IdentityError,connecti
 from gabriel.identity.workbench import prepare_workbench,serve_workbench
 
 ROOT=Path('/var/lib/gabriel-workbench')
+PHASE='command'
 
 
 def service():
@@ -73,14 +74,19 @@ def tls(directory):
 
 
 def initialize(payload):
+    global PHASE
     if set(payload)!={'organization','username','password'}: raise ValueError('invalid_enrollment')
     owner=read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE'])
+    PHASE='migration'
     migrate(owner)
+    PHASE='empty_organization_check'
     with connection(owner,runtime=False) as conn:
         if conn.execute('SELECT count(*) AS n FROM gabriel_identity.organizations').fetchone()['n']:
             raise ValueError('already_initialized')
+    PHASE='owner_creation'
     org,user=provision_organization(owner,payload['organization'],payload['username'],payload['password'])
     receipt={'organization_id':str(org),'user_id':str(user),'username':username(payload['username'])}
+    PHASE='receipt_publication'
     write_document(ROOT/'installation.json',receipt)
     return receipt
 
@@ -179,8 +185,8 @@ def main():
                 result={'restored_identity':True}
         print(json.dumps({'status':'ok','result':result}))
         return 0
-    except (IdentityError,OSError,ValueError,TypeError,KeyError,tarfile.TarError):
-        print(json.dumps({'status':'denied','code':'installation_operation_denied'}))
+    except (IdentityError,OSError,ValueError,TypeError,KeyError,tarfile.TarError) as exc:
+        print(json.dumps({'status':'denied','code':'installation_operation_denied','phase':PHASE,'kind':type(exc).__name__}))
         return 1
 
 
