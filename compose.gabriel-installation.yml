@@ -1,0 +1,106 @@
+x-app: &app
+  image: ${GABRIEL_INSTALL_IMAGE:?Build the installation image first}
+  user: '10001:10001'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 512m
+  cpus: 1
+  networks: [private]
+  tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=64m']
+  environment:
+    GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+    GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring
+    GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+    GABRIEL_EVIDENCE_ROOT: /var/lib/gabriel-evidence
+  volumes:
+    - evidence:/var/lib/gabriel-evidence
+    - workbench:/var/lib/gabriel-workbench
+services:
+  identity-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gabriel
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+      - source: role_init
+        target: /docker-entrypoint-initdb.d/01-gabriel-role.sql
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [private]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U postgres -d gabriel']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  operator:
+    <<: *app
+    profiles: [operator]
+    entrypoint: [python, -m, gabriel.identity.installation]
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
+      GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring
+      GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+      GABRIEL_EVIDENCE_ROOT: /var/lib/gabriel-evidence
+    secrets: [app_dsn, owner_dsn, provider_keyring, evidence_keyring]
+  workbench:
+    <<: *app
+    entrypoint: [python, -m, gabriel.identity.installation, serve]
+    secrets: [app_dsn, provider_keyring, evidence_keyring, tls_certificate, tls_key, tls_ca]
+    healthcheck:
+      test: [CMD, python, -m, gabriel.identity.installation, health]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  local-entry:
+    image: ${GABRIEL_INSTALL_IMAGE}
+    user: '10001:10001'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    networks: [private, entry]
+    entrypoint: [python, -m, gabriel.identity.installation, relay]
+    ports: ['127.0.0.1:${GABRIEL_INSTALL_PORT:?Local port required}:8444']
+    depends_on:
+      workbench:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1',8444),timeout=2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+networks:
+  private:
+    internal: true
+  entry:
+volumes:
+  database:
+  evidence:
+  workbench:
+secrets:
+  db_password:
+    file: ${GABRIEL_INSTALL_ROOT:?External installation directory required}/database/db_password
+  role_init:
+    file: ${GABRIEL_INSTALL_ROOT}/database/role_init.sql
+  app_dsn:
+    file: ${GABRIEL_INSTALL_ROOT}/database/app_dsn
+  owner_dsn:
+    file: ${GABRIEL_INSTALL_ROOT}/database/owner_dsn
+  provider_keyring:
+    file: ${GABRIEL_INSTALL_ROOT}/provider/keyring.json
+  evidence_keyring:
+    file: ${GABRIEL_INSTALL_ROOT}/evidence/keyring.json
+  tls_certificate:
+    file: ${GABRIEL_INSTALL_ROOT}/tls/server.pem
+  tls_key:
+    file: ${GABRIEL_INSTALL_ROOT}/tls/server.key
+  tls_ca:
+    file: ${GABRIEL_INSTALL_ROOT}/tls/ca.pem
