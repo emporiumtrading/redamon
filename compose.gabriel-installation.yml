@@ -8,7 +8,7 @@ x-app: &app
   mem_limit: 512m
   cpus: 1
   networks: [private]
-  tmpfs: [/tmp:rw,noexec,nosuid,nodev,size=64m]
+  tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=64m']
   environment:
     GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
     GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring

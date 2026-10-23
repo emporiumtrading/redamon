@@ -52,6 +52,7 @@ def main():
         assert not config['services']['identity-db'].get('ports')
         assert config['services']['workbench']['ports'][0]['host_ip']=='127.0.0.1'
         assert config['services']['workbench']['read_only'] and config['services']['workbench']['user']=='10001:10001'
+        assert config['services']['workbench']['tmpfs']==['/tmp:rw,noexec,nosuid,nodev,size=64m']
         assert 'owner_dsn' not in {s['source'] for s in config['services']['workbench']['secrets']}
         app.start_db()
         identity=app.operator('initialize',dict(organization='Generated installation lab',username='owner',password=secret))
