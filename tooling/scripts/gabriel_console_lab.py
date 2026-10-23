@@ -186,7 +186,7 @@ def ready(root):
     while time.monotonic()<limit:
         connection=http.client.HTTPSConnection('localhost',info['port'],context=context,timeout=5)
         try:
-            connection.request('GET','/login' if info['tool']=='iris' else '/auth/login')
+            connection.request('GET','/login' if info['tool']=='iris' else '/app/login')
             response=connection.getresponse();body=response.read(262144).decode(errors='replace')
             if response.status==200 and ('password' in body.lower() or info['tool']=='wazuh' and any(x in body.lower() for x in ('opensearch','wazuh'))): return {'trusted_https':True}
         except (OSError,ssl.SSLError,http.client.HTTPException): pass
@@ -207,6 +207,10 @@ def main():
         if args.command=='prepare': prepare(args.tool,root);result={'prepared':True}
         else:
             if json.loads((root/'lab.json').read_text())['tool']!=args.tool: raise ValueError('lab_mismatch')
+            PRIVATE.append(json.loads((root/'credentials.json').read_text())['password'])
+            for service in json.loads((root/'compose.json').read_text())['services'].values():
+                for key,value in service.get('environment',{}).items():
+                    if any(word in key for word in ('PASSWORD','SECRET','SALT','API_KEY','BROKER')) and isinstance(value,str): PRIVATE.append(value)
             if args.command=='up': PHASE='startup';compose(root,'up','-d');result=ready(root)
             elif args.command=='check': result=ready(root)
             else: compose(root,'down','--volumes','--remove-orphans');result={'generated_lab_removed':True}

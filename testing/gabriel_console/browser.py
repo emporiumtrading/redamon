@@ -64,7 +64,7 @@ def main():
         '--proxy-server=http://127.0.0.1:9','--proxy-bypass-list=localhost','about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     cdp=None
     try:
-        cdp=CDP();tab=cdp.send('Target.createTarget',{'url':target+('/login' if tool=='iris' else '/auth/login')})['targetId']
+        cdp=CDP();tab=cdp.send('Target.createTarget',{'url':target+('/login' if tool=='iris' else '/app/login')})['targetId']
         session=cdp.send('Target.attachToTarget',{'targetId':tab,'flatten':True})['sessionId']
         wait(lambda:cdp.evaluate(session,"Boolean(document.querySelector('input[type=password]'))"),90)
         login=snapshot(cdp,session)
