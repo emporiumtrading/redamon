@@ -115,12 +115,12 @@ def prepare(tool,root):
         write(root/'generate.json',generation)
         run(['docker','compose','--project-name',project+'-certs','--file',str(root/'generate.json'),'run','--rm','generator'],cwd=base)
         run(['docker','compose','--project-name',project+'-certs','--file',str(root/'generate.json'),'down','--remove-orphans'],cwd=base)
+        hasher,_=image('httpd:2.4-alpine')
         run(['docker','run','--rm','--network','none','--mount','type=bind,src='+str(base/'config/wazuh_indexer_ssl_certs')+',dst=/certs',
-            '--entrypoint','sh',generator,'-c','find /certs -type d -exec chmod 755 {} +; find /certs -type f -exec chmod 444 {} +'])
+            '--entrypoint','sh',hasher,'-c','find /certs -type d -exec chmod 755 {} +; find /certs -type f -exec chmod 444 {} +'])
         config=json.loads(run(['docker','compose','--file','docker-compose.yml','config','--format','json'],cwd=base))
         dashboard_password=secret();api_password=secret()
         PHASE='wazuh_private_accounts'
-        hasher,_=image('httpd:2.4-alpine')
         def bcrypt(value):
             raw=run(['docker','run','--rm','-i','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
                 '--entrypoint','htpasswd',hasher,'-niBC','12','generated'],data=(value+'\n').encode()).decode().strip()
