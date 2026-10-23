@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""Prepare and check dedicated generated-data console labs; never a Gabriel adapter."""
+import argparse
+from hashlib import sha256
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import shutil
+import ssl
+import subprocess
+import time
+from uuid import uuid4
+
+REPO=Path(__file__).resolve().parents[2]
+PINS={
+    'iris':('https://github.com/dfir-iris/iris-web.git','v2.4.24','3e1e42d6088d950cf5c51ed8ad708adfb900beae'),
+    'wazuh':('https://github.com/wazuh/wazuh-docker.git','v4.14.9','56ece955b1107b7b62823afae5b7057e1dab9d98'),
+}
+PHASE='preflight'
+PRIVATE=[]
+RESOLVED={}
+
+
+def run(command,*,cwd=None,env=None,data=None,timeout=900):
+    result=subprocess.run(command,cwd=cwd,env=env,input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
+    if result.returncode:
+        message=result.stderr.decode(errors='replace')[-3000:]
+        for value in sorted(PRIVATE,key=len,reverse=True): message=message.replace(value,'[REMOVED]')
+        raise RuntimeError('command_failed: '+message)
+    return result.stdout
+
+
+def write(path,value):
+    with path.open('x') as stream: json.dump(value,stream,sort_keys=True);stream.write('\n')
+
+
+def secret():
+    value='Aa1!'+secrets.token_urlsafe(32)
+    PRIVATE.append(value)
+    return value
+
+
+def image(tag):
+    run(['docker','pull','--quiet',tag])
+    metadata=json.loads(run(['docker','image','inspect',tag]))[0]
+    digests=metadata.get('RepoDigests',[])
+    if not digests or '@sha256:' not in digests[0]: raise ValueError('image_digest_missing')
+    RESOLVED[tag]={'digest':digests[0],'image_id':metadata['Id'],'os':metadata['Os'],'architecture':metadata['Architecture']}
+    return digests[0],metadata['Id']
+
+
+def compose(root,*args,data=None):
+    info=json.loads((root/'lab.json').read_text())
+    if re.fullmatch(r'gabriel-console-[a-f0-9]{16}',info['project']) is None: raise ValueError('invalid_project')
+    if sha256((root/'compose.json').read_bytes()).hexdigest()!=info['compose_sha256']: raise ValueError('configuration_changed')
+    return run(['docker','compose','--project-name',info['project'],'--file',str(root/'compose.json'),*args],cwd=root,data=data)
+
+
+def certificates(root):
+    directory=root/'tls';directory.mkdir(mode=0o700)
+    run(['openssl','req','-x509','-newkey','rsa:3072','-sha256','-days','1','-nodes',
+        '-keyout',str(directory/'server.key'),'-out',str(directory/'server.pem'),'-subj','/CN=localhost',
+        '-addext','subjectAltName=DNS:localhost,IP:127.0.0.1','-addext','basicConstraints=critical,CA:TRUE'])
+    for path in directory.iterdir(): path.chmod(0o444)
+
+
+def prepare(tool,root):
+    global PHASE
+    if root.exists() or not root.is_absolute() or root!=root.resolve() or REPO in root.parents: raise ValueError('new_external_directory_required')
+    run(['docker','info']);run(['docker','compose','version'])
+    if tool=='wazuh' and int(Path('/proc/sys/vm/max_map_count').read_text())<262144: raise ValueError('configure_lab_vm_max_map_count_first')
+    root.mkdir(mode=0o700)
+    project='gabriel-console-'+uuid4().hex[:16]
+    source=root/'source';url,tag,commit=PINS[tool]
+    PHASE='pinned_source'
+    run(['git','clone','--depth','1','--branch',tag,url,str(source)])
+    if run(['git','rev-parse','HEAD'],cwd=source).decode().strip()!=commit: raise ValueError('upstream_source_changed')
+    certificates(root)
+    port=18446 if tool=='iris' else 18447
+    owner_password=secret()
+    credentials={'tool':tool,'username':'gabriel-lab-owner' if tool=='iris' else 'admin','password':owner_password,'port':port}
+    write(root/'credentials.json',credentials)
+    if tool=='iris':
+        base=source
+        broker_password=secret()
+        values=dict(POSTGRES_USER='postgres',POSTGRES_PASSWORD=secret(),POSTGRES_ADMIN_USER='raptor',POSTGRES_ADMIN_PASSWORD=secret(),
+            POSTGRES_DB='iris_db',POSTGRES_SERVER='db',POSTGRES_PORT='5432',IRIS_SECRET_KEY=secret(),IRIS_SECURITY_PASSWORD_SALT=secret(),
+            IRIS_ADM_USERNAME=credentials['username'],IRIS_ADM_PASSWORD=owner_password,IRIS_ADM_API_KEY=secret(),IRIS_ADM_EMAIL='generated-owner@example.invalid',
+            IRIS_UPSTREAM_SERVER='app',IRIS_UPSTREAM_PORT='8000',IRIS_AUTHENTICATION_TYPE='local',DOCKERIZED='1',
+            INTERFACE_HTTPS_PORT=str(port),SERVER_NAME='localhost',CERT_FILENAME='server.pem',KEY_FILENAME='server.key',CELERY_BROKER='amqp://gabriel-lab-broker:'+broker_password+'@rabbitmq',
+            APP_IMAGE_NAME='ghcr.io/dfir-iris/iriswebapp_app',APP_IMAGE_TAG='v2.4.24',DB_IMAGE_NAME='ghcr.io/dfir-iris/iriswebapp_db',DB_IMAGE_TAG='v2.4.24',
+            NGINX_IMAGE_NAME='ghcr.io/dfir-iris/iriswebapp_nginx',NGINX_IMAGE_TAG='v2.4.24')
+        with (source/'.env').open('x') as stream: stream.write(''.join(k+'='+v+'\n' for k,v in values.items()))
+        environment=dict(os.environ,**values)
+        for directory in ('certificates/rootCA','certificates/web_certificates','certificates/ldap'): (source/directory).mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(root/'tls/server.pem',source/'certificates/rootCA/irisRootCACert.pem')
+        for name in ('server.pem','server.key'): shutil.copyfile(root/'tls'/name,source/'certificates/web_certificates'/name);(source/'certificates/web_certificates'/name).chmod(0o444)
+        config=json.loads(run(['docker','compose','--file','docker-compose.yml','config','--format','json'],cwd=base,env=environment))
+        config['services']['rabbitmq']['environment']={'RABBITMQ_DEFAULT_USER':'gabriel-lab-broker','RABBITMQ_DEFAULT_PASS':broker_password}
+        for service in config['services'].values(): service.pop('env_file',None)
+        config['networks']={'iris_backend':{'internal':True},'iris_frontend':{'internal':True},'entry':{}}
+        config['services']['nginx']['networks']={'iris_frontend':{},'entry':{}}
+        entry='nginx'
+    else:
+        base=source/'single-node'
+        PHASE='wazuh_certificates'
+        generator,_=image('wazuh/wazuh-certs-generator:0.0.4')
+        generation=json.loads(run(['docker','compose','-f','generate-indexer-certs.yml','config','--format','json'],cwd=base))
+        generation['services']['generator']['image']=generator
+        generation.pop('name',None)
+        for network in generation.get('networks',{}).values(): network.pop('name',None)
+        write(root/'generate.json',generation)
+        run(['docker','compose','--project-name',project+'-certs','--file',str(root/'generate.json'),'run','--rm','generator'],cwd=base)
+        run(['docker','compose','--project-name',project+'-certs','--file',str(root/'generate.json'),'down','--remove-orphans'],cwd=base)
+        hasher,_=image('httpd:2.4-alpine')
+        run(['docker','run','--rm','--network','none','--mount','type=bind,src='+str(base/'config/wazuh_indexer_ssl_certs')+',dst=/certs',
+            '--entrypoint','sh',hasher,'-c','find /certs -type d -exec chmod 755 {} +; find /certs -type f -exec chmod 444 {} +'])
+        config=json.loads(run(['docker','compose','--file','docker-compose.yml','config','--format','json'],cwd=base))
+        dashboard_password=secret();api_password=secret()
+        PHASE='wazuh_private_accounts'
+        def bcrypt(value):
+            raw=run(['docker','run','--rm','-i','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
+                '--entrypoint','htpasswd',hasher,'-niBC','12','generated'],data=(value+'\n').encode()).decode().strip()
+            result=raw.split(':',1)[1]
+            if re.fullmatch(r'\$2[aby]\$12\$[./A-Za-z0-9]{53}',result) is None: raise ValueError('invalid_password_hash')
+            return result
+        users={'_meta':{'type':'internalusers','config_version':2},
+            'admin':{'hash':bcrypt(owner_password),'reserved':True,'backend_roles':['admin']},
+            'kibanaserver':{'hash':bcrypt(dashboard_password),'reserved':True}}
+        (base/'config/wazuh_indexer/internal_users.yml').write_text(json.dumps(users))
+        (base/'config/wazuh_indexer/internal_users.yml').chmod(0o444)
+        settings=base/'config/wazuh_dashboard/wazuh.yml'
+        text=settings.read_text();text,n=re.subn(r'(?m)^(\s+password:) .+$',lambda m:m[1]+' '+json.dumps(api_password),text)
+        if n!=1: raise ValueError('unexpected_api_configuration')
+        settings.write_text(text);settings.chmod(0o444)
+        for service in config['services'].values():
+            env=service.get('environment',{})
+            for key in ('INDEXER_PASSWORD','API_PASSWORD','DASHBOARD_PASSWORD'):
+                if key in env: env[key]={'INDEXER_PASSWORD':owner_password,'API_PASSWORD':api_password,'DASHBOARD_PASSWORD':dashboard_password}[key]
+        for mount in config['services']['wazuh.dashboard']['volumes']:
+            if mount['target']=='/usr/share/wazuh-dashboard/certs/wazuh-dashboard.pem': mount['source']=str(root/'tls/server.pem')
+            if mount['target']=='/usr/share/wazuh-dashboard/certs/wazuh-dashboard-key.pem': mount['source']=str(root/'tls/server.key')
+        config['networks']={'private':{'internal':True},'entry':{}}
+        for service in config['services'].values(): service['networks']={'private':{}}
+        config['services']['wazuh.dashboard']['networks']={'private':{},'entry':{}}
+        entry='wazuh.dashboard'
+    PHASE='image_resolution'
+    images={}
+    for name,service in config['services'].items():
+        original=service['image']
+        if original not in images:
+            digest,identity=image(original);images[original]={'digest':digest,'image_id':identity}
+        service['image']=images[original]['digest'];service['pull_policy']='never'
+        service.pop('container_name',None);service.pop('ports',None);service.pop('restart',None);service.pop('links',None)
+        service['restart']='no'
+        service['mem_limit']={'wazuh.indexer':'3g','wazuh.manager':'2g','wazuh.dashboard':'2g','app':'2g','worker':'1g','db':'1g','rabbitmq':'512m','nginx':'256m'}[name]
+        service['pids_limit']=1024
+        service['cpus']=2
+        for mount in service.get('volumes',[]):
+            if mount['type']!='bind': continue
+            path=Path(mount['source'])
+            if root not in path.resolve().parents: raise ValueError('mount_outside_generated_lab')
+            paths=[path,*path.rglob('*')] if path.is_dir() else [path]
+            for item in paths:
+                if item.is_symlink(): raise ValueError('unexpected_mount_symlink')
+                if item.stat().st_uid==os.getuid(): item.chmod(0o755 if item.is_dir() else 0o444)
+    config['services'][entry]['ports']=[{'host_ip':'127.0.0.1','published':str(port),'target':port if tool=='iris' else 5601,'protocol':'tcp'}]
+    config.pop('name',None)
+    for network in config['networks'].values(): network.pop('name',None)
+    for volume in config.get('volumes',{}).values(): volume.pop('name',None)
+    write(root/'compose.json',config)
+    manifest=dict(schema_version=1,tool=tool,project=project,upstream_commit=commit,upstream_tag=tag,port=port,images=images,
+        resolved_images=RESOLVED,
+        compose_sha256=sha256((root/'compose.json').read_bytes()).hexdigest(),production_admitted=False,gabriel_adapter_admitted=False)
+    write(root/'lab.json',manifest)
+    return manifest
+
+
+def ready(root):
+    info=json.loads((root/'lab.json').read_text())
+    context=ssl.create_default_context(cafile=str(root/'tls/server.pem'))
+    limit=time.monotonic()+480
+    while time.monotonic()<limit:
+        connection=http.client.HTTPSConnection('localhost',info['port'],context=context,timeout=5)
+        try:
+            connection.request('GET','/login' if info['tool']=='iris' else '/app/login')
+            response=connection.getresponse();body=response.read(262144).decode(errors='replace')
+            if response.status==200 and ('password' in body.lower() or info['tool']=='wazuh' and any(x in body.lower() for x in ('opensearch','wazuh'))): return {'trusted_https':True}
+        except (OSError,ssl.SSLError,http.client.HTTPException): pass
+        finally: connection.close()
+        time.sleep(2)
+    raise ValueError('console_https_readiness_timeout')
+
+
+def main():
+    global PHASE
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command',choices=('prepare','up','check','down'))
+    parser.add_argument('tool',choices=tuple(PINS))
+    parser.add_argument('directory',type=Path)
+    args=parser.parse_args();os.umask(0o077)
+    try:
+        root=args.directory.absolute()
+        if args.command=='prepare': prepare(args.tool,root);result={'prepared':True}
+        else:
+            if json.loads((root/'lab.json').read_text())['tool']!=args.tool: raise ValueError('lab_mismatch')
+            PRIVATE.append(json.loads((root/'credentials.json').read_text())['password'])
+            for service in json.loads((root/'compose.json').read_text())['services'].values():
+                for key,value in service.get('environment',{}).items():
+                    if any(word in key for word in ('PASSWORD','SECRET','SALT','API_KEY','BROKER')) and isinstance(value,str): PRIVATE.append(value)
+            if args.command=='up': PHASE='startup';compose(root,'up','-d');result=ready(root)
+            elif args.command=='check': result=ready(root)
+            else: compose(root,'down','--volumes','--remove-orphans');result={'generated_lab_removed':True}
+        print(json.dumps({'status':'ok','result':result,'production_admitted':False}))
+        return 0
+    except (OSError,ValueError,RuntimeError,KeyError,subprocess.SubprocessError) as exc:
+        print('FAIL: console lab '+PHASE+' ('+type(exc).__name__+')',flush=True)
+        if isinstance(exc,RuntimeError): print(str(exc),flush=True)
+        return 1
+
+
+if __name__=='__main__': raise SystemExit(main())
