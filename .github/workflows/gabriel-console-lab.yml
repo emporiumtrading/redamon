@@ -1,0 +1,56 @@
+name: Gabriel real console lab
+on:
+  pull_request:
+    paths:
+      - 'tooling/scripts/gabriel_console_lab.py'
+      - 'testing/gabriel_console/**'
+      - '.github/workflows/gabriel-console-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  consoles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [iris, wazuh]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Configure only the ephemeral Wazuh runner kernel
+        if: matrix.tool == 'wazuh'
+        run: sudo sysctl -w vm.max_map_count=262144
+      - name: Prepare generated private console and resolve image digests
+        run: python3 tooling/scripts/gabriel_console_lab.py prepare '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
+      - name: Start the real console and verify trusted localhost HTTPS
+        run: python3 tooling/scripts/gabriel_console_lab.py up '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
+      - name: Build isolated browser discovery harness
+        run: docker build --build-arg "LAB_UID=$(id -u)" -f testing/gabriel_console/Dockerfile -t gabriel-console-browser .
+      - name: Verify actual operator browser login and rendered pages
+        run: |
+          mkdir -p "$RUNNER_TEMP/gabriel-console-output"
+          chmod 700 "$RUNNER_TEMP/gabriel-console-output"
+          docker run --rm --network host --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs "/home/browserlab:rw,nosuid,nodev,size=32m,uid=$(id -u),gid=$(id -g),mode=700" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/credentials.json,dst=/run/lab/credentials.json,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/tls/server.pem,dst=/run/lab/server.pem,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-output,dst=/output" gabriel-console-browser
+      - name: Retain only sanitized source and image provenance
+        run: |
+          cp "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/lab.json" "$RUNNER_TEMP/gabriel-console-output/lab.json"
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-console-output/source-sha.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-console-${{ matrix.tool }}
+          path: ${{ runner.temp }}/gabriel-console-output
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove only this generated lab project and its volumes
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/lab.json"; then
+            python3 tooling/scripts/gabriel_console_lab.py down '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
+          fi
