@@ -124,22 +124,22 @@ class Installation:
 
     def stop(self):
         self.start_db()
-        self.compose('stop','workbench')
+        self.compose('stop','local-entry','workbench')
         self.operator('revoke')
         self.compose('stop','identity-db')
 
     def open(self,password):
         self.start_db()
-        self.compose('stop','workbench')
+        self.compose('stop','local-entry','workbench')
         ticket=self.operator('open',dict(password=password,port=self.config['port']))
-        self.compose('up','-d','--wait','--force-recreate','workbench')
+        self.compose('up','-d','--wait','--force-recreate','workbench','local-entry')
         return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',**ticket)
 
     def backup(self,destination):
         if destination.exists(): raise ValueError('new_backup_directory_required')
         destination.mkdir(mode=0o700)
         self.start_db()
-        self.compose('stop','workbench')
+        self.compose('stop','local-entry','workbench')
         self.operator('revoke')
         receipt=self.operator('receipt')
         with (destination/'database.dump').open('xb') as stream:

@@ -10,6 +10,11 @@ import ssl
 import sys
 import re
 import tarfile
+import select
+import socket
+import socketserver
+from threading import BoundedSemaphore
+import time
 from uuid import UUID,uuid4
 
 from gabriel.identity.checkpoints import read_document,write_document
@@ -149,13 +154,48 @@ def restore_objects(stream):
     return {'restored_objects':len(objects)}
 
 
+def relay():
+    """Opaque bounded TLS forwarding to one fixed service; no credentials or target selection."""
+    slots=BoundedSemaphore(4)
+    class Handler(socketserver.BaseRequestHandler):
+        def handle(self):
+            try:
+                with socket.create_connection(('workbench',8444),timeout=3) as upstream:
+                    self.request.settimeout(3)
+                    pair={self.request:upstream,upstream:self.request}
+                    remaining=4*1024*1024
+                    end=time.monotonic()+30
+                    while remaining>0 and time.monotonic()<end:
+                        ready,_,_=select.select(list(pair),[],[],max(0,end-time.monotonic()))
+                        if not ready: return
+                        for source in ready:
+                            body=source.recv(min(65536,remaining))
+                            if not body: return
+                            remaining-=len(body)
+                            pair[source].sendall(body)
+            except OSError: return
+    class Server(socketserver.ThreadingMixIn,socketserver.TCPServer):
+        allow_reuse_address=True
+        daemon_threads=True
+        request_queue_size=4
+        def process_request(self,request,address):
+            if not slots.acquire(blocking=False): self.close_request(request);return
+            try: super().process_request(request,address)
+            except Exception: slots.release();raise
+        def process_request_thread(self,request,address):
+            try: super().process_request_thread(request,address)
+            finally: slots.release()
+    with Server(('0.0.0.0',8444),Handler) as server: server.serve_forever()
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('tls','initialize','open','serve','health','receipt','restore-receipt','revoke','restore-objects'))
+    parser.add_argument('command',choices=('tls','initialize','open','serve','health','receipt','restore-receipt','revoke','restore-objects','relay'))
     parser.add_argument('--directory')
     args=parser.parse_args()
     try:
         if args.command=='tls': result=tls(args.directory)
+        elif args.command=='relay': relay();return 0
         elif args.command=='serve':
             serve_workbench(str(active()/'workbench.json'),'/run/secrets/tls_certificate','/run/secrets/tls_key','0.0.0.0:8444')
             return 0

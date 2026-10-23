@@ -31,6 +31,7 @@ def connect(root,app,password):
     port=app.config['port']
     code,html,_=request(root,port,'/claim');assert code==200
     csrf=re.search(r'name="csrf" value="([A-Za-z0-9_-]+)"',html)[1]
+    assert request(root,port,'/claim',dict(csrf='wrong',ticket=result['ticket']))[0]==403
     code,_,headers=request(root,port,'/claim',dict(csrf=csrf,ticket=result['ticket']));assert code==303
     cookie=headers['Set-Cookie'].split(';',1)[0]
     assert all(part in headers['Set-Cookie'] for part in ('Secure','HttpOnly','SameSite=Strict'))
@@ -48,9 +49,12 @@ def main():
         prepare(root,18444,image)
         app=Installation(root);apps.append(app)
         config=json.loads(app.compose('--profile','operator','config','--format','json'))
-        assert all(n['internal'] for n in config['networks'].values())
+        assert config['networks']['private']['internal']
+        assert set(config['services']['workbench']['networks'])=={'private'}
         assert not config['services']['identity-db'].get('ports')
-        assert config['services']['workbench']['ports'][0]['host_ip']=='127.0.0.1'
+        assert not config['services']['workbench'].get('ports')
+        assert config['services']['local-entry']['ports'][0]['host_ip']=='127.0.0.1'
+        assert not config['services']['local-entry'].get('secrets') and not config['services']['local-entry'].get('volumes')
         assert config['services']['workbench']['read_only'] and config['services']['workbench']['user']=='10001:10001'
         assert config['services']['workbench']['tmpfs']==['/tmp:rw,noexec,nosuid,nodev,size=64m']
         assert 'owner_dsn' not in {s['source'] for s in config['services']['workbench']['secrets']}

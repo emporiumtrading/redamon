@@ -51,16 +51,36 @@ services:
   workbench:
     <<: *app
     entrypoint: [python, -m, gabriel.identity.installation, serve]
-    ports: ['127.0.0.1:${GABRIEL_INSTALL_PORT:?Local port required}:8444']
     secrets: [app_dsn, provider_keyring, evidence_keyring, tls_certificate, tls_key, tls_ca]
     healthcheck:
       test: [CMD, python, -m, gabriel.identity.installation, health]
       interval: 5s
       timeout: 5s
       retries: 12
+  local-entry:
+    image: ${GABRIEL_INSTALL_IMAGE}
+    user: '10001:10001'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    networks: [private, entry]
+    entrypoint: [python, -m, gabriel.identity.installation, relay]
+    ports: ['127.0.0.1:${GABRIEL_INSTALL_PORT:?Local port required}:8444']
+    depends_on:
+      workbench:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1',8444),timeout=2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
 networks:
   private:
     internal: true
+  entry:
 volumes:
   database:
   evidence:
