@@ -20,6 +20,13 @@ REPO=Path(__file__).resolve().parents[2]
 COMPOSE=REPO/'compose.gabriel-installation.yml'
 
 
+class DockerOperationError(ValueError):
+    def __init__(self,completed):
+        super().__init__('docker_operation_failed; inspect the local Docker service and installation state')
+        self.stdout=completed.stdout
+        self.stderr=completed.stderr
+
+
 def run(command,*,env=None,payload=None,output=None):
     completed=subprocess.run(command,cwd=REPO,env=env,input=payload,stdout=output if output is not None else subprocess.PIPE,
         stderr=subprocess.PIPE,check=False)
@@ -31,7 +38,7 @@ def run(command,*,env=None,payload=None,output=None):
                 if re.fullmatch(r'[a-z_]{1,64}',phase) and re.fullmatch(r'[A-Za-z]{1,64}',kind):
                     raise ValueError('installation denied at '+phase+' ('+kind+'); no secret values logged')
         except (json.JSONDecodeError,UnicodeError): pass
-        raise ValueError('docker_operation_failed; inspect the local Docker service and installation state')
+        raise DockerOperationError(completed)
     return completed.stdout
 
 

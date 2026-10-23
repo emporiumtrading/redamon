@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 
 repo=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(repo/'tooling/scripts'))
-from gabriel_install import Installation,prepare,read,write
+from gabriel_install import DockerOperationError,Installation,prepare
 
 
 def request(root,port,path,fields=None,cookie=None):
@@ -107,6 +107,22 @@ print('PASS: restored encrypted evidence decrypted using the original evidence k
         cookie,_=connect(target,restored,secret)
         assert request(target,18445,'/cases',cookie=cookie)[0]==200
         print('PASS: fresh installation; least-privilege loopback HTTPS; hashed owner identity; case and encrypted evidence persistence; old-cookie denial; quiesced backup; fresh-project restore with original keys; fresh login after Stop')
+    except DockerOperationError as exc:
+        diagnostic=((exc.stdout or b'')+b'\n'+(exc.stderr or b'')).decode(errors='replace')
+        replacements=[secret]
+        for app in apps:
+            for folder in ('database','provider','evidence'):
+                for file in (app.root/folder).iterdir():
+                    text=file.read_text().strip();replacements.append(text)
+                    try:
+                        value=json.loads(text)
+                        replacements.extend(value.get('keys',{}).values())
+                    except ValueError: pass
+        for value in sorted(replacements,key=len,reverse=True):
+            if value: diagnostic=diagnostic.replace(value,'[GENERATED SECRET REMOVED]')
+        diagnostic=re.sub(r'(?:gwt1_|gb1_|gwu1_)[A-Za-z0-9_-]+','[GENERATED TOKEN REMOVED]',diagnostic)
+        print('GENERATED-LAB DIAGNOSTIC ONLY: '+diagnostic[-6000:],flush=True)
+        raise
     finally:
         for app in apps:
             app.compose('--profile','operator','down','--volumes','--remove-orphans')
