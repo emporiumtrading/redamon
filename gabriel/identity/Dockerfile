@@ -14,6 +14,8 @@ COPY gabriel/identity/browser_navigation.py gabriel/identity/schema_v21.sql /app
 COPY gabriel/identity/schema_v22.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_gateway.py gabriel/identity/gateway_cli.py /app/gabriel/identity/
 COPY gabriel/identity/reports.py gabriel/identity/environment.py /app/gabriel/identity/
+COPY gabriel/identity/installation.py /app/gabriel/identity/
+RUN mkdir -p /var/lib/gabriel-workbench && chown 10001:10001 /var/lib/gabriel-workbench && chmod 700 /var/lib/gabriel-workbench
 COPY gabriel/identity/workbench.py gabriel/identity/workbench_cli.py /app/gabriel/identity/
 COPY gabriel/identity/analyst_views.py /app/gabriel/identity/
 COPY gabriel/identity/case_workflow.py gabriel/identity/schema_v13.sql /app/gabriel/identity/

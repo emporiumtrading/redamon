@@ -1,0 +1,44 @@
+name: Gabriel private Docker installation
+on:
+  pull_request:
+    paths:
+      - 'gabriel/identity/**'
+      - 'compose.gabriel-installation.yml'
+      - 'tooling/scripts/gabriel_install.py'
+      - 'tooling/scripts/gabriel_identity_prepare.py'
+      - 'tooling/scripts/gabriel_provider_keys.py'
+      - 'testing/gabriel_identity/installation_journey.py'
+      - '.github/workflows/gabriel-installation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  installation:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build the exact non-root installation image
+        run: docker build -f gabriel/identity/Dockerfile --target production -t gabriel-installation-check .
+      - name: Fresh install, actual HTTPS, persistent evidence and fresh-project restore
+        run: |
+          image_id="$(docker image inspect gabriel-installation-check --format '{{.Id}}')"
+          python3 testing/gabriel_identity/installation_journey.py "$RUNNER_TEMP/gabriel-installation-journey" "$image_id"
+      - name: Retain sanitized source and installation acceptance result
+        run: |
+          mkdir -p "$RUNNER_TEMP/gabriel-installation-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-installation-evidence/source-sha.txt"
+          docker image inspect gabriel-installation-check --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-installation-evidence/image-id.txt"
+          printf '%s\n' 'PASS: generated-data local Docker installation and fresh-project restore; production and native OS acceptance pending' > "$RUNNER_TEMP/gabriel-installation-evidence/result.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-installation-${{ matrix.runner }}
+          path: ${{ runner.temp }}/gabriel-installation-evidence
+          if-no-files-found: error
+          retention-days: 14
