@@ -55,7 +55,7 @@ def snapshot(cdp,session):
 const visible=e=>Boolean(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
 const clean=e=>e.innerText.trim().replace(/\\s+/g,' ').slice(0,160);
 return {title:document.title,path:location.pathname,headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
-table_headers:[...document.querySelectorAll('th')].filter(visible).map(clean).slice(0,80),
+table_headers:[...document.querySelectorAll('th,[role=columnheader]')].filter(visible).map(clean).slice(0,80),
 links:[...document.querySelectorAll('a[href]')].filter(visible).map(e=>{let u=new URL(e.href);return u.origin===location.origin?{text:clean(e),path:u.pathname,fragment:u.hash.slice(0,180)}:null}).filter(Boolean).slice(0,100),
 buttons:[...document.querySelectorAll('button')].filter(visible).map(e=>({text:clean(e),label:e.getAttribute('aria-label')||'',test_subject:e.getAttribute('data-test-subj')||''})).slice(0,80),
 inputs:[...document.querySelectorAll('input,textarea,select')].filter(visible).map(e=>({tag:e.tagName,type:e.type,name:e.name,id:e.id})).slice(0,50)};})()""")
@@ -109,6 +109,7 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
             wait(lambda:cdp.evaluate(session,"location.pathname==='/app/threat-hunting'&&document.readyState==='complete'"),90)
             time.sleep(5);pages.append(snapshot(cdp,session))
             phase='threat_hunting_events'
+            wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('button,a,[role=tab]')].some(e=>e.getClientRects().length&&e.innerText.trim()==='Events')"),90)
             assert cdp.evaluate(session,"(()=>{const e=[...document.querySelectorAll('button,a,[role=tab]')].find(e=>e.getClientRects().length&&e.innerText.trim()==='Events');if(!e)return false;e.click();return true;})()")
             wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('th,[role=columnheader]')].some(e=>e.getClientRects().length&&e.innerText.trim())"),90)
             pages.append(snapshot(cdp,session))
