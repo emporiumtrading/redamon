@@ -125,11 +125,15 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
                 assert cdp.evaluate(session,expression)
                 wait(lambda:cdp.evaluate(session,"Boolean(document.querySelector('button[data-test-subj=querySubmitButton]:not([disabled])'))"))
                 cdp.evaluate(session,"document.querySelector('button[data-test-subj=querySubmitButton]').click();true")
+            phase='replay_empty_control'
             search('full_log: "'+marker+'-absent"')
             wait(lambda:cdp.evaluate(session,"(()=>{const e=document.querySelector('[data-test-subj=discoverNoResults]');return Boolean(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');})()"),90)
+            replay_check=dict(marker=marker,empty_control_verified=True,marker_filtered_rows_rendered=False,
+                native_event_identity_verified=False,live_attack=False)
+            phase='replay_marker_results'
             search('full_log: "'+marker+'"')
             def matching():
-                return cdp.evaluate(session,"(()=>{const ids=new Set(EXPECTED);return [...new Set([...document.querySelectorAll('[role=gridcell]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').slice(0,100).map(e=>e.innerText.trim()).filter(x=>ids.has(x)))];})()".replace('EXPECTED',json.dumps(expected)))
+                return cdp.evaluate(session,"(()=>{const ids=new Set(EXPECTED);return [...new Set([...document.querySelectorAll('a[href]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').slice(0,100).filter(e=>{const id=e.innerText.trim(),u=new URL(e.href);return ids.has(id)&&u.origin===location.origin&&u.pathname==='/app/rules'&&u.hash==='#/manager/?tab=rules&redirectRule='+id;}).map(e=>e.innerText.trim()))];})()".replace('EXPECTED',json.dumps(expected)))
             found=wait(matching,120)
             replay_check=dict(marker=marker,empty_control_verified=True,matching_rule_ids=found,
                 marker_filtered_rows_rendered=True,native_event_identity_verified=False,live_attack=False)
@@ -148,7 +152,7 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
     except Exception:
         diagnostic=dict(status='FAIL',tool=tool,phase=phase,operator_login_only=True,gabriel_adapter_admitted=False,
             attack_detection_verified=False,login_structure=login,pages=pages,http_response_status_counts=cdp.network if cdp else {},
-            http_error_routes=cdp.errors if cdp else {})
+            http_error_routes=cdp.errors if cdp else {},replay_event_query=replay_check)
         if cdp and session:
             try: diagnostic['last_structure']=snapshot(cdp,session)
             except Exception: diagnostic['last_structure_unavailable']=True
