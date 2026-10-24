@@ -1,0 +1,72 @@
+name: Gabriel defensive image security
+on:
+  pull_request:
+    paths: ['gabriel/**', '.github/workflows/gabriel-security.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gabriel-security-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  core-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build the exact defensive production image
+        run: |
+          mkdir -p "$RUNNER_TEMP/gabriel-security"
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-security/source-sha.txt"
+          docker build --target production -f gabriel/identity/Dockerfile -t gabriel-security-candidate .
+          docker image inspect gabriel-security-candidate --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-security/image-id.txt"
+          docker save gabriel-security-candidate -o "$RUNNER_TEMP/gabriel-security/core.tar"
+      - name: Resolve versioned scanner images to exact registry digests
+        run: |
+          for tool in anchore/syft:v1.55.0 anchore/grype:v0.121.0 ghcr.io/gitleaks/gitleaks:v8.30.1; do
+            docker pull "$tool"
+            docker image inspect "$tool" --format '{{index .RepoDigests 0}}' >> "$RUNNER_TEMP/gabriel-security/scanners.txt"
+          done
+      - name: Generate an offline SBOM without host Docker access
+        run: |
+          scanner=$(sed -n '1p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 128 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m -e XDG_CACHE_HOME=/tmp \
+            -v "$RUNNER_TEMP/gabriel-security/core.tar:/image/core.tar:ro" \
+            "$scanner" docker-archive:/image/core.tar -o syft-json > "$RUNNER_TEMP/gabriel-security/sbom.json"
+      - name: Scan the production SBOM and block high or critical findings
+        run: |
+          scanner=$(sed -n '2p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 128 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,nosuid,nodev,size=1g -e XDG_CACHE_HOME=/tmp -e GRYPE_CHECK_FOR_APP_UPDATE=false \
+            -v "$RUNNER_TEMP/gabriel-security/sbom.json:/image/sbom.json:ro" \
+            "$scanner" sbom:/image/sbom.json -o json --fail-on high > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
+      - name: Scan defensive source for secrets with fully redacted output
+        if: success() || failure()
+        run: |
+          scanner=$(sed -n '3p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
+          test -n "$scanner"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 128 --memory 512m --cpus 1 --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,nosuid,nodev,size=64m -v "$GITHUB_WORKSPACE/gabriel:/source:ro" \
+            -v "$RUNNER_TEMP/gabriel-security:/reports" "$scanner" dir /source \
+            --redact=100 --report-format json --report-path /reports/secrets.json
+      - name: Remove the transport archive and retain digests
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/gabriel-security/core.tar"; then
+            sha256sum "$RUNNER_TEMP/gabriel-security/core.tar" > "$RUNNER_TEMP/gabriel-security/image-archive.sha256"
+            rm "$RUNNER_TEMP/gabriel-security/core.tar"
+          fi
+          echo 'Automated core-image checks only; independent review and release acceptance remain separate.' > "$RUNNER_TEMP/gabriel-security/scope.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-core-security
+          path: ${{ runner.temp }}/gabriel-security
+          if-no-files-found: error
+          retention-days: 14
