@@ -1,9 +1,11 @@
 """Operator-only generated-account console discovery; never gives Gabriel login authority."""
 import http.client
 import json
+import re
 from pathlib import Path
 import subprocess
 import time
+from urllib.parse import urlsplit
 
 import websocket
 
@@ -24,7 +26,7 @@ class CDP:
                 c=http.client.HTTPConnection('127.0.0.1',19222,timeout=1);c.request('GET','/json/version')
                 value=json.loads(c.getresponse().read());c.close();return value['webSocketDebuggerUrl']
             except (OSError,ValueError): return None
-        self.ws=websocket.create_connection(wait(url),suppress_origin=True,timeout=20);self.serial=0;self.network={}
+        self.ws=websocket.create_connection(wait(url),suppress_origin=True,timeout=20);self.serial=0;self.network={};self.errors={}
     def send(self,method,params=None,session=None):
         self.serial+=1;ident=self.serial
         request={'id':ident,'method':method,'params':params or {}}
@@ -35,6 +37,10 @@ class CDP:
             if value.get('method')=='Network.responseReceived':
                 response=value['params']['response'];key=str(response['status'])
                 self.network[key]=self.network.get(key,0)+1
+                if response['status']>=400:
+                    path=urlsplit(response['url']).path
+                    route=path if re.fullmatch(r'/(?:api|internal|auth)/[a-z_/-]{1,100}',path) else '[other-route]'
+                    error=key+' '+route;self.errors[error]=self.errors.get(error,0)+1
             if value.get('id')==ident:
                 if 'error' in value: raise AssertionError('console_cdp_command_failed')
                 return value.get('result',{})
@@ -98,9 +104,18 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
                 assert '#'+str(creds['case_id'])+' -' in pages[-1]['title']
         else:
             assert any(link['text'] for link in pages[0]['links']) or any(pages[0]['headings'])
+            phase='threat_hunting_navigation'
+            assert cdp.evaluate(session,"(()=>{const a=[...document.querySelectorAll('a[href]')].find(e=>e.getClientRects().length&&new URL(e.href).pathname==='/app/threat-hunting'&&e.innerText.trim()==='Threat Hunting');if(!a)return false;a.click();return true;})()")
+            wait(lambda:cdp.evaluate(session,"location.pathname==='/app/threat-hunting'&&document.readyState==='complete'"),90)
+            time.sleep(5);pages.append(snapshot(cdp,session))
+            phase='threat_hunting_events'
+            assert cdp.evaluate(session,"(()=>{const e=[...document.querySelectorAll('button,a,[role=tab]')].find(e=>e.getClientRects().length&&e.innerText.trim()==='Events');if(!e)return false;e.click();return true;})()")
+            wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('th,[role=columnheader]')].some(e=>e.getClientRects().length&&e.innerText.trim())"),90)
+            pages.append(snapshot(cdp,session))
         result=dict(status='PASS',tool=tool,operator_login_only=True,gabriel_adapter_admitted=False,attack_detection_verified=False,
             browser_version=subprocess.check_output(['/usr/bin/chromium','--version']).decode().strip(),login_structure=login,pages=pages,
             http_response_status_counts=cdp.network,
+            http_error_routes=cdp.errors,
             environment='generated isolated lab; headless Chromium sandbox disabled; external browser traffic blocked by dead proxy')
         encoded=json.dumps(result,sort_keys=True)
         for value in (creds['password'],):
@@ -109,7 +124,8 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
         print('PASS: '+tool+' operator browser login and rendered page structure; adapter and detection acceptance remain open')
     except Exception:
         diagnostic=dict(status='FAIL',tool=tool,phase=phase,operator_login_only=True,gabriel_adapter_admitted=False,
-            attack_detection_verified=False,login_structure=login,pages=pages,http_response_status_counts=cdp.network if cdp else {})
+            attack_detection_verified=False,login_structure=login,pages=pages,http_response_status_counts=cdp.network if cdp else {},
+            http_error_routes=cdp.errors if cdp else {})
         if cdp and session:
             try: diagnostic['last_structure']=snapshot(cdp,session)
             except Exception: diagnostic['last_structure_unavailable']=True
