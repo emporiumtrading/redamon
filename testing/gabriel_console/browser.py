@@ -138,6 +138,17 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
             replay_check=dict(marker=marker,empty_control_verified=True,matching_rule_ids=found,
                 marker_filtered_rows_rendered=True,native_event_identity_verified=False,live_attack=False)
             pages.append(snapshot(cdp,session))
+            phase='native_document_details'
+            assert cdp.evaluate(session,"(()=>{const e=[...document.querySelectorAll('button[aria-label=\"Inspect document details\"]')].find(e=>e.getClientRects().length);if(!e)return false;e.click();return true;})()")
+            wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('[role=tab],button')].some(e=>e.getClientRects().length&&e.innerText.trim()==='JSON')"))
+            cdp.evaluate(session,"[...document.querySelectorAll('[role=tab],button')].find(e=>e.getClientRects().length&&e.innerText.trim()==='JSON').click();true")
+            raw=wait(lambda:cdp.evaluate(session,"(()=>{const e=document.querySelector('[aria-label=\"Document details\"]');return e&&e.getClientRects().length?e.innerText:null;})()"))
+            detail=json.loads(raw);source=detail['_source']
+            assert marker in source['full_log'] and re.fullmatch(r'[0-9]+\.[0-9]+',source['id'])
+            replay_check['native_detail']=dict(event_id=source['id'],event_time=source['timestamp'],
+                rule_id=source['rule']['id'],agent_id=source['agent']['id'],agent_name=source['agent']['name'],
+                full_log=source['full_log'][:512],location=source['location'],data={k:source.get('data',{}).get(k) for k in ('srcip','srcport','dstuser')})
+            replay_check['native_id_visible']=True
         result=dict(status='PASS',tool=tool,operator_login_only=True,gabriel_adapter_admitted=False,attack_detection_verified=False,
             browser_version=subprocess.check_output(['/usr/bin/chromium','--version']).decode().strip(),login_structure=login,pages=pages,
             http_response_status_counts=cdp.network,
