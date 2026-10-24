@@ -34,7 +34,7 @@ jobs:
           scanner=$(sed -n '1p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
             --pids-limit 128 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
-            --tmpfs /tmp:rw,nosuid,nodev,size=256m -e XDG_CACHE_HOME=/tmp \
+            --tmpfs /tmp:rw,nosuid,nodev,size=1g,mode=1777 -e XDG_CACHE_HOME=/tmp -e SYFT_CHECK_FOR_APP_UPDATE=false \
             -v "$RUNNER_TEMP/gabriel-security/core.tar:/image/core.tar:ro" \
             "$scanner" docker-archive:/image/core.tar -o syft-json > "$RUNNER_TEMP/gabriel-security/sbom.json"
       - name: Scan the production SBOM and block high or critical findings
@@ -42,7 +42,7 @@ jobs:
           scanner=$(sed -n '2p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
           docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
             --pids-limit 128 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
-            --tmpfs /tmp:rw,nosuid,nodev,size=1g -e XDG_CACHE_HOME=/tmp -e GRYPE_CHECK_FOR_APP_UPDATE=false \
+            --tmpfs /tmp:rw,nosuid,nodev,size=1g,mode=1777 -e XDG_CACHE_HOME=/tmp -e GRYPE_CHECK_FOR_APP_UPDATE=false \
             -v "$RUNNER_TEMP/gabriel-security/sbom.json:/image/sbom.json:ro" \
             "$scanner" sbom:/image/sbom.json -o json --fail-on high > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
       - name: Scan defensive source for secrets with fully redacted output
@@ -52,7 +52,7 @@ jobs:
           test -n "$scanner"
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
             --pids-limit 128 --memory 512m --cpus 1 --user "$(id -u):$(id -g)" \
-            --tmpfs /tmp:rw,nosuid,nodev,size=64m -v "$GITHUB_WORKSPACE/gabriel:/source:ro" \
+            --tmpfs /tmp:rw,nosuid,nodev,size=64m,mode=1777 -v "$GITHUB_WORKSPACE/gabriel:/source:ro" \
             -v "$RUNNER_TEMP/gabriel-security:/reports" "$scanner" dir /source \
             --redact=100 --report-format json --report-path /reports/secrets.json
       - name: Remove the transport archive and retain digests
