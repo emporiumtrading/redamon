@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepare and check dedicated generated-data console labs; never a Gabriel adapter."""
 import argparse
+from datetime import datetime, timezone
 from hashlib import sha256
 import http.client
 import json
@@ -24,9 +25,9 @@ PRIVATE=[]
 RESOLVED={}
 
 
-def run(command,*,cwd=None,env=None,data=None,timeout=900):
+def run(command,*,cwd=None,env=None,data=None,timeout=900,accepted=(0,)):
     result=subprocess.run(command,cwd=cwd,env=env,input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
-    if result.returncode:
+    if result.returncode not in accepted:
         message=result.stderr.decode(errors='replace')[-3000:]
         for value in sorted(PRIVATE,key=len,reverse=True): message=message.replace(value,'[REMOVED]')
         raise RuntimeError('command_failed: '+message)
@@ -52,11 +53,11 @@ def image(tag):
     return digests[0],metadata['Id']
 
 
-def compose(root,*args,data=None):
+def compose(root,*args,data=None,accepted=(0,)):
     info=json.loads((root/'lab.json').read_text())
     if re.fullmatch(r'gabriel-console-[a-f0-9]{16}',info['project']) is None: raise ValueError('invalid_project')
     if sha256((root/'compose.json').read_bytes()).hexdigest()!=info['compose_sha256']: raise ValueError('configuration_changed')
-    return run(['docker','compose','--project-name',info['project'],'--file',str(root/'compose.json'),*args],cwd=root,data=data)
+    return run(['docker','compose','--project-name',info['project'],'--file',str(root/'compose.json'),*args],cwd=root,data=data,accepted=accepted)
 
 
 def certificates(root):
@@ -119,6 +120,13 @@ def prepare(tool,root):
         run(['docker','run','--rm','--network','none','--mount','type=bind,src='+str(base/'config/wazuh_indexer_ssl_certs')+',dst=/certs',
             '--entrypoint','sh',hasher,'-c','find /certs -type d -exec chmod 755 {} +; find /certs -type f -exec chmod 444 {} +'])
         config=json.loads(run(['docker','compose','--file','docker-compose.yml','config','--format','json'],cwd=base))
+        inputs=root/'generated-input';inputs.mkdir(mode=0o755)
+        (inputs/'auth.log').touch(mode=0o444)
+        settings=base/'config/wazuh_cluster/wazuh_manager.conf'
+        text=settings.read_text()
+        before,closing=text.rsplit('</ossec_config>',1)
+        settings.write_text(before+'<localfile><log_format>syslog</log_format><location>/var/log/gabriel-lab/auth.log</location></localfile>\n</ossec_config>'+closing)
+        config['services']['wazuh.manager']['volumes'].append({'type':'bind','source':str(inputs),'target':'/var/log/gabriel-lab','read_only':True})
         dashboard_password=secret();api_password=secret()
         PHASE='wazuh_private_accounts'
         def bcrypt(value):
@@ -195,10 +203,102 @@ def ready(root):
     raise ValueError('console_https_readiness_timeout')
 
 
+def replay(root):
+    """A generated log replay checks collection; it does not execute an attack."""
+    info=json.loads((root/'lab.json').read_text())
+    if info['tool']!='wazuh': raise ValueError('wazuh_replay_only')
+    if (root/'replay.json').exists(): raise ValueError('replay_already_recorded')
+    limit=time.monotonic()+120
+    while time.monotonic()<limit:
+        # Upstream status exits 1 when an optional daemon (e.g. clustering) is stopped.
+        status=json.loads(compose(root,'exec','-T','wazuh.manager','/var/ossec/bin/wazuh-control','-j','status',accepted=(0,1)))
+        if status.get('error')!=0 or type(status.get('data')) is not list: raise ValueError('invalid_daemon_status')
+        states={item['daemon']:item['status'] for item in status['data']}
+        if all(states.get(name)=='running' for name in ('wazuh-logcollector','wazuh-analysisd')): break
+        time.sleep(2)
+    else: raise ValueError('wazuh_collection_not_ready')
+    marker='gabriel-lab-'+uuid4().hex[:12]
+    started=datetime.now(timezone.utc).isoformat()
+    # The collector opens this fresh lab's file at startup; wait for its first scan.
+    time.sleep(5)
+    path=root/'generated-input/auth.log'
+    path.chmod(0o600)
+    try:
+        with path.open('a') as stream:
+            for number in range(12):
+                stamp=datetime.now(timezone.utc).strftime('%b %d %H:%M:%S')
+                stream.write(f'{stamp} generated-lab sshd[{20000+number}]: Failed password for invalid user {marker} from 192.0.2.10 port {40000+number} ssh2\n')
+                stream.flush();os.fsync(stream.fileno())
+                time.sleep(.2)
+    finally: path.chmod(0o444)
+    limit=time.monotonic()+180
+    alerts={}
+    while time.monotonic()<limit:
+        raw=compose(root,'exec','-T','wazuh.manager','sh','-c','if test -f /var/ossec/logs/alerts/alerts.json; then tail -c 4194304 /var/ossec/logs/alerts/alerts.json; fi')
+        for line in raw.splitlines():
+            try: event=json.loads(line)
+            except ValueError: continue
+            if marker not in event.get('full_log','') or event.get('location')!='/var/log/gabriel-lab/auth.log': continue
+            if not event.get('id') or not event.get('rule',{}).get('id'): continue
+            alerts[event['id']]={'id':event['id'],'timestamp':event['timestamp'],'rule_id':event['rule']['id'],
+                'rule_level':event['rule'].get('level'),'decoder':event.get('decoder',{}).get('name')}
+        if alerts: break
+        time.sleep(2)
+    if not alerts: raise ValueError('generated_replay_not_collected')
+    report=dict(schema_version=1,kind='synthetic_syslog_replay',live_attack=False,endpoint_sensor_verified=False,
+        browser_capture_verified=False,indexer_forwarding_verified=False,tool='wazuh',marker=marker,emitted_records=12,
+        observed_alerts=list(alerts.values()),started_at=started,first_observed_at=datetime.now(timezone.utc).isoformat(),
+        required_daemons={name:states[name] for name in ('wazuh-logcollector','wazuh-analysisd')},
+        inactive_optional_daemons=sorted(name for name,state in states.items() if state!='running'),
+        source_sha256=sha256(path.read_bytes()).hexdigest())
+    write(root/'replay.json',report)
+    return {'synthetic_replay_collected':True,'observed_alert_count':len(alerts)}
+
+
+def analyst(root):
+    """Provision a case-scoped viewer only in the generated IRIS lab."""
+    info=json.loads((root/'lab.json').read_text())
+    if info['tool']!='iris': raise ValueError('iris_analyst_only')
+    if (root/'analyst-credentials.json').exists(): raise ValueError('analyst_already_prepared')
+    if sha256((root/'compose.json').read_bytes()).hexdigest()!=info['compose_sha256']: raise ValueError('configuration_changed')
+    config=json.loads((root/'compose.json').read_text())
+    owner_key=config['services']['app']['environment']['IRIS_ADM_API_KEY']
+    context=ssl.create_default_context(cafile=str(root/'tls/server.pem'))
+    def request(method,path,key,payload=None,expected=200):
+        connection=http.client.HTTPSConnection('localhost',info['port'],context=context,timeout=30)
+        try:
+            connection.request(method,path,body=json.dumps(payload) if payload is not None else None,
+                headers={'X-IRIS-AUTH':key,'Content-Type':'application/json'})
+            response=connection.getresponse();value=json.loads(response.read(1048576))
+            if response.status!=expected or value.get('status')!=('success' if expected==200 else 'error'):
+                raise ValueError('iris_analyst_permission_check_failed')
+            return value.get('data')
+        finally: connection.close()
+    username='gabriel-viewer-'+uuid4().hex[:10];password=secret()
+    user=request('POST','/manage/users/add',owner_key,dict(user_name=username,user_login=username,
+        user_email=username+'@example.invalid',user_password=password,user_isadmin=False,user_is_service_account=False,active=True))
+    user_id=user['id'];viewer_key=user['user_api_key'];PRIVATE.append(viewer_key)
+    if type(user_id) is not int: raise ValueError('invalid_generated_user_id')
+    group=request('POST','/manage/groups/add',owner_key,dict(group_name=username,group_description='Generated case-scoped lab viewer',
+        group_permissions=[1],group_auto_follow=False,group_auto_follow_access_level=1))
+    if group['group_permissions']!=1 or type(group['group_id']) is not int: raise ValueError('unexpected_viewer_permissions')
+    request('POST',f'/manage/users/{user_id}/groups/update',owner_key,{'groups_membership':[group['group_id']]})
+    request('POST',f'/manage/users/{user_id}/cases-access/update',owner_key,{'cases_list':[1],'access_level':2})
+    summary=request('GET','/case/summary/fetch?cid=1',viewer_key)
+    request('POST','/case/summary/update?cid=1',viewer_key,{'case_description':summary['case_description']},expected=403)
+    request('GET','/manage/users/list',viewer_key,expected=403)
+    if request('GET','/case/summary/fetch?cid=1',owner_key)!=summary: raise ValueError('readonly_case_changed')
+    write(root/'analyst-credentials.json',dict(tool='iris',username=username,password=password,port=info['port'],case_id=1))
+    write(root/'analyst-access.json',dict(schema_version=1,tool='iris',username=username,user_id=user_id,case_id=1,
+        group_permissions=1,case_access_level=2,case_read_http=200,case_write_http=403,admin_read_http=403,
+        case_summary_unchanged=True,browser_session_verified=False,gabriel_adapter_admitted=False))
+    return {'generated_case_viewer_prepared':True,'case_write_denied':True,'admin_read_denied':True}
+
+
 def main():
     global PHASE
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','up','check','down'))
+    parser.add_argument('command',choices=('prepare','up','check','replay','analyst','down'))
     parser.add_argument('tool',choices=tuple(PINS))
     parser.add_argument('directory',type=Path)
     args=parser.parse_args();os.umask(0o077)
@@ -213,6 +313,8 @@ def main():
                     if any(word in key for word in ('PASSWORD','SECRET','SALT','API_KEY','BROKER')) and isinstance(value,str): PRIVATE.append(value)
             if args.command=='up': PHASE='startup';compose(root,'up','-d');result=ready(root)
             elif args.command=='check': result=ready(root)
+            elif args.command=='replay': PHASE='generated_replay';result=replay(root)
+            elif args.command=='analyst': PHASE='generated_analyst';result=analyst(root)
             else: compose(root,'down','--volumes','--remove-orphans');result={'generated_lab_removed':True}
         print(json.dumps({'status':'ok','result':result,'production_admitted':False}))
         return 0
