@@ -18,7 +18,8 @@ jobs:
         run: |
           mkdir -m 700 "$RUNNER_TEMP/gabriel-model-review"
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
-            --pids-limit 256 --memory 2g --cpus 2 --tmpfs /tmp:rw,nosuid,nodev,size=512m,mode=1777 --entrypoint python \
+            --pids-limit 256 --memory 2g --cpus 2 --tmpfs /tmp:rw,nosuid,nodev,size=512m,mode=1777 \
+            --tmpfs "/home/browserlab:rw,nosuid,nodev,size=32m,uid=$(id -u),gid=$(id -g),mode=700" --entrypoint python \
             -v "$GITHUB_WORKSPACE/tooling/scripts/gabriel_model_review_page.py:/lab/review_generator.py:ro" \
             -v "$GITHUB_WORKSPACE/testing/gabriel_model_lab/review_page_check.py:/lab/review_check.py:ro" \
             -v "$GITHUB_WORKSPACE/testing/gabriel_model_lab/review_packets/protocol-v2-development-pending.json:/packet.json:ro" \
