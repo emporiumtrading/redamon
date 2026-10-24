@@ -26,12 +26,12 @@ def main():
     def uid(key): return str(uuid5(NAMESPACE_URL,check['marker']+'/'+key))
     eid=uid('browser-evidence');digest=sha256(raw).hexdigest();typed=[]
     for event in events:
-        actor=re.search(r'Failed password for invalid user (gabriel-lab-[a-f0-9]{12}) from ',event['full_log'])
+        actor=re.search(r'Failed password for invalid user (gabriel-lab-[a-f0-9]{12}) from (192\.0\.2\.10) port ([0-9]{5}) ssh2$',event['full_log'])
         assert actor and actor[1]==check['marker'] and event['rule_id'] in {'5710','5712'}
         when=datetime.fromisoformat(event['event_time']).astimezone(timezone.utc).isoformat().replace('+00:00','Z')
         typed.append(dict(source_id=uid('manager'),event_id=event['event_id'],evidence_id=eid,evidence_digest=digest,
             event_time=when,kind='auth_failure',actor_id=uid('actor/'+actor[1]),asset_id=uid('agent/'+event['agent_id']),
-            source_asset_id=uid('source/'+event['data']['srcip']),process_sha256=None,object_id=None,authorization='unknown'))
+            source_asset_id=uid('source/'+actor[2]),process_sha256=None,object_id=None,authorization='unknown'))
     when=max(row['event_time'] for row in typed)
     security=dict(version='security-events-v1',case_id=uid('case'),as_of=when,
         missing_sources=['process','network','file','kernel','boot'],events=typed)
