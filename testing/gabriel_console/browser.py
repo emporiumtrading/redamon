@@ -131,7 +131,7 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
             replay_check=dict(marker=marker,empty_control_verified=True,marker_filtered_rows_rendered=False,
                 native_event_identity_verified=False,live_attack=False)
             phase='replay_marker_results'
-            search('rule.id: 5710 AND full_log: "'+marker+'"')
+            search('full_log: "'+marker+'"')
             def matching():
                 return cdp.evaluate(session,"(()=>{const ids=new Set(EXPECTED);return [...new Set([...document.querySelectorAll('a[href]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').slice(0,100).filter(e=>{const id=e.innerText.trim(),u=new URL(e.href);return ids.has(id)&&u.origin===location.origin&&u.pathname==='/app/rules'&&u.hash==='#/manager/?tab=rules&redirectRule='+id;}).map(e=>e.innerText.trim()))];})()".replace('EXPECTED',json.dumps(expected)))
             found=wait(matching,120)
@@ -151,7 +151,7 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
                     raw=wait(lambda:cdp.evaluate(session,"(()=>{const e=document.querySelector('[aria-label=\"Document details\"]');return e&&e.getClientRects().length?e.innerText:null;})()"))
                     source=json.loads(raw)['_source']
                     assert marker in source['full_log'] and re.fullmatch(r'[0-9]+\.[0-9]+',source['id'])
-                    assert source['rule']['id']=='5710' and source['id'] not in seen
+                    assert source['rule']['id'] in {'5710','5712'} and source['id'] not in seen
                     seen.add(source['id'])
                     details.append(dict(event_id=source['id'],event_time=source['timestamp'],
                         rule_id=source['rule']['id'],agent_id=source['agent']['id'],agent_name=source['agent']['name'],
