@@ -239,7 +239,7 @@ def replay(root):
             try: event=json.loads(line)
             except ValueError: continue
             if marker not in event.get('full_log','') or event.get('location')!='/var/log/gabriel-lab/auth.log': continue
-            if not event.get('id') or event.get('rule',{}).get('id')!='5710': continue
+            if not event.get('id') or event.get('rule',{}).get('id') not in {'5710','5712'}: continue
             alerts[event['id']]={'id':event['id'],'timestamp':event['timestamp'],'rule_id':event['rule']['id'],
                 'rule_level':event['rule'].get('level'),'decoder':event.get('decoder',{}).get('name')}
         if len(alerts)==12: break
@@ -272,7 +272,7 @@ def reconcile(root,browser_path):
             or len({item['event_id'] for item in visible})!=12
             or {item['event_id'] for item in visible}!={item['id'] for item in replay['observed_alerts']}
             or any(item['location']!='/var/log/gabriel-lab/auth.log' or marker not in item['full_log']
-                   or item['rule_id']!='5710' for item in visible)):
+                   or item['rule_id'] not in {'5710','5712'} for item in visible)):
         raise ValueError('browser_replay_binding_failed')
     raw=compose(root,'exec','-T','wazuh.manager','sh','-c','tail -c 4194304 /var/ossec/logs/alerts/alerts.json')
     matches=[]
