@@ -239,12 +239,12 @@ def replay(root):
             try: event=json.loads(line)
             except ValueError: continue
             if marker not in event.get('full_log','') or event.get('location')!='/var/log/gabriel-lab/auth.log': continue
-            if not event.get('id') or not event.get('rule',{}).get('id'): continue
+            if not event.get('id') or event.get('rule',{}).get('id')!='5710': continue
             alerts[event['id']]={'id':event['id'],'timestamp':event['timestamp'],'rule_id':event['rule']['id'],
                 'rule_level':event['rule'].get('level'),'decoder':event.get('decoder',{}).get('name')}
-        if alerts: break
+        if len(alerts)==12: break
         time.sleep(2)
-    if not alerts: raise ValueError('generated_replay_not_collected')
+    if len(alerts)!=12: raise ValueError('generated_replay_incomplete')
     report=dict(schema_version=1,kind='synthetic_syslog_replay',live_attack=False,endpoint_sensor_verified=False,
         browser_capture_verified=False,indexer_forwarding_verified=False,tool='wazuh',marker=marker,emitted_records=12,
         observed_alerts=list(alerts.values()),started_at=started,first_observed_at=datetime.now(timezone.utc).isoformat(),
@@ -263,31 +263,39 @@ def reconcile(root,browser_path):
     if len(raw_browser)>1048576: raise ValueError('browser_report_limit')
     browser=json.loads(raw_browser)
     replay=json.loads((root/'replay.json').read_text())
-    query=browser['replay_event_query'];visible=query['native_detail']
+    query=browser['replay_event_query'];visible=query['native_details']
     marker=replay['marker']
     if (browser['status']!='PASS' or browser['tool']!='wazuh' or query['marker']!=marker
             or re.fullmatch('gabriel-lab-[a-f0-9]{12}',marker) is None
             or not query['empty_control_verified'] or not query['marker_filtered_rows_rendered']
-            or visible['location']!='/var/log/gabriel-lab/auth.log' or marker not in visible['full_log']):
+            or type(visible) is not list or len(visible)!=replay['emitted_records'] or len(visible)!=12
+            or len({item['event_id'] for item in visible})!=12
+            or {item['event_id'] for item in visible}!={item['id'] for item in replay['observed_alerts']}
+            or any(item['location']!='/var/log/gabriel-lab/auth.log' or marker not in item['full_log']
+                   or item['rule_id']!='5710' for item in visible)):
         raise ValueError('browser_replay_binding_failed')
     raw=compose(root,'exec','-T','wazuh.manager','sh','-c','tail -c 4194304 /var/ossec/logs/alerts/alerts.json')
     matches=[]
     for line in raw.splitlines():
         try: event=json.loads(line)
         except ValueError: continue
-        if event.get('id')!=visible['event_id']: continue
+        if event.get('id') not in {item['event_id'] for item in visible}: continue
         projection=dict(event_id=event['id'],event_time=event['timestamp'],rule_id=event['rule']['id'],
             agent_id=event['agent']['id'],agent_name=event['agent']['name'],full_log=event['full_log'][:512],
             location=event['location'],data={key:event.get('data',{}).get(key) for key in ('srcip','srcport','dstuser')})
         matches.append(projection)
-    if len(matches)!=1 or matches[0]!=visible: raise ValueError('native_event_reconciliation_failed')
+    order=lambda rows:sorted(rows,key=lambda item:item['event_id'])
+    if len(matches)!=12 or order(matches)!=order(visible): raise ValueError('native_event_reconciliation_failed')
+    ports={item['data']['srcport'] for item in visible}
+    if ports!={str(40000+i) for i in range(12)}: raise ValueError('generated_record_coverage_failed')
     report=dict(schema_version=1,status='PASS',tool='wazuh',generated_lab=True,native_event_identity_verified=True,
         source_authenticity_verified=False,live_attack=False,gabriel_adapter_admitted=False,
-        browser_sha256=sha256(raw_browser).hexdigest(),event_id=visible['event_id'],
-        manager_projection_sha256=sha256(json.dumps(matches[0],sort_keys=True,separators=(',',':')).encode()).hexdigest(),
-        matched_fields=sorted(visible),method='exact generated manager alert projection equals browser-visible document')
+        browser_sha256=sha256(raw_browser).hexdigest(),event_ids=sorted(item['event_id'] for item in visible),
+        observed_event_count=12,emitted_record_coverage_verified=True,
+        manager_projection_sha256=sha256(json.dumps(order(matches),sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+        matched_fields=sorted(visible[0]),method='exact generated manager alert projections equal browser-visible documents')
     write(browser_path.parent/'native-reconciliation.json',report)
-    return {'browser_event_matches_generated_manager':True,'matched_field_count':len(visible)}
+    return {'browser_events_match_generated_manager':True,'matched_event_count':len(visible)}
 
 
 def analyst(root):
