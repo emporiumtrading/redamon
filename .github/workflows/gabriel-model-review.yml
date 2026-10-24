@@ -1,0 +1,34 @@
+name: Gabriel model review worksheet
+on:
+  pull_request:
+    paths: ['tooling/scripts/gabriel_model_review_page.py', 'testing/gabriel_model_lab/review_page_check.py', 'testing/gabriel_model_lab/review_packets/**', '.github/workflows/gabriel-model-review.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  worksheet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: docker build --build-arg "LAB_UID=$(id -u)" -f testing/gabriel_console/Dockerfile -t gabriel-review-browser .
+      - name: Verify worksheet integrity and incomplete review behavior in an isolated browser
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-model-review"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 --tmpfs /tmp:rw,nosuid,nodev,size=512m,mode=1777 \
+            --tmpfs "/home/browserlab:rw,nosuid,nodev,size=32m,uid=$(id -u),gid=$(id -g),mode=700" --entrypoint python \
+            -v "$GITHUB_WORKSPACE/tooling/scripts/gabriel_model_review_page.py:/lab/review_generator.py:ro" \
+            -v "$GITHUB_WORKSPACE/testing/gabriel_model_lab/review_page_check.py:/lab/review_check.py:ro" \
+            -v "$GITHUB_WORKSPACE/testing/gabriel_model_lab/review_packets/protocol-v2-development-pending.json:/packet.json:ro" \
+            -v "$RUNNER_TEMP/gabriel-model-review:/output" gabriel-review-browser /lab/review_check.py
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-model-review/source-sha.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-model-review-worksheet
+          path: ${{ runner.temp }}/gabriel-model-review
+          if-no-files-found: error
+          retention-days: 14
