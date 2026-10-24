@@ -27,12 +27,13 @@ def main():
           return {specialists:d.length,tableRows:document.querySelectorAll('tr').length,
             persistenceVisible:document.body.innerText.includes('Persistence check: passed'),
             reconciliationVisible:document.body.innerText.includes('exactly matched the generated Wazuh manager'),
+            repeatedFailureVisible:document.body.innerText.includes('Twelve distinct native events'),
             limitsVisible:document.body.innerText.includes('AI models are disabled'),
             disclosureOpened:d.length>0&&d[0].open&&d[0].querySelector('li').getClientRects().length>0,
             horizontalOverflow:document.documentElement.scrollWidth>innerWidth};
         })()""")
         assert result['specialists']==12 and result['tableRows']==13
-        assert all(result[k] for k in ('persistenceVisible','reconciliationVisible','limitsVisible','disclosureOpened'))
+        assert all(result[k] for k in ('persistenceVisible','reconciliationVisible','repeatedFailureVisible','limitsVisible','disclosureOpened'))
         assert not result['horizontalOverflow']
         screenshot=base64.b64decode(cdp.send('Page.captureScreenshot',{'format':'png'},session)['data'])
         (root/'presentation-preview.png').write_bytes(screenshot)
