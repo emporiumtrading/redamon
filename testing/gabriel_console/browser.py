@@ -131,7 +131,7 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
             replay_check=dict(marker=marker,empty_control_verified=True,marker_filtered_rows_rendered=False,
                 native_event_identity_verified=False,live_attack=False)
             phase='replay_marker_results'
-            search('full_log: "'+marker+'"')
+            search('rule.id: 5710 AND full_log: "'+marker+'"')
             def matching():
                 return cdp.evaluate(session,"(()=>{const ids=new Set(EXPECTED);return [...new Set([...document.querySelectorAll('a[href]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').slice(0,100).filter(e=>{const id=e.innerText.trim(),u=new URL(e.href);return ids.has(id)&&u.origin===location.origin&&u.pathname==='/app/rules'&&u.hash==='#/manager/?tab=rules&redirectRule='+id;}).map(e=>e.innerText.trim()))];})()".replace('EXPECTED',json.dumps(expected)))
             found=wait(matching,120)
@@ -139,16 +139,36 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
                 marker_filtered_rows_rendered=True,native_event_identity_verified=False,live_attack=False)
             pages.append(snapshot(cdp,session))
             phase='native_document_details'
-            assert cdp.evaluate(session,"(()=>{const e=[...document.querySelectorAll('button[aria-label=\"Inspect document details\"]')].find(e=>e.getClientRects().length);if(!e)return false;e.click();return true;})()")
-            wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('[role=tab],button')].some(e=>e.getClientRects().length&&e.innerText.trim()==='JSON')"))
-            cdp.evaluate(session,"[...document.querySelectorAll('[role=tab],button')].find(e=>e.getClientRects().length&&e.innerText.trim()==='JSON').click();true")
-            raw=wait(lambda:cdp.evaluate(session,"(()=>{const e=document.querySelector('[aria-label=\"Document details\"]');return e&&e.getClientRects().length?e.innerText:null;})()"))
-            detail=json.loads(raw);source=detail['_source']
-            assert marker in source['full_log'] and re.fullmatch(r'[0-9]+\.[0-9]+',source['id'])
-            replay_check['native_detail']=dict(event_id=source['id'],event_time=source['timestamp'],
-                rule_id=source['rule']['id'],agent_id=source['agent']['id'],agent_name=source['agent']['name'],
-                full_log=source['full_log'][:512],location=source['location'],data={k:source.get('data',{}).get(k) for k in ('srcip','srcport','dstuser')})
+            details=[];seen=set()
+            for page_number in range(4):
+                count=cdp.evaluate(session,"[...document.querySelectorAll('button[aria-label=\"Inspect document details\"]')].filter(e=>e.getClientRects().length).length")
+                assert 1<=count<=100
+                for index in range(count):
+                    expression="(()=>{const es=[...document.querySelectorAll('button[aria-label=\"Inspect document details\"]')].filter(e=>e.getClientRects().length);if(!es[INDEX])return false;es[INDEX].click();return true;})()".replace('INDEX',str(index))
+                    assert cdp.evaluate(session,expression)
+                    wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('[role=tab],button')].some(e=>e.getClientRects().length&&e.innerText.trim()==='JSON')"))
+                    cdp.evaluate(session,"[...document.querySelectorAll('[role=tab],button')].find(e=>e.getClientRects().length&&e.innerText.trim()==='JSON').click();true")
+                    raw=wait(lambda:cdp.evaluate(session,"(()=>{const e=document.querySelector('[aria-label=\"Document details\"]');return e&&e.getClientRects().length?e.innerText:null;})()"))
+                    source=json.loads(raw)['_source']
+                    assert marker in source['full_log'] and re.fullmatch(r'[0-9]+\.[0-9]+',source['id'])
+                    assert source['rule']['id']=='5710' and source['id'] not in seen
+                    seen.add(source['id'])
+                    details.append(dict(event_id=source['id'],event_time=source['timestamp'],
+                        rule_id=source['rule']['id'],agent_id=source['agent']['id'],agent_name=source['agent']['name'],
+                        full_log=source['full_log'][:512],location=source['location'],
+                        data={k:source.get('data',{}).get(k) for k in ('srcip','srcport','dstuser')}))
+                    cdp.send('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27},session)
+                    cdp.send('Input.dispatchKeyEvent',{'type':'keyUp','key':'Escape','code':'Escape','windowsVirtualKeyCode':27},session)
+                    wait(lambda:cdp.evaluate(session,"!document.querySelector('[aria-label=\"Document details\"]')"))
+                if len(details)==replay['emitted_records']: break
+                assert len(details)<replay['emitted_records']
+                before=cdp.evaluate(session,"document.querySelector('table,[role=grid]').innerText")
+                assert cdp.evaluate(session,"(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.getClientRects().length&&e.getAttribute('aria-label')==='Next page'&&!e.disabled);if(!b)return false;b.click();return true;})()")
+                wait(lambda:cdp.evaluate(session,"document.querySelector('table,[role=grid]').innerText")!=before)
+            assert len(details)==12
+            replay_check['native_details']=details
             replay_check['native_id_visible']=True
+            replay_check['observed_event_count']=len(details)
         result=dict(status='PASS',tool=tool,operator_login_only=True,gabriel_adapter_admitted=False,attack_detection_verified=False,
             browser_version=subprocess.check_output(['/usr/bin/chromium','--version']).decode().strip(),login_structure=login,pages=pages,
             http_response_status_counts=cdp.network,
