@@ -27,11 +27,13 @@ def main():
         case['id']=str(case['id'])
         raw=(root/'browser.json').read_bytes()
         original=service.acquire(token,case['id'],uuid4(),raw.decode(),'Generated Wazuh browser report',approved=True)
+        original['id']=str(original['id'])
         document=json.loads((root/'specialist-demo.json').read_text())['facts']
         document['case_id']=case['id']
         for fact in document['facts']:
             fact['evidence_id']=original['id'];fact['evidence_digest']=sha256(raw).hexdigest()
         facts=service.acquire(token,case['id'],uuid4(),canonical(document).decode(),'Generated replay typed facts',approved=True,parent_id=original['id'])
+        facts['id']=str(facts['id'])
         requests={role:str(uuid4()) for role in ROLES}
         results={role:run(service,token,case['id'],requests[role],role,facts['id']) for role in ROLES}
         state=dict(org=str(org),password=password,case_id=case['id'],source_id=original['id'],facts_id=facts['id'],
