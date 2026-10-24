@@ -50,6 +50,14 @@ jobs:
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/$LAB_BROWSER_CREDENTIALS,dst=/run/lab/credentials.json,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/tls/server.pem,dst=/run/lab/server.pem,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-output,dst=/output" "${LAB_REPLAY_MOUNT[@]}" gabriel-console-browser
+      - name: Review observed event with twelve local specialist kernels
+        if: matrix.tool == 'wazuh'
+        run: |
+          docker build --target runtime -f gabriel/identity/Dockerfile -t gabriel-specialist-demo .
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 512m --cpus 1 \
+            --user "$(id -u):$(id -g)" --entrypoint python \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/testing/gabriel_console/presentation_bridge.py,dst=/bridge.py,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-output,dst=/output" gabriel-specialist-demo /bridge.py
       - name: Retain only sanitized source and image provenance
         if: always()
         run: |
