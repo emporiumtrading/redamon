@@ -25,9 +25,9 @@ PRIVATE=[]
 RESOLVED={}
 
 
-def run(command,*,cwd=None,env=None,data=None,timeout=900):
+def run(command,*,cwd=None,env=None,data=None,timeout=900,accepted=(0,)):
     result=subprocess.run(command,cwd=cwd,env=env,input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
-    if result.returncode:
+    if result.returncode not in accepted:
         message=result.stderr.decode(errors='replace')[-3000:]
         for value in sorted(PRIVATE,key=len,reverse=True): message=message.replace(value,'[REMOVED]')
         raise RuntimeError('command_failed: '+message)
@@ -53,11 +53,11 @@ def image(tag):
     return digests[0],metadata['Id']
 
 
-def compose(root,*args,data=None):
+def compose(root,*args,data=None,accepted=(0,)):
     info=json.loads((root/'lab.json').read_text())
     if re.fullmatch(r'gabriel-console-[a-f0-9]{16}',info['project']) is None: raise ValueError('invalid_project')
     if sha256((root/'compose.json').read_bytes()).hexdigest()!=info['compose_sha256']: raise ValueError('configuration_changed')
-    return run(['docker','compose','--project-name',info['project'],'--file',str(root/'compose.json'),*args],cwd=root,data=data)
+    return run(['docker','compose','--project-name',info['project'],'--file',str(root/'compose.json'),*args],cwd=root,data=data,accepted=accepted)
 
 
 def certificates(root):
@@ -210,8 +210,11 @@ def replay(root):
     if (root/'replay.json').exists(): raise ValueError('replay_already_recorded')
     limit=time.monotonic()+120
     while time.monotonic()<limit:
-        status=compose(root,'exec','-T','wazuh.manager','/var/ossec/bin/wazuh-control','status').decode()
-        if all(name+' is running' in status for name in ('wazuh-logcollector','wazuh-analysisd')): break
+        # Upstream status exits 1 when an optional daemon (e.g. clustering) is stopped.
+        status=json.loads(compose(root,'exec','-T','wazuh.manager','/var/ossec/bin/wazuh-control','-j','status',accepted=(0,1)))
+        if status.get('error')!=0 or type(status.get('data')) is not list: raise ValueError('invalid_daemon_status')
+        states={item['daemon']:item['status'] for item in status['data']}
+        if all(states.get(name)=='running' for name in ('wazuh-logcollector','wazuh-analysisd')): break
         time.sleep(2)
     else: raise ValueError('wazuh_collection_not_ready')
     marker='gabriel-lab-'+uuid4().hex[:12]
@@ -245,6 +248,8 @@ def replay(root):
     report=dict(schema_version=1,kind='synthetic_syslog_replay',live_attack=False,endpoint_sensor_verified=False,
         browser_capture_verified=False,indexer_forwarding_verified=False,tool='wazuh',marker=marker,emitted_records=12,
         observed_alerts=list(alerts.values()),started_at=started,first_observed_at=datetime.now(timezone.utc).isoformat(),
+        required_daemons={name:states[name] for name in ('wazuh-logcollector','wazuh-analysisd')},
+        inactive_optional_daemons=sorted(name for name,state in states.items() if state!='running'),
         source_sha256=sha256(path.read_bytes()).hexdigest())
     write(root/'replay.json',report)
     return {'synthetic_replay_collected':True,'observed_alert_count':len(alerts)}
