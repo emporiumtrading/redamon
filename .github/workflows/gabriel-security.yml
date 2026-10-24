@@ -40,9 +40,11 @@ jobs:
       - name: Scan the production SBOM and block high or critical findings
         run: |
           scanner=$(sed -n '2p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-grype-cache"
           docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
             --pids-limit 128 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
-            --tmpfs /tmp:rw,nosuid,nodev,size=1g,mode=1777 -e XDG_CACHE_HOME=/tmp -e GRYPE_CHECK_FOR_APP_UPDATE=false \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 -e XDG_CACHE_HOME=/cache -e GRYPE_CHECK_FOR_APP_UPDATE=false \
+            -v "$RUNNER_TEMP/gabriel-grype-cache:/cache" \
             -v "$RUNNER_TEMP/gabriel-security/sbom.json:/image/sbom.json:ro" \
             "$scanner" sbom:/image/sbom.json -o json --fail-on high > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
       - name: Scan defensive source for secrets with fully redacted output
