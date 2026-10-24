@@ -26,6 +26,21 @@ The dedicated workflow runs each tool on its own Linux x86 runner. It verifies t
 
 Artifacts contain only the source revision, sanitized lab/image provenance and browser title/headings/table headers/link routes/input metadata. Passwords, API tokens, input values, private configurations, certificates' private keys and raw service logs are excluded. IRIS's upstream startup may log its generated administrator password, so never publish the container logs or treat them as sanitized evidence. Form/hidden values are not captured in the discovery report. A passing console/login check does not establish attack detection, least-privilege analyst operation or an accepted adapter.
 
+## Collection and viewer checks
+
+After startup, the Wazuh-only command below appends twelve generated SSH failure records to a dedicated lab input file. Wazuh's real log collector and analysis engine must emit a matching alert with the fresh replay marker and exact source path. The report retains native IDs, rule metadata and timestamps. It records the number of emitted records separately from the number observed; one matching alert does not prove complete collection or correlation of all twelve.
+
+```bash
+python3 tooling/scripts/gabriel_console_lab.py replay wazuh /absolute/private/new-wazuh-lab
+python3 tooling/scripts/gabriel_console_lab.py analyst iris /absolute/private/new-iris-lab
+```
+
+The IRIS command creates a separate generated viewer, a group with only standard-user permission, and read-only access to the initial generated demo case. Using the viewer's private API key, the lab requires a successful case read, HTTP 403 for a case-summary write and administrator user listing, and an unchanged summary after the denied write. The browser receives only analyst-credentials.json (username/password/port/case ID), never the API key. It checks the visible viewer identity and renders the assigned case. These limited permission checks do not establish every IRIS permission or browser operation is read-only.
+
+Both commands refuse to overwrite their completed report/credential files. A partial failure retains generated state for inspection; cleanup removes the entire dedicated lab project. The Wazuh replay is synthetic log ingestion, not an executed brute-force attack, endpoint-sensor test, indexer-forwarding check or Gabriel browser capture. No real authentication attempt occurs. Replay timestamps must not be reported as live attack detection latency.
+
+The Wazuh browser check now waits for application categories to appear after login. A login redirect or empty application shell cannot pass. Sanitized browser structure and aggregate HTTP response status counts are retained on failure; raw response bodies, headers and service logs remain excluded. CI publishes generated replay/viewer access reports alongside source and image provenance. Production adapters and model routes remain disabled until their separate acceptance gates pass.
+
 ## Destructive lab cleanup
 
 ```bash

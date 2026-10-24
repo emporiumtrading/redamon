@@ -250,10 +250,50 @@ def replay(root):
     return {'synthetic_replay_collected':True,'observed_alert_count':len(alerts)}
 
 
+def analyst(root):
+    """Provision a case-scoped viewer only in the generated IRIS lab."""
+    info=json.loads((root/'lab.json').read_text())
+    if info['tool']!='iris': raise ValueError('iris_analyst_only')
+    if (root/'analyst-credentials.json').exists(): raise ValueError('analyst_already_prepared')
+    if sha256((root/'compose.json').read_bytes()).hexdigest()!=info['compose_sha256']: raise ValueError('configuration_changed')
+    config=json.loads((root/'compose.json').read_text())
+    owner_key=config['services']['app']['environment']['IRIS_ADM_API_KEY']
+    context=ssl.create_default_context(cafile=str(root/'tls/server.pem'))
+    def request(method,path,key,payload=None,expected=200):
+        connection=http.client.HTTPSConnection('localhost',info['port'],context=context,timeout=30)
+        try:
+            connection.request(method,path,body=json.dumps(payload) if payload is not None else None,
+                headers={'X-IRIS-AUTH':key,'Content-Type':'application/json'})
+            response=connection.getresponse();value=json.loads(response.read(1048576))
+            if response.status!=expected or value.get('status')!=('success' if expected==200 else 'error'):
+                raise ValueError('iris_analyst_permission_check_failed')
+            return value.get('data')
+        finally: connection.close()
+    username='gabriel-viewer-'+uuid4().hex[:10];password=secret()
+    user=request('POST','/manage/users/add',owner_key,dict(user_name=username,user_login=username,
+        user_email=username+'@example.invalid',user_password=password,user_isadmin=False,user_is_service_account=False,active=True))
+    user_id=user['user_id'];viewer_key=user['user_api_key'];PRIVATE.append(viewer_key)
+    if type(user_id) is not int: raise ValueError('invalid_generated_user_id')
+    group=request('POST','/manage/groups/add',owner_key,dict(group_name=username,group_description='Generated case-scoped lab viewer',
+        group_permissions=[1],group_auto_follow=False,group_auto_follow_access_level=1))
+    if group['group_permissions']!=1 or type(group['group_id']) is not int: raise ValueError('unexpected_viewer_permissions')
+    request('POST',f'/manage/users/{user_id}/groups/update',owner_key,{'groups_membership':[group['group_id']]})
+    request('POST',f'/manage/users/{user_id}/cases-access/update',owner_key,{'cases_list':[1],'access_level':2})
+    summary=request('GET','/case/summary/fetch?cid=1',viewer_key)
+    request('POST','/case/summary/update?cid=1',viewer_key,{'case_description':summary['case_description']},expected=403)
+    request('GET','/manage/users/list',viewer_key,expected=403)
+    if request('GET','/case/summary/fetch?cid=1',owner_key)!=summary: raise ValueError('readonly_case_changed')
+    write(root/'analyst-credentials.json',dict(tool='iris',username=username,password=password,port=info['port'],case_id=1))
+    write(root/'analyst-access.json',dict(schema_version=1,tool='iris',username=username,user_id=user_id,case_id=1,
+        group_permissions=1,case_access_level=2,case_read_http=200,case_write_http=403,admin_read_http=403,
+        case_summary_unchanged=True,browser_session_verified=False,gabriel_adapter_admitted=False))
+    return {'generated_case_viewer_prepared':True,'case_write_denied':True,'admin_read_denied':True}
+
+
 def main():
     global PHASE
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','up','check','replay','down'))
+    parser.add_argument('command',choices=('prepare','up','check','replay','analyst','down'))
     parser.add_argument('tool',choices=tuple(PINS))
     parser.add_argument('directory',type=Path)
     args=parser.parse_args();os.umask(0o077)
@@ -269,6 +309,7 @@ def main():
             if args.command=='up': PHASE='startup';compose(root,'up','-d');result=ready(root)
             elif args.command=='check': result=ready(root)
             elif args.command=='replay': PHASE='generated_replay';result=replay(root)
+            elif args.command=='analyst': PHASE='generated_analyst';result=analyst(root)
             else: compose(root,'down','--volumes','--remove-orphans');result={'generated_lab_removed':True}
         print(json.dumps({'status':'ok','result':result,'production_admitted':False}))
         return 0

@@ -85,10 +85,17 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
         else: time.sleep(3)
         pages=[snapshot(cdp,session)]
         if tool=='iris':
+            assert any(link['text'].split(' ',1)[0]==creds['username'] for link in pages[0]['links'])
             cdp.send('Page.navigate',{'url':target+'/manage/cases'},session)
             wait(lambda:cdp.evaluate(session,"location.pathname==='/manage/cases'&&document.readyState==='complete'"))
             time.sleep(2);pages.append(snapshot(cdp,session))
             assert any('Case' in h or 'Name' in h for h in pages[-1]['table_headers'])
+            if 'case_id' in creds:
+                phase='readonly_case_page'
+                cdp.send('Page.navigate',{'url':target+'/case?cid='+str(creds['case_id'])},session)
+                wait(lambda:cdp.evaluate(session,"location.pathname==='/case'&&document.readyState==='complete'"))
+                time.sleep(2);pages.append(snapshot(cdp,session))
+                assert '#'+str(creds['case_id'])+' -' in pages[-1]['title']
         else:
             assert any(link['text'] for link in pages[0]['links']) or any(pages[0]['headings'])
         result=dict(status='PASS',tool=tool,operator_login_only=True,gabriel_adapter_admitted=False,attack_detection_verified=False,
