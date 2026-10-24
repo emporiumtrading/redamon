@@ -24,6 +24,7 @@ def main():
         org,_=provision_organization(read_secret('/run/secrets/owner_dsn'),'Generated presentation lab','demo-owner',password)
         token=IdentityService(app).login(org,'demo-owner',password).token
         case=service.create_case(token,'Generated Wazuh browser replay demonstration')
+        case['id']=str(case['id'])
         raw=(root/'browser.json').read_bytes()
         original=service.acquire(token,case['id'],uuid4(),raw.decode(),'Generated Wazuh browser report',approved=True)
         document=json.loads((root/'specialist-demo.json').read_text())['facts']
@@ -58,7 +59,7 @@ def main():
             gabriel_scoped_browser_capture=False)
         (root/'persisted-demo.json').write_text(json.dumps(result,sort_keys=True)+'\n')
         page=root/'presentation.html'
-        page.write_text(page.read_text().replace('</table>','</table><h2>Persistence check: passed</h2><p>Generated case, encrypted evidence and all twelve specialist receipts survived a physical PostgreSQL restart. Repeating the same requests returned the same receipts without duplicate runs.</p>'))
+        page.write_text(page.read_text().replace('</table>','</table><h2>Persistence check: passed</h2><p>Generated case, encrypted evidence and all twelve specialist receipts survived a physical PostgreSQL restart. Repeating the same requests returned the same receipts without duplicate runs.</p>').replace('Database persistence and Gabriel’s scoped browser integration remain separate acceptance gates.','The generated case persistence check passed. Gabriel’s scoped browser integration remains a separate acceptance gate.'))
         print('PASS: decrypted evidence and all twelve replayable receipts survived physical PostgreSQL restart')
 
 
