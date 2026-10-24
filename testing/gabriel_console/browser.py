@@ -1,9 +1,11 @@
 """Operator-only generated-account console discovery; never gives Gabriel login authority."""
 import http.client
 import json
+import re
 from pathlib import Path
 import subprocess
 import time
+from urllib.parse import urlsplit
 
 import websocket
 
@@ -24,7 +26,7 @@ class CDP:
                 c=http.client.HTTPConnection('127.0.0.1',19222,timeout=1);c.request('GET','/json/version')
                 value=json.loads(c.getresponse().read());c.close();return value['webSocketDebuggerUrl']
             except (OSError,ValueError): return None
-        self.ws=websocket.create_connection(wait(url),suppress_origin=True,timeout=20);self.serial=0;self.network={}
+        self.ws=websocket.create_connection(wait(url),suppress_origin=True,timeout=20);self.serial=0;self.network={};self.errors={}
     def send(self,method,params=None,session=None):
         self.serial+=1;ident=self.serial
         request={'id':ident,'method':method,'params':params or {}}
@@ -35,6 +37,10 @@ class CDP:
             if value.get('method')=='Network.responseReceived':
                 response=value['params']['response'];key=str(response['status'])
                 self.network[key]=self.network.get(key,0)+1
+                if response['status']>=400:
+                    path=urlsplit(response['url']).path
+                    route=path if re.fullmatch(r'/(?:api|internal|auth)/[a-z_/-]{1,100}',path) else '[other-route]'
+                    error=key+' '+route;self.errors[error]=self.errors.get(error,0)+1
             if value.get('id')==ident:
                 if 'error' in value: raise AssertionError('console_cdp_command_failed')
                 return value.get('result',{})
@@ -49,7 +55,7 @@ def snapshot(cdp,session):
 const visible=e=>Boolean(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
 const clean=e=>e.innerText.trim().replace(/\\s+/g,' ').slice(0,160);
 return {title:document.title,path:location.pathname,headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
-table_headers:[...document.querySelectorAll('th')].filter(visible).map(clean).slice(0,80),
+table_headers:[...document.querySelectorAll('th,[role=columnheader]')].filter(visible).map(clean).slice(0,80),
 links:[...document.querySelectorAll('a[href]')].filter(visible).map(e=>{let u=new URL(e.href);return u.origin===location.origin?{text:clean(e),path:u.pathname,fragment:u.hash.slice(0,180)}:null}).filter(Boolean).slice(0,100),
 buttons:[...document.querySelectorAll('button')].filter(visible).map(e=>({text:clean(e),label:e.getAttribute('aria-label')||'',test_subject:e.getAttribute('data-test-subj')||''})).slice(0,80),
 inputs:[...document.querySelectorAll('input,textarea,select')].filter(visible).map(e=>({tag:e.tagName,type:e.type,name:e.name,id:e.id})).slice(0,50)};})()""")
@@ -63,7 +69,7 @@ def main():
     process=subprocess.Popen(['/usr/bin/chromium','--headless=new','--no-sandbox','--no-first-run','--disable-background-networking',
         '--disable-dev-shm-usage','--remote-debugging-port=19222','--user-data-dir=/tmp/console-profile',
         '--proxy-server=http://127.0.0.1:9','--proxy-bypass-list=localhost','about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    cdp=None;session=None;phase='browser_startup';login=None;pages=[]
+    cdp=None;session=None;phase='browser_startup';login=None;pages=[];replay_check=None
     try:
         cdp=CDP();tab=cdp.send('Target.createTarget',{'url':target+('/login' if tool=='iris' else '/app/login')})['targetId']
         session=cdp.send('Target.attachToTarget',{'targetId':tab,'flatten':True})['sessionId']
@@ -98,9 +104,45 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
                 assert '#'+str(creds['case_id'])+' -' in pages[-1]['title']
         else:
             assert any(link['text'] for link in pages[0]['links']) or any(pages[0]['headings'])
+            phase='threat_hunting_navigation'
+            assert cdp.evaluate(session,"(()=>{const a=[...document.querySelectorAll('a[href]')].find(e=>e.getClientRects().length&&new URL(e.href).pathname==='/app/threat-hunting'&&e.innerText.trim()==='Threat Hunting');if(!a)return false;a.click();return true;})()")
+            wait(lambda:cdp.evaluate(session,"location.pathname==='/app/threat-hunting'&&document.readyState==='complete'"),90)
+            time.sleep(5);pages.append(snapshot(cdp,session))
+            phase='threat_hunting_events'
+            wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('button,a,[role=tab]')].some(e=>e.getClientRects().length&&e.innerText.trim()==='Events')"),90)
+            assert cdp.evaluate(session,"(()=>{const e=[...document.querySelectorAll('button,a,[role=tab]')].find(e=>e.getClientRects().length&&e.innerText.trim()==='Events');if(!e)return false;e.click();return true;})()")
+            wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('th,[role=columnheader]')].some(e=>e.getClientRects().length&&e.innerText.trim())"),90)
+            pages.append(snapshot(cdp,session))
+            phase='replay_event_query'
+            replay=json.loads(Path('/run/lab/replay.json').read_text());marker=replay['marker']
+            assert replay['live_attack'] is False and re.fullmatch(r'gabriel-lab-[a-f0-9]{12}',marker)
+            expected=sorted({event['rule_id'] for event in replay['observed_alerts']})
+            assert expected
+            def search(query):
+                expression="""(()=>{const es=[...document.querySelectorAll('textarea')].filter(e=>e.getClientRects().length);if(es.length!==1)return false;
+const e=es[0];Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,QUERY);
+e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true;})()""".replace('QUERY',json.dumps(query))
+                assert cdp.evaluate(session,expression)
+                wait(lambda:cdp.evaluate(session,"Boolean(document.querySelector('button[data-test-subj=querySubmitButton]:not([disabled])'))"))
+                cdp.evaluate(session,"document.querySelector('button[data-test-subj=querySubmitButton]').click();true")
+            phase='replay_empty_control'
+            search('full_log: "'+marker+'-absent"')
+            wait(lambda:cdp.evaluate(session,"(()=>{const e=document.querySelector('[data-test-subj=discoverNoResults]');return Boolean(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');})()"),90)
+            replay_check=dict(marker=marker,empty_control_verified=True,marker_filtered_rows_rendered=False,
+                native_event_identity_verified=False,live_attack=False)
+            phase='replay_marker_results'
+            search('full_log: "'+marker+'"')
+            def matching():
+                return cdp.evaluate(session,"(()=>{const ids=new Set(EXPECTED);return [...new Set([...document.querySelectorAll('a[href]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').slice(0,100).filter(e=>{const id=e.innerText.trim(),u=new URL(e.href);return ids.has(id)&&u.origin===location.origin&&u.pathname==='/app/rules'&&u.hash==='#/manager/?tab=rules&redirectRule='+id;}).map(e=>e.innerText.trim()))];})()".replace('EXPECTED',json.dumps(expected)))
+            found=wait(matching,120)
+            replay_check=dict(marker=marker,empty_control_verified=True,matching_rule_ids=found,
+                marker_filtered_rows_rendered=True,native_event_identity_verified=False,live_attack=False)
+            pages.append(snapshot(cdp,session))
         result=dict(status='PASS',tool=tool,operator_login_only=True,gabriel_adapter_admitted=False,attack_detection_verified=False,
             browser_version=subprocess.check_output(['/usr/bin/chromium','--version']).decode().strip(),login_structure=login,pages=pages,
             http_response_status_counts=cdp.network,
+            http_error_routes=cdp.errors,
+            replay_event_query=replay_check,
             environment='generated isolated lab; headless Chromium sandbox disabled; external browser traffic blocked by dead proxy')
         encoded=json.dumps(result,sort_keys=True)
         for value in (creds['password'],):
@@ -109,7 +151,8 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
         print('PASS: '+tool+' operator browser login and rendered page structure; adapter and detection acceptance remain open')
     except Exception:
         diagnostic=dict(status='FAIL',tool=tool,phase=phase,operator_login_only=True,gabriel_adapter_admitted=False,
-            attack_detection_verified=False,login_structure=login,pages=pages,http_response_status_counts=cdp.network if cdp else {})
+            attack_detection_verified=False,login_structure=login,pages=pages,http_response_status_counts=cdp.network if cdp else {},
+            http_error_routes=cdp.errors if cdp else {},replay_event_query=replay_check)
         if cdp and session:
             try: diagnostic['last_structure']=snapshot(cdp,session)
             except Exception: diagnostic['last_structure_unavailable']=True
