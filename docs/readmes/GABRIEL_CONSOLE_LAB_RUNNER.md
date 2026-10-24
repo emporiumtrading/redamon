@@ -43,11 +43,9 @@ The Wazuh browser check now waits for application categories to appear after log
 
 The event-view extension follows the observed Threat Hunting link and opens its Events tab. A generated impossible-marker search must show the real no-results state before the replay-marker search can pass with a matching manager rule ID in rendered event cells. This proves a limited marker-filtered UI result only; the default columns do not expose native alert IDs, no completeness or latency threshold is accepted, and this operator harness is separate from Gabriel's privacy preview, scoped lease and source receipts. Sanitized request-error routes help investigate startup failures; queries, headers, bodies and identifier-bearing routes are excluded.
 
-## Destructive lab cleanup
-
 ## Twelve-record replay acceptance increment
 
-The next lab gate requires twelve distinct rule-5710 manager alerts and twelve browser-visible native documents from the generated replay. It reconciles the complete native projections, unique native IDs and all twelve generated source ports; changed IDs, timestamps, logs, missing records and duplicate records must fail without a receipt. The browser uses the existing search and document-detail UI, including bounded pagination. An absent search remains a required negative control.
+The next lab gate requires twelve distinct manager alerts (5710 failures or the upstream 5712 repeated-failure rule) and twelve browser-visible native documents from the generated replay. It reconciles the complete native projections, unique native IDs and all twelve generated source ports; changed IDs, timestamps, logs, missing records and duplicate records must fail without a receipt. The browser uses the existing search and document-detail UI, including bounded pagination. An absent search remains a required negative control.
 
 The existing local candidate kernel then reviews the twelve typed authentication failures. It must return a repeated-failure candidate with benign alternatives, while nine distinct events padded with duplicate copies remain below threshold. The normalized event document, candidate review and twelve specialist receipts are stored in the disposable case database; restart and idempotent replay must retain exactly one candidate review. Other telemetry, source authenticity, AI quality, real-attack effectiveness and Gabriel's scoped browser admission remain unverified. Validation is pending the actual Docker lab run; syntax checks alone do not accept this increment.
 
