@@ -86,3 +86,8 @@ USER browserlab
 ENTRYPOINT ["timeout", "--kill-after=10", "300", "bash", "testing/gabriel_browser/start.sh"]
 
 FROM runtime AS production
+USER 0:0
+# Production installs dependencies at build time; bundled build tools add attack surface.
+RUN python -m pip uninstall --yes setuptools wheel pip \
+    && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn"
+USER 10001:10001

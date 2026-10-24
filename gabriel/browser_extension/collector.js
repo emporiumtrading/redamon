@@ -27,6 +27,16 @@ export function inspectPage(collect = false) {
           rects.some(r => r.top < box.top || r.left < box.left || r.bottom > box.bottom || r.right > box.right)) visible = false;
     }
     if (!visible) continue;
+    // Geometry alone includes text behind dialogs and ordinary page overlays.
+    for (const box of rects) {
+      for (const x of [box.left + Math.min(1, box.width / 2), (box.left + box.right) / 2, box.right - Math.min(1, box.width / 2)]) {
+        const y = (box.top + box.bottom) / 2;
+        const hit = document.elementFromPoint(x, y);
+        const caret = document.caretRangeFromPoint?.(x, y);
+        if (!hit || !parent.contains(hit) || caret?.startContainer !== node) visible = false;
+      }
+    }
+    if (!visible) continue;
     bytes += new TextEncoder().encode(text + "\n").length;
     if (bytes > 65536) throw new Error("Text exceeds the sharing limit. Narrow the page; nothing was shared.");
     lines.push(text);
