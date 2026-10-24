@@ -29,6 +29,9 @@ jobs:
         run: python3 tooling/scripts/gabriel_console_lab.py up '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
       - name: Build isolated browser discovery harness
         run: docker build --build-arg "LAB_UID=$(id -u)" -f testing/gabriel_console/Dockerfile -t gabriel-console-browser .
+      - name: Verify generated syslog replay through the Wazuh collector
+        if: matrix.tool == 'wazuh'
+        run: python3 tooling/scripts/gabriel_console_lab.py replay wazuh "$RUNNER_TEMP/gabriel-console-wazuh"
       - name: Verify actual operator browser login and rendered pages
         run: |
           mkdir -p "$RUNNER_TEMP/gabriel-console-output"
@@ -39,10 +42,17 @@ jobs:
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/tls/server.pem,dst=/run/lab/server.pem,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-output,dst=/output" gabriel-console-browser
       - name: Retain only sanitized source and image provenance
+        if: always()
         run: |
+          mkdir -p "$RUNNER_TEMP/gabriel-console-output"
+          if ! test -f "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/lab.json"; then exit 0; fi
           cp "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/lab.json" "$RUNNER_TEMP/gabriel-console-output/lab.json"
+          if test -f "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/replay.json"; then
+            cp "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/replay.json" "$RUNNER_TEMP/gabriel-console-output/replay.json"
+          fi
           git rev-parse HEAD > "$RUNNER_TEMP/gabriel-console-output/source-sha.txt"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
           name: gabriel-console-${{ matrix.tool }}
           path: ${{ runner.temp }}/gabriel-console-output

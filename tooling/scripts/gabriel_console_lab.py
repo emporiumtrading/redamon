@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepare and check dedicated generated-data console labs; never a Gabriel adapter."""
 import argparse
+from datetime import datetime, timezone
 from hashlib import sha256
 import http.client
 import json
@@ -119,6 +120,13 @@ def prepare(tool,root):
         run(['docker','run','--rm','--network','none','--mount','type=bind,src='+str(base/'config/wazuh_indexer_ssl_certs')+',dst=/certs',
             '--entrypoint','sh',hasher,'-c','find /certs -type d -exec chmod 755 {} +; find /certs -type f -exec chmod 444 {} +'])
         config=json.loads(run(['docker','compose','--file','docker-compose.yml','config','--format','json'],cwd=base))
+        inputs=root/'generated-input';inputs.mkdir(mode=0o755)
+        (inputs/'auth.log').touch(mode=0o444)
+        settings=base/'config/wazuh_cluster/wazuh_manager.conf'
+        text=settings.read_text()
+        before,closing=text.rsplit('</ossec_config>',1)
+        settings.write_text(before+'<localfile><log_format>syslog</log_format><location>/var/log/gabriel-lab/auth.log</location></localfile>\n</ossec_config>'+closing)
+        config['services']['wazuh.manager']['volumes'].append({'type':'bind','source':str(inputs),'target':'/var/log/gabriel-lab','read_only':True})
         dashboard_password=secret();api_password=secret()
         PHASE='wazuh_private_accounts'
         def bcrypt(value):
@@ -195,10 +203,57 @@ def ready(root):
     raise ValueError('console_https_readiness_timeout')
 
 
+def replay(root):
+    """A generated log replay checks collection; it does not execute an attack."""
+    info=json.loads((root/'lab.json').read_text())
+    if info['tool']!='wazuh': raise ValueError('wazuh_replay_only')
+    if (root/'replay.json').exists(): raise ValueError('replay_already_recorded')
+    limit=time.monotonic()+120
+    while time.monotonic()<limit:
+        status=compose(root,'exec','-T','wazuh.manager','/var/ossec/bin/wazuh-control','status').decode()
+        if all(name+' is running' in status for name in ('wazuh-logcollector','wazuh-analysisd')): break
+        time.sleep(2)
+    else: raise ValueError('wazuh_collection_not_ready')
+    marker='gabriel-lab-'+uuid4().hex[:12]
+    started=datetime.now(timezone.utc).isoformat()
+    # The collector opens this fresh lab's file at startup; wait for its first scan.
+    time.sleep(5)
+    path=root/'generated-input/auth.log'
+    path.chmod(0o600)
+    try:
+        with path.open('a') as stream:
+            for number in range(12):
+                stamp=datetime.now(timezone.utc).strftime('%b %d %H:%M:%S')
+                stream.write(f'{stamp} generated-lab sshd[{20000+number}]: Failed password for invalid user {marker} from 192.0.2.10 port {40000+number} ssh2\n')
+                stream.flush();os.fsync(stream.fileno())
+                time.sleep(.2)
+    finally: path.chmod(0o444)
+    limit=time.monotonic()+180
+    alerts={}
+    while time.monotonic()<limit:
+        raw=compose(root,'exec','-T','wazuh.manager','sh','-c','if test -f /var/ossec/logs/alerts/alerts.json; then tail -c 4194304 /var/ossec/logs/alerts/alerts.json; fi')
+        for line in raw.splitlines():
+            try: event=json.loads(line)
+            except ValueError: continue
+            if marker not in event.get('full_log','') or event.get('location')!='/var/log/gabriel-lab/auth.log': continue
+            if not event.get('id') or not event.get('rule',{}).get('id'): continue
+            alerts[event['id']]={'id':event['id'],'timestamp':event['timestamp'],'rule_id':event['rule']['id'],
+                'rule_level':event['rule'].get('level'),'decoder':event.get('decoder',{}).get('name')}
+        if alerts: break
+        time.sleep(2)
+    if not alerts: raise ValueError('generated_replay_not_collected')
+    report=dict(schema_version=1,kind='synthetic_syslog_replay',live_attack=False,endpoint_sensor_verified=False,
+        browser_capture_verified=False,indexer_forwarding_verified=False,tool='wazuh',marker=marker,emitted_records=12,
+        observed_alerts=list(alerts.values()),started_at=started,first_observed_at=datetime.now(timezone.utc).isoformat(),
+        source_sha256=sha256(path.read_bytes()).hexdigest())
+    write(root/'replay.json',report)
+    return {'synthetic_replay_collected':True,'observed_alert_count':len(alerts)}
+
+
 def main():
     global PHASE
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','up','check','down'))
+    parser.add_argument('command',choices=('prepare','up','check','replay','down'))
     parser.add_argument('tool',choices=tuple(PINS))
     parser.add_argument('directory',type=Path)
     args=parser.parse_args();os.umask(0o077)
@@ -213,6 +268,7 @@ def main():
                     if any(word in key for word in ('PASSWORD','SECRET','SALT','API_KEY','BROKER')) and isinstance(value,str): PRIVATE.append(value)
             if args.command=='up': PHASE='startup';compose(root,'up','-d');result=ready(root)
             elif args.command=='check': result=ready(root)
+            elif args.command=='replay': PHASE='generated_replay';result=replay(root)
             else: compose(root,'down','--volumes','--remove-orphans');result={'generated_lab_removed':True}
         print(json.dumps({'status':'ok','result':result,'production_admitted':False}))
         return 0
