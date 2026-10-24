@@ -14,7 +14,11 @@ from gabriel.identity.specialist_contracts import ROLES
 def main():
     root=Path('/output')
     raw=(root/'browser.json').read_bytes();browser=json.loads(raw)
+    reconciliation=json.loads((root/'native-reconciliation.json').read_text())
+    assert reconciliation['status']=='PASS' and reconciliation['native_event_identity_verified']
+    assert reconciliation['browser_sha256']==sha256(raw).hexdigest()
     check=browser['replay_event_query'];event=check['native_detail']
+    assert reconciliation['event_id']==event['event_id']
     assert browser['status']=='PASS' and check['empty_control_verified'] and check['marker_filtered_rows_rendered']
     assert check['marker'] in event['full_log'] and event['rule_id']=='5710'
     def uid(key): return str(uuid5(NAMESPACE_URL,check['marker']+'/'+key))
@@ -35,13 +39,13 @@ def main():
     assert len(results)==12 and all(r['confidence']=='unqualified' and not r['external_actions_authorized'] for r in results.values())
     report=dict(version='generated-console-specialist-demo-v1',production_ready=False,model_enabled=False,
         source_browser_sha256=digest,observed_event_count=1,synthetic_replay=True,
-        database_persisted=False,gabriel_scoped_browser_capture=False,
+        database_persisted=False,gabriel_scoped_browser_capture=False,native_event_reconciled=True,
         normalizer_scope='generated replay format only; actor reported by log text',facts=document,specialists=results)
     (root/'specialist-demo.json').write_text(json.dumps(report,sort_keys=True)+'\n')
     def label(value): return html.escape(value.replace('_',' ').capitalize())
     rows=''.join('<tr><td>'+html.escape(role.replace('_',' ').title())+'</td><td>'+label(r['incident_assessment'])+'</td><td>'+label(r['urgency'])+'</td></tr>' for role,r in results.items())
     page='<!doctype html><meta charset="utf-8"><title>Gabriel verified lab demonstration</title><style>body{font:18px system-ui;max-width:1100px;margin:48px auto;padding:24px;background:#111827;color:#e5e7eb}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:12px;border-bottom:1px solid #374151}aside{padding:20px;background:#273449;border-radius:12px}h1{color:#67e8f9}</style><h1>Gabriel: defensive investigation lab</h1><p>Real Wazuh browser event → typed evidence → twelve local specialist reviews.</p><aside>Engineering demonstration. Synthetic SSH log replay. Local rules; AI models are disabled and quality remains unqualified. One observed event; incomplete telemetry. No autonomous response or production-readiness claim.</aside><h2>Specialist results</h2><table><tr><th>Specialist</th><th>Assessment</th><th>Urgency</th></tr>'+rows+'</table><p>Security effectiveness: unassessed. Compliance coverage: unassessed.</p><p>Browser evidence SHA-256: <code>'+digest+'</code></p><p>These results are generated in an isolated test container. Database persistence and Gabriel’s scoped browser integration remain separate acceptance gates.</p>'
-    page+='<h2>Observed event</h2><p>Native event ID: <code>'+html.escape(event['event_id'])+'</code>. Rule: '+html.escape(event['rule_id'])+'. Source time: '+html.escape(when)+'.</p><p>One browser-visible synthetic authentication failure was normalized. This does not establish a brute-force attack, compromise, or attacker absence. Exact server-side event identity reconciliation remains open.</p><h2>Specialist findings and follow-up</h2>'
+    page+='<h2>Observed event</h2><p>Native event ID: <code>'+html.escape(event['event_id'])+'</code>. Rule: '+html.escape(event['rule_id'])+'. Source time: '+html.escape(when)+'.</p><p>The browser-visible event exactly matched the generated Wazuh manager alert projection. One synthetic authentication failure was normalized. This does not establish a brute-force attack, compromise, attacker absence, or source authenticity.</p><h2>Specialist findings and follow-up</h2>'
     for role,result in results.items():
         page+='<details><summary>'+html.escape(role.replace('_',' ').title())+' — '+label(result['incident_assessment'])+'</summary><h3>Reported observations</h3><ul>'
         page+=''.join('<li>'+html.escape(item['statement'])+'</li>' for item in result['observations'])+'</ul><h3>Suggested review steps</h3><ul>'
