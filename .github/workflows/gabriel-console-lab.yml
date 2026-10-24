@@ -4,6 +4,9 @@ on:
     paths:
       - 'tooling/scripts/gabriel_console_lab.py'
       - 'testing/gabriel_console/**'
+      - 'tooling/scripts/gabriel_console_persist.sh'
+      - 'gabriel/identity/**'
+      - 'compose.gabriel-identity.yml'
       - '.github/workflows/gabriel-console-lab.yml'
   workflow_dispatch:
 permissions:
@@ -53,12 +56,7 @@ jobs:
       - name: Reconcile browser-visible native event against generated manager alert bytes
         if: matrix.tool == 'wazuh'
         run: |
-          mkdir "$RUNNER_TEMP/gabriel-native-negative"
-          python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["replay_event_query"]["native_detail"]["event_id"]="0.0"; json.dump(p,open(sys.argv[2],"x"))' "$RUNNER_TEMP/gabriel-console-output/browser.json" "$RUNNER_TEMP/gabriel-native-negative/browser.json"
-          if python3 tooling/scripts/gabriel_console_lab.py reconcile wazuh "$RUNNER_TEMP/gabriel-console-wazuh" --browser-report "$RUNNER_TEMP/gabriel-native-negative/browser.json"; then
-            echo 'FAIL: forged native event ID was accepted'; exit 1
-          fi
-          test ! -f "$RUNNER_TEMP/gabriel-native-negative/native-reconciliation.json"
+          python3 testing/gabriel_console/reconciliation_controls.py "$RUNNER_TEMP/gabriel-console-wazuh" "$RUNNER_TEMP/gabriel-console-output/browser.json"
           python3 tooling/scripts/gabriel_console_lab.py reconcile wazuh "$RUNNER_TEMP/gabriel-console-wazuh" --browser-report "$RUNNER_TEMP/gabriel-console-output/browser.json"
       - name: Review observed event with twelve local specialist kernels
         if: matrix.tool == 'wazuh'
