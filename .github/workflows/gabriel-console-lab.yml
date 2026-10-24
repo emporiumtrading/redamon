@@ -71,6 +71,13 @@ jobs:
       - name: Persist generated case and twelve receipts and verify PostgreSQL restart
         if: matrix.tool == 'wazuh'
         run: bash tooling/scripts/gabriel_console_persist.sh "$RUNNER_TEMP/gabriel-console-output"
+      - name: Render and verify the offline presentation report
+        if: matrix.tool == 'wazuh'
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=512m --entrypoint python \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/testing/gabriel_console/presentation_check.py,dst=/lab/presentation_check.py,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-output,dst=/output" gabriel-console-browser /lab/presentation_check.py
       - name: Retain only sanitized source and image provenance
         if: always()
         run: |
