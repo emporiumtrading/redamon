@@ -69,7 +69,7 @@ def main():
     process=subprocess.Popen(['/usr/bin/chromium','--headless=new','--no-sandbox','--no-first-run','--disable-background-networking',
         '--disable-dev-shm-usage','--remote-debugging-port=19222','--user-data-dir=/tmp/console-profile',
         '--proxy-server=http://127.0.0.1:9','--proxy-bypass-list=localhost','about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    cdp=None;session=None;phase='browser_startup';login=None;pages=[]
+    cdp=None;session=None;phase='browser_startup';login=None;pages=[];replay_check=None
     try:
         cdp=CDP();tab=cdp.send('Target.createTarget',{'url':target+('/login' if tool=='iris' else '/app/login')})['targetId']
         session=cdp.send('Target.attachToTarget',{'targetId':tab,'flatten':True})['sessionId']
@@ -113,10 +113,32 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
             assert cdp.evaluate(session,"(()=>{const e=[...document.querySelectorAll('button,a,[role=tab]')].find(e=>e.getClientRects().length&&e.innerText.trim()==='Events');if(!e)return false;e.click();return true;})()")
             wait(lambda:cdp.evaluate(session,"[...document.querySelectorAll('th,[role=columnheader]')].some(e=>e.getClientRects().length&&e.innerText.trim())"),90)
             pages.append(snapshot(cdp,session))
+            phase='replay_event_query'
+            replay=json.loads(Path('/run/lab/replay.json').read_text());marker=replay['marker']
+            assert replay['live_attack'] is False and re.fullmatch(r'gabriel-lab-[a-f0-9]{12}',marker)
+            expected=sorted({event['rule_id'] for event in replay['observed_alerts']})
+            assert expected
+            def search(query):
+                expression="""(()=>{const es=[...document.querySelectorAll('textarea')].filter(e=>e.getClientRects().length);if(es.length!==1)return false;
+const e=es[0];Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,QUERY);
+e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true;})()""".replace('QUERY',json.dumps(query))
+                assert cdp.evaluate(session,expression)
+                wait(lambda:cdp.evaluate(session,"Boolean(document.querySelector('button[data-test-subj=querySubmitButton]:not([disabled])'))"))
+                cdp.evaluate(session,"document.querySelector('button[data-test-subj=querySubmitButton]').click();true")
+            search('full_log: "'+marker+'-absent"')
+            wait(lambda:cdp.evaluate(session,"(()=>{const e=document.querySelector('[data-test-subj=discoverNoResults]');return Boolean(e&&e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden');})()"),90)
+            search('full_log: "'+marker+'"')
+            def matching():
+                return cdp.evaluate(session,"(()=>{const ids=new Set(EXPECTED);return [...new Set([...document.querySelectorAll('[role=gridcell]')].filter(e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden').slice(0,100).map(e=>e.innerText.trim()).filter(x=>ids.has(x)))];})()".replace('EXPECTED',json.dumps(expected)))
+            found=wait(matching,120)
+            replay_check=dict(marker=marker,empty_control_verified=True,matching_rule_ids=found,
+                marker_filtered_rows_rendered=True,native_event_identity_verified=False,live_attack=False)
+            pages.append(snapshot(cdp,session))
         result=dict(status='PASS',tool=tool,operator_login_only=True,gabriel_adapter_admitted=False,attack_detection_verified=False,
             browser_version=subprocess.check_output(['/usr/bin/chromium','--version']).decode().strip(),login_structure=login,pages=pages,
             http_response_status_counts=cdp.network,
             http_error_routes=cdp.errors,
+            replay_event_query=replay_check,
             environment='generated isolated lab; headless Chromium sandbox disabled; external browser traffic blocked by dead proxy')
         encoded=json.dumps(result,sort_keys=True)
         for value in (creds['password'],):

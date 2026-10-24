@@ -41,6 +41,8 @@ Both commands refuse to overwrite their completed report/credential files. A par
 
 The Wazuh browser check now waits for application categories to appear after login. A login redirect or empty application shell cannot pass. Sanitized browser structure and aggregate HTTP response status counts are retained on failure; raw response bodies, headers and service logs remain excluded. CI publishes generated replay/viewer access reports alongside source and image provenance. Production adapters and model routes remain disabled until their separate acceptance gates pass.
 
+The event-view extension follows the observed Threat Hunting link and opens its Events tab. A generated impossible-marker search must show the real no-results state before the replay-marker search can pass with a matching manager rule ID in rendered event cells. This proves a limited marker-filtered UI result only; the default columns do not expose native alert IDs, no completeness or latency threshold is accepted, and this operator harness is separate from Gabriel's privacy preview, scoped lease and source receipts. Sanitized request-error routes help investigate startup failures; queries, headers, bodies and identifier-bearing routes are excluded.
+
 ## Destructive lab cleanup
 
 ```bash
