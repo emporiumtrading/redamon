@@ -45,6 +45,14 @@ The event-view extension follows the observed Threat Hunting link and opens its 
 
 ## Destructive lab cleanup
 
+## Twelve-record replay acceptance increment
+
+The next lab gate requires twelve distinct rule-5710 manager alerts and twelve browser-visible native documents from the generated replay. It reconciles the complete native projections, unique native IDs and all twelve generated source ports; changed IDs, timestamps, logs, missing records and duplicate records must fail without a receipt. The browser uses the existing search and document-detail UI, including bounded pagination. An absent search remains a required negative control.
+
+The existing local candidate kernel then reviews the twelve typed authentication failures. It must return a repeated-failure candidate with benign alternatives, while nine distinct events padded with duplicate copies remain below threshold. The normalized event document, candidate review and twelve specialist receipts are stored in the disposable case database; restart and idempotent replay must retain exactly one candidate review. Other telemetry, source authenticity, AI quality, real-attack effectiveness and Gabriel's scoped browser admission remain unverified. Validation is pending the actual Docker lab run; syntax checks alone do not accept this increment.
+
+## Destructive lab cleanup commands
+
 ```bash
 python3 tooling/scripts/gabriel_console_lab.py down iris /absolute/private/new-iris-lab
 ```
