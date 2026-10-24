@@ -286,7 +286,9 @@ def reconcile(root,browser_path):
         matches.append(projection)
     order=lambda rows:sorted(rows,key=lambda item:item['event_id'])
     if len(matches)!=12 or order(matches)!=order(visible): raise ValueError('native_event_reconciliation_failed')
-    ports={item['data']['srcport'] for item in visible}
+    records=[re.search(r'Failed password for invalid user '+re.escape(marker)+r' from 192\.0\.2\.10 port ([0-9]{5}) ssh2$',item['full_log']) for item in visible]
+    if not all(records): raise ValueError('generated_record_format_failed')
+    ports={item[1] for item in records}
     if ports!={str(40000+i) for i in range(12)}: raise ValueError('generated_record_coverage_failed')
     report=dict(schema_version=1,status='PASS',tool='wazuh',generated_lab=True,native_event_identity_verified=True,
         source_authenticity_verified=False,live_attack=False,gabriel_adapter_admitted=False,
