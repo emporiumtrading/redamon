@@ -255,6 +255,41 @@ def replay(root):
     return {'synthetic_replay_collected':True,'observed_alert_count':len(alerts)}
 
 
+def reconcile(root,browser_path):
+    """Independently match the browser-visible event to this generated manager's alert bytes."""
+    info=json.loads((root/'lab.json').read_text())
+    if info['tool']!='wazuh' or browser_path is None: raise ValueError('wazuh_browser_report_required')
+    raw_browser=browser_path.read_bytes()
+    if len(raw_browser)>1048576: raise ValueError('browser_report_limit')
+    browser=json.loads(raw_browser)
+    replay=json.loads((root/'replay.json').read_text())
+    query=browser['replay_event_query'];visible=query['native_detail']
+    marker=replay['marker']
+    if (browser['status']!='PASS' or browser['tool']!='wazuh' or query['marker']!=marker
+            or re.fullmatch('gabriel-lab-[a-f0-9]{12}',marker) is None
+            or not query['empty_control_verified'] or not query['marker_filtered_rows_rendered']
+            or visible['location']!='/var/log/gabriel-lab/auth.log' or marker not in visible['full_log']):
+        raise ValueError('browser_replay_binding_failed')
+    raw=compose(root,'exec','-T','wazuh.manager','sh','-c','tail -c 4194304 /var/ossec/logs/alerts/alerts.json')
+    matches=[]
+    for line in raw.splitlines():
+        try: event=json.loads(line)
+        except ValueError: continue
+        if event.get('id')!=visible['event_id']: continue
+        projection=dict(event_id=event['id'],event_time=event['timestamp'],rule_id=event['rule']['id'],
+            agent_id=event['agent']['id'],agent_name=event['agent']['name'],full_log=event['full_log'][:512],
+            location=event['location'],data={key:event.get('data',{}).get(key) for key in ('srcip','srcport','dstuser')})
+        matches.append(projection)
+    if len(matches)!=1 or matches[0]!=visible: raise ValueError('native_event_reconciliation_failed')
+    report=dict(schema_version=1,status='PASS',tool='wazuh',generated_lab=True,native_event_identity_verified=True,
+        source_authenticity_verified=False,live_attack=False,gabriel_adapter_admitted=False,
+        browser_sha256=sha256(raw_browser).hexdigest(),event_id=visible['event_id'],
+        manager_projection_sha256=sha256(json.dumps(matches[0],sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+        matched_fields=sorted(visible),method='exact generated manager alert projection equals browser-visible document')
+    write(browser_path.parent/'native-reconciliation.json',report)
+    return {'browser_event_matches_generated_manager':True,'matched_field_count':len(visible)}
+
+
 def analyst(root):
     """Provision a case-scoped viewer only in the generated IRIS lab."""
     info=json.loads((root/'lab.json').read_text())
@@ -298,9 +333,10 @@ def analyst(root):
 def main():
     global PHASE
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','up','check','replay','analyst','down'))
+    parser.add_argument('command',choices=('prepare','up','check','replay','reconcile','analyst','down'))
     parser.add_argument('tool',choices=tuple(PINS))
     parser.add_argument('directory',type=Path)
+    parser.add_argument('--browser-report',type=Path)
     args=parser.parse_args();os.umask(0o077)
     try:
         root=args.directory.absolute()
@@ -314,6 +350,7 @@ def main():
             if args.command=='up': PHASE='startup';compose(root,'up','-d');result=ready(root)
             elif args.command=='check': result=ready(root)
             elif args.command=='replay': PHASE='generated_replay';result=replay(root)
+            elif args.command=='reconcile': PHASE='native_reconciliation';result=reconcile(root,args.browser_report)
             elif args.command=='analyst': PHASE='generated_analyst';result=analyst(root)
             else: compose(root,'down','--volumes','--remove-orphans');result={'generated_lab_removed':True}
         print(json.dumps({'status':'ok','result':result,'production_admitted':False}))

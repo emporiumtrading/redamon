@@ -50,6 +50,16 @@ jobs:
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/$LAB_BROWSER_CREDENTIALS,dst=/run/lab/credentials.json,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}/tls/server.pem,dst=/run/lab/server.pem,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-output,dst=/output" "${LAB_REPLAY_MOUNT[@]}" gabriel-console-browser
+      - name: Reconcile browser-visible native event against generated manager alert bytes
+        if: matrix.tool == 'wazuh'
+        run: |
+          mkdir "$RUNNER_TEMP/gabriel-native-negative"
+          python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["replay_event_query"]["native_detail"]["event_id"]="0.0"; json.dump(p,open(sys.argv[2],"x"))' "$RUNNER_TEMP/gabriel-console-output/browser.json" "$RUNNER_TEMP/gabriel-native-negative/browser.json"
+          if python3 tooling/scripts/gabriel_console_lab.py reconcile wazuh "$RUNNER_TEMP/gabriel-console-wazuh" --browser-report "$RUNNER_TEMP/gabriel-native-negative/browser.json"; then
+            echo 'FAIL: forged native event ID was accepted'; exit 1
+          fi
+          test ! -f "$RUNNER_TEMP/gabriel-native-negative/native-reconciliation.json"
+          python3 tooling/scripts/gabriel_console_lab.py reconcile wazuh "$RUNNER_TEMP/gabriel-console-wazuh" --browser-report "$RUNNER_TEMP/gabriel-console-output/browser.json"
       - name: Review observed event with twelve local specialist kernels
         if: matrix.tool == 'wazuh'
         run: |
@@ -61,6 +71,13 @@ jobs:
       - name: Persist generated case and twelve receipts and verify PostgreSQL restart
         if: matrix.tool == 'wazuh'
         run: bash tooling/scripts/gabriel_console_persist.sh "$RUNNER_TEMP/gabriel-console-output"
+      - name: Render and verify the offline presentation report
+        if: matrix.tool == 'wazuh'
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs "/home/browserlab:rw,nosuid,nodev,size=32m,uid=$(id -u),gid=$(id -g),mode=700" --entrypoint python \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/testing/gabriel_console/presentation_check.py,dst=/lab/presentation_check.py,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-output,dst=/output" gabriel-console-browser /lab/presentation_check.py
       - name: Retain only sanitized source and image provenance
         if: always()
         run: |
