@@ -17,6 +17,16 @@ export function inspectPage(collect = false) {
       if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0) { visible = false; break; }
     }
     if (!visible) continue;
+    // Geometry alone includes text behind dialogs and ordinary page overlays.
+    for (const box of rects) {
+      for (const x of [box.left + Math.min(1, box.width / 2), (box.left + box.right) / 2, box.right - Math.min(1, box.width / 2)]) {
+        const y = (box.top + box.bottom) / 2;
+        const hit = document.elementFromPoint(x, y);
+        const caret = document.caretRangeFromPoint?.(x, y);
+        if (!hit || !parent.contains(hit) || caret?.startContainer !== node) visible = false;
+      }
+    }
+    if (!visible) continue;
     const range = document.createRange();
     range.selectNodeContents(node);
     const rects = [...range.getClientRects()];
