@@ -34,10 +34,22 @@ def main():
             fact['evidence_id']=original['id'];fact['evidence_digest']=sha256(raw).hexdigest()
         facts=service.acquire(token,case['id'],uuid4(),canonical(document).decode(),'Generated replay typed facts',approved=True,parent_id=original['id'])
         facts['id']=str(facts['id'])
+        security=json.loads((root/'specialist-demo.json').read_text())['security_events']
+        security['case_id']=case['id']
+        for event in security['events']:
+            event['evidence_id']=original['id'];event['evidence_digest']=sha256(raw).hexdigest()
+        events=service.acquire(token,case['id'],uuid4(),canonical(security).decode(),
+            'Generated replay native event projection',approved=True,parent_id=original['id'])
+        attack_request=str(uuid4())
+        attack=service.run_attack_review(token,case['id'],attack_request,events['id'])
+        assert attack['result']['unique_event_count']==12
+        assert [item['family'] for item in attack['result']['findings']]==['brute_force']
         requests={role:str(uuid4()) for role in ROLES}
         results={role:run(service,token,case['id'],requests[role],role,facts['id']) for role in ROLES}
         state=dict(org=str(org),password=password,case_id=case['id'],source_id=original['id'],facts_id=facts['id'],
             source_digest=sha256(raw).hexdigest(),requests=requests,
+            events_id=str(events['id']),attack_request=attack_request,
+            attack_id=attack['id'],attack_digest=attack['result_digest'],
             runs={role:dict(id=row['id'],result_digest=row['result_digest']) for role,row in results.items()})
         with state_path.open('x') as stream: json.dump(state,stream)
         state_path.chmod(0o600)
@@ -55,7 +67,15 @@ def main():
             assert replay['id']==row['id'] and replay['result_digest']==row['result_digest']
             saved[role]=dict(id=row['id'],result_digest=row['result_digest'],assessment=row['result']['incident_assessment'])
         assert len(list_runs(service,token,state['case_id'])['runs'])==12
+        attack=service.get_attack_review(token,state['case_id'],state['attack_id'])
+        assert attack['result_digest']==state['attack_digest'] and not attack['grants_authority']
+        repeated=service.run_attack_review(token,state['case_id'],state['attack_request'],state['events_id'])
+        assert repeated['id']==attack['id'] and repeated['result_digest']==attack['result_digest']
+        assert attack['result']['unique_event_count']==12
+        assert len(service.list_attack_reviews(token,state['case_id'])['runs'])==1
         result=dict(status='PASS',database_persisted=True,physical_database_restart_verified=True,
+            attack_review_restart_verified=True,attack_review_replay_verified=True,
+            observed_event_count=12,attack_review_id=attack['id'],attack_review_digest=attack['result_digest'],
             receipt_replay_verified=True,specialist_count=12,case_id=state['case_id'],source_digest=state['source_digest'],
             specialists=saved,source_verified=False,model_enabled=False,production_ready=False,
             gabriel_scoped_browser_capture=False)
