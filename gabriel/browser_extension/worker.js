@@ -50,7 +50,7 @@ async function current(selected, collect = false) {
   const tab = await chrome.tabs.get(selected.tab_id);
   if (tab.incognito || safeURL(tab.url) !== selected.page_url) throw new Error("Page changed. Stop and obtain fresh pairing.");
   const results = await chrome.scripting.executeScript({target: {tabId: selected.tab_id, documentIds: [selected.document_id]}, func: inspectPage, args: [collect]});
-  if (results.length !== 1 || results[0].frameId !== 0 || results[0].documentId !== selected.document_id || results[0].result.page_url !== selected.page_url)
+  if (results.length !== 1 || results[0].frameId !== 0 || results[0].documentId !== selected.document_id || results[0].result?.page_url !== selected.page_url)
     throw new Error("Document changed or visibility was lost. Fresh pairing is required.");
   return results[0].result;
 }
