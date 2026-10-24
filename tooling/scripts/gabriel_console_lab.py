@@ -272,7 +272,7 @@ def analyst(root):
     username='gabriel-viewer-'+uuid4().hex[:10];password=secret()
     user=request('POST','/manage/users/add',owner_key,dict(user_name=username,user_login=username,
         user_email=username+'@example.invalid',user_password=password,user_isadmin=False,user_is_service_account=False,active=True))
-    user_id=user['user_id'];viewer_key=user['user_api_key'];PRIVATE.append(viewer_key)
+    user_id=user['id'];viewer_key=user['user_api_key'];PRIVATE.append(viewer_key)
     if type(user_id) is not int: raise ValueError('invalid_generated_user_id')
     group=request('POST','/manage/groups/add',owner_key,dict(group_name=username,group_description='Generated case-scoped lab viewer',
         group_permissions=[1],group_auto_follow=False,group_auto_follow_access_level=1))
