@@ -165,7 +165,7 @@ class BrowserSessionService(EvidenceKeyService):
                 conn.execute("UPDATE gabriel_identity.browser_leases SET state='active',last_seen=clock_timestamp() WHERE organization_id=%s AND id=%s",(p.organization_id,row['id']))
             _audit(conn,'browser.paired',p,row['id'])
             return {'lease_id':str(row['id']),'paired':True,'expires_at':row['expires_at'],
-                'scheduled_review_enabled':row['scheduled_review_enabled'],'discovery_enabled':row['discovery_enabled'],'capabilities':['session.heartbeat','session.disconnect'],'page_content_received':False}
+                'scheduled_review_enabled':row.get('scheduled_review_enabled',False),'discovery_enabled':row.get('discovery_enabled',False),'capabilities':['session.heartbeat','session.disconnect'],'page_content_received':False}
 
     def heartbeat_browser(self,token,context):
         with connection(self._dsn) as conn:

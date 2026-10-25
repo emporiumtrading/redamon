@@ -371,7 +371,7 @@ def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,exten
             CONSOLE_MODES.clear()
 
 
-def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,extension_origin,port):
+def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,extension_origin,port,output):
     mark(family+':multiple-tab-monitoring')
     CONSOLE_MODES.clear()
     navigation=BrowserNavigationService(service._dsn,service.store)
@@ -379,6 +379,8 @@ def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,exte
     endpoint='https://localhost:'+str(port)
     enrollments=[];tabs=[];contexts=[];logs=[]
     for index,path in enumerate(('/security','/traffic')):
+        for old in cdp.targets():
+            if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
         tab=cdp.send('Target.createTarget',{'url':console_origin+path})['targetId'];tabs.append(tab)
         session=cdp.attach(tab)
         wait_for(lambda:cdp.evaluate(session,'document.readyState')=='complete')
@@ -387,6 +389,8 @@ def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,exte
         cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
         click(cdp,popup,'select')
         scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None));contexts.append(scope)
+        assert scope['page_url']==console_origin+path
+        assert all(previous['tab_id']!=scope['tab_id'] for previous in contexts[:-1])
         task=navigation.create_browser_task(human,'Generated tab '+str(index),900,20)
         directory=root/('monitor-'+str(index))
         enrollments.append(prepare(navigation,human,task['id'],case['id'],scope,endpoint,extension_origin,directory,
@@ -414,7 +418,9 @@ def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,exte
                 enabled=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"monitor-start",mode:"page",approved:true})')
                 assert enabled['ok']
             def state():return cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
-            assert len(state()['channels'])==2 and all(row['paired'] and row['monitoring']['enabled'] for row in state()['channels'])
+            snapshot=state()
+            (output/(family+'-generated-monitoring-state.json')).write_text(json.dumps({'state':snapshot,'contexts':contexts},indent=2))
+            assert len(snapshot['channels'])==2 and all(row['paired'] and row['monitoring']['enabled'] for row in snapshot['channels'])
             # Close the real action popup: alarm-driven capture must not rely on popup timers.
             popup_target=next(t['targetId'] for t in cdp.targets() if t.get('url')==extension_origin+'/popup.html')
             cdp.send('Target.closeTarget',{'targetId':popup_target})
@@ -760,7 +766,7 @@ def run_browser(family,executable,output):
             gateway.terminate();gateway.wait(timeout=10);gateway=None
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
                 'https://localhost:'+str(server.server_port),origin,gateway_port)
-            monitoring_checks=monitoring_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
+            monitoring_checks=monitoring_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port,output)
             discovery_checks=discovery_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version

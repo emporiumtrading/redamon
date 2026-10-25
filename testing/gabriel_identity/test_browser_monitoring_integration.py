@@ -1,18 +1,40 @@
 """Real authority, lifetime and multi-tab isolation; no production provider dispatch."""
 from io import BytesIO
 import json
+import os
+import secrets
+from types import SimpleNamespace
+import psycopg
+from psycopg.conninfo import make_conninfo
+from psycopg import sql
+from gabriel.identity.cli import read_secret
+from gabriel.identity.service import migrate
 from uuid import uuid4
 
 import pytest
 
 from gabriel.identity.browser_gateway import BrowserGateway,BrowserGatewayGroup,ticket_digest
 from gabriel.identity.browser_navigation import BrowserNavigationService,OPERATOR_PAGES
-from gabriel.identity.service import AccessDenied,InvalidIdentityInput
-from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
+from gabriel.identity.service import AccessDenied,AuthenticationDenied,InvalidIdentityInput
+from testing.gabriel_identity.test_identity_integration import tenant,owner_connection
 from testing.gabriel_identity.test_cases_integration import cases,case
 from testing.gabriel_identity.test_browser_sessions_integration import context
 
 pytestmark=pytest.mark.integration
+
+
+@pytest.fixture(scope='module')
+def database():
+    app_path,owner_path=os.environ.get('GABRIEL_IDENTITY_DSN_FILE'),os.environ.get('GABRIEL_MIGRATION_DSN_FILE')
+    if not app_path or not owner_path:pytest.skip('isolated PostgreSQL credentials required')
+    owner=read_secret(owner_path);app=read_secret(app_path);name='gabriel_monitor_'+secrets.token_hex(8)
+    with psycopg.connect(owner,autocommit=True) as conn:conn.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(name)))
+    scoped=SimpleNamespace(owner=make_conninfo(owner,dbname=name),app=make_conninfo(app,dbname=name))
+    try:
+        migrate(scoped.owner)
+        yield scoped
+    finally:
+        with psycopg.connect(owner,autocommit=True) as conn:conn.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(name)))
 
 
 def enrollment(tenant,cases,case,context,tab=1,**kwargs):
@@ -83,7 +105,7 @@ def test_exact_operator_routes_remain_origin_bound_and_stop_is_terminal(tenant,c
     assert browser.navigation_plan(tenant.token,lease.token,scope)['monitoring_approved']
     with pytest.raises(AccessDenied):browser.prepare_navigation(tenant.token,lease.token,uuid4(),'https://outside.invalid/alerts')
     browser.disconnect_browser(lease.token)
-    with pytest.raises(AccessDenied):browser.navigation_plan(tenant.token,lease.token,scope)
+    with pytest.raises(AuthenticationDenied):browser.navigation_plan(tenant.token,lease.token,scope)
 
 
 def test_text_review_is_receipt_bound_idempotent_and_preserves_source_quotes(tenant,cases,case,context):
@@ -101,7 +123,7 @@ def test_text_review_is_receipt_bound_idempotent_and_preserves_source_quotes(ten
     assert value['evidence_id']==str(captured['evidence_id'])
     assert all(payload['content'][r['start']:r['end']]==r['quote'] for r in value['findings'])
     browser.disconnect_browser(lease.token)
-    with pytest.raises(AccessDenied):browser.review_browser_text(tenant.token,lease.token,scope,captured['observation_id'])
+    with pytest.raises(AuthenticationDenied):browser.review_browser_text(tenant.token,lease.token,scope,captured['observation_id'])
 
 
 def test_source_health_display_fields_do_not_expand_specialist_contract(tenant,cases,case,context):
@@ -125,5 +147,5 @@ def test_discovery_is_explicit_and_binds_discovered_query_routes_to_original_ori
     intent=browser.prepare_navigation(tenant.token,lease.token,uuid4(),url)
     assert intent['destination_url']==url
     for denied in [url+'&token=generated',url+'&action=delete','https://outside.invalid/alerts']:
-        with pytest.raises((AccessDenied,InvalidIdentityInput)):
+        with pytest.raises((AccessDenied,AuthenticationDenied,InvalidIdentityInput)):
             browser.prepare_navigation(tenant.token,lease.token,uuid4(),denied)

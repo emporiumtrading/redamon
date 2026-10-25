@@ -215,7 +215,6 @@ def remove_v26(conn):
 
 def remove_v27(conn):
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=27').fetchone():
-        conn.execute("DELETE FROM gabriel_identity.browser_leases WHERE extension_version='0.4.0'")
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
         conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version IN ('0.1.0','0.2.0','0.3.0'))")
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_lease_lifetime')
