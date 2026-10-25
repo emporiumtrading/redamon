@@ -7,6 +7,7 @@ from html import escape
 import http.client
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import socket
@@ -156,9 +157,12 @@ def native_popup(cdp,console_target,origin):
         session=cdp.attach(existing['targetId'])
         wait_for(lambda:cdp.evaluate(session,"document.body?.dataset.gabrielReady==='true'"))
         return session
+    console_session=cdp.attach(console_target)
+    console_title=cdp.evaluate(console_session,'document.title')
+    if not console_title:raise AssertionError('test_console_title_required')
     def visible_window():
         cdp.send('Target.activateTarget',{'targetId':console_target})
-        windows=subprocess.run(['xdotool','search','--onlyvisible','--name','Generated Gabriel Lab Console'],capture_output=True,text=True,timeout=5)
+        windows=subprocess.run(['xdotool','search','--onlyvisible','--name',re.escape(console_title)],capture_output=True,text=True,timeout=5)
         return windows.stdout.splitlines()[0] if windows.stdout.strip() else None
     window=wait_for(visible_window,15)
     subprocess.run(['xdotool','windowactivate','--sync',window],check=True,timeout=5)
@@ -321,6 +325,8 @@ def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,exten
     CONSOLE_MODES.clear()
     CONSOLE_MODES['/unfamiliar-dashboard']='agnostic'
     CONSOLE_MODES['/unfamiliar-audit']='agnostic'
+    for old in cdp.targets():
+        if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
     tab=cdp.send('Target.createTarget',{'url':console_origin+'/unfamiliar-dashboard'})['targetId']
     session=cdp.attach(tab);wait_for(lambda:cdp.evaluate(session,'document.readyState')=='complete')
     cdp.send('Target.activateTarget',{'targetId':tab})
@@ -450,6 +456,7 @@ def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,exte
             assert not state()['monitoring']['enabled'] and len(observations(1))==1
             cdp.send('Target.closeTarget',{'targetId':tabs[1]})
             wait_for(lambda:navigation.get_browser_lease(human,enrollments[1]['lease_id'])['state']=='disconnected',15)
+            popup=native_popup(cdp,tabs[0],extension_origin)
             assert not state()['stored_pairing']
             logfile.flush()
             assert human not in (root/'monitor-group.log').read_text()
@@ -769,8 +776,8 @@ def run_browser(family,executable,output):
             gateway.terminate();gateway.wait(timeout=10);gateway=None
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
                 'https://localhost:'+str(server.server_port),origin,gateway_port)
-            monitoring_checks=monitoring_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port,output)
             discovery_checks=discovery_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
+            monitoring_checks=monitoring_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port,output)
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
