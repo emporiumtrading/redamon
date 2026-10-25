@@ -26,6 +26,7 @@ COPY gabriel/identity/memory.py gabriel/identity/schema_v15.sql /app/gabriel/ide
 COPY gabriel/identity/model_evaluation.py gabriel/identity/model_protocol.py gabriel/identity/model_routes.py gabriel/identity/model_transport.py gabriel/identity/model_worker.py /app/gabriel/identity/
 COPY gabriel/identity/model_input.py /app/gabriel/identity/
 COPY gabriel/identity/attack_patterns.py /app/gabriel/identity/
+COPY gabriel/identity/wazuh_events.py /app/gabriel/identity/
 COPY gabriel/identity/attack_pattern_runs.py gabriel/identity/schema_v23.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_events.py gabriel/identity/browser_specialists.py gabriel/identity/schema_v24.sql gabriel/identity/schema_v26.sql /app/gabriel/identity/
 COPY gabriel/identity/specialist_analysis_runs.py gabriel/identity/schema_v20.sql /app/gabriel/identity/

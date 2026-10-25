@@ -11,6 +11,7 @@ from gabriel.identity.specialist_analysis import analyze, validate_document
 from gabriel.identity.attack_patterns import investigate
 from gabriel.identity.browser_specialists import project
 from gabriel.identity.specialist_contracts import ROLES
+from gabriel.identity.wazuh_events import normalize,VERSION as NORMALIZER_VERSION
 
 
 def main():
@@ -24,14 +25,12 @@ def main():
     assert set(reconciliation['event_ids'])=={event['event_id'] for event in events}
     assert browser['status']=='PASS' and check['empty_control_verified'] and check['marker_filtered_rows_rendered']
     def uid(key): return str(uuid5(NAMESPACE_URL,check['marker']+'/'+key))
-    eid=uid('browser-evidence');digest=sha256(raw).hexdigest();typed=[]
+    eid=uid('browser-evidence');digest=sha256(raw).hexdigest();typed=[];normalization=[]
     for event in events:
         actor=re.search(r'Failed password for invalid user (gabriel-lab-[a-f0-9]{12}) from (192\.0\.2\.10) port ([0-9]{5}) ssh2$',event['full_log'])
         assert actor and actor[1]==check['marker'] and event['rule_id'] in {'5710','5712'}
-        when=datetime.fromisoformat(event['event_time']).astimezone(timezone.utc).isoformat().replace('+00:00','Z')
-        typed.append(dict(source_id=uid('manager'),event_id=event['event_id'],evidence_id=eid,evidence_digest=digest,
-            event_time=when,kind='auth_failure',actor_id=uid('actor/'+actor[1]),asset_id=uid('agent/'+event['agent_id']),
-            source_asset_id=uid('source/'+actor[2]),process_sha256=None,object_id=None,authorization='unknown'))
+        row,manifest=normalize(event,uid('manager'),eid,digest)
+        typed.append(row);normalization.append(manifest)
     when=max(row['event_time'] for row in typed)
     security=dict(version='security-events-v1',case_id=uid('case'),as_of=when,
         missing_sources=['process','network','file','kernel','boot'],events=typed)
@@ -50,7 +49,8 @@ def main():
         source_browser_sha256=digest,observed_event_count=12,synthetic_replay=True,attack_review=attack,security_events=security,
         duplicate_inflation_control_verified=True,
         database_persisted=False,gabriel_scoped_browser_capture=False,native_event_reconciled=True,
-        normalizer_scope='generated replay format only; actor reported by log text',facts=document,specialists=results)
+        normalizer_scope='bounded native Wazuh SSH invalid-user format; entity assertions remain unverified',
+        normalizer_version=NORMALIZER_VERSION,normalization=normalization,facts=document,specialists=results)
     (root/'specialist-demo.json').write_text(json.dumps(report,sort_keys=True)+'\n')
     def label(value): return html.escape(value.replace('_',' ').capitalize())
     rows=''.join('<tr><td>'+html.escape(role.replace('_',' ').title())+'</td><td>'+label(r['incident_assessment'])+'</td><td>'+label(r['urgency'])+'</td></tr>' for role,r in results.items())
