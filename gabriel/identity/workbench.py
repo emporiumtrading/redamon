@@ -242,7 +242,7 @@ class Workbench:
         if method=='GET' and path=='/sources':
             result=source_health(self.service,self._token)
             body='<p class="notice">Partial coverage. A recent heartbeat does not establish current page visibility or uninterrupted monitoring. Sources are sampled individually.</p>'
-            body+=table(['Browser','Health','Last heartbeat','Expires','Case'],[(e(row['browser']),e(row['health']),e(row['last_seen'] or 'Never recorded'),e(row['expires_at']),'<a href="/cases/'+e(row['case_id'])+'">'+e(row['case_id'])+'</a>') for row in result['sources']]) if result['sources'] else '<p>No browser sessions recorded.</p>'
+            body+=table(['Browser','Health','Last heartbeat','Captured','Last capture','Scheduled permission','Expires','Case'],[(e(row['browser']),e(row['health']),e(row['last_seen'] or 'Never recorded'),e(row['captured_observations']),e(row['last_capture'] or 'None'),e('Approved; activity unverified' if row['scheduled_permission'] else 'Not approved'),e(row['expires_at']),'<a href="/cases/'+e(row['case_id'])+'">'+e(row['case_id'])+'</a>') for row in result['sources']]) if result['sources'] else '<p>No browser sessions recorded.</p>'
             body+='<p>Showing up to 32 most recent sessions.'+(' Older sessions are omitted.' if result['truncated'] else '')+'</p>'
             return '200 OK',self._page('Browser health and coverage',body,principal),[]
         if method=='GET' and path=='/audit':

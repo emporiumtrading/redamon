@@ -11,8 +11,8 @@ from gabriel.identity.service import (AccessDenied,AuthenticationDenied,InvalidI
     _audit,_digest,connection,identifier)
 from gabriel.identity.tasks import task_record,available
 
-VERSION = '0.3.0'
-SUPPORTED_VERSIONS = frozenset({'0.1.0','0.2.0',VERSION})
+VERSION = '0.4.0'
+SUPPORTED_VERSIONS = frozenset({'0.1.0','0.2.0','0.3.0',VERSION})
 CONTEXT_FIELDS = {'browser','extension_version','installation_id','tab_id','document_id','page_url','account_label'}
 
 
@@ -87,9 +87,11 @@ class BrowserSessionService(EvidenceKeyService):
             _audit(conn,'browser.task_created',p,row['id'])
             return row
 
-    def issue_browser_lease(self,token,task_id,case_id,context,ttl_seconds=300,*,share_observations=False):
+    def issue_browser_lease(self,token,task_id,case_id,context,ttl_seconds=300,*,share_observations=False,monitoring_approved=False):
         context = approved_context(context)
-        if type(ttl_seconds) is not int or not 60<=ttl_seconds<=300 or type(share_observations) is not bool:
+        if (type(ttl_seconds) is not int or type(monitoring_approved) is not bool
+                or not 60<=ttl_seconds<=(3600 if monitoring_approved else 300) or type(share_observations) is not bool
+                or monitoring_approved and not share_observations):
             raise InvalidIdentityInput('invalid_browser_lifetime')
         secret = 'gbp1_'+secrets.token_urlsafe(32)
         with connection(self._dsn) as conn:
@@ -106,12 +108,12 @@ class BrowserSessionService(EvidenceKeyService):
             session = conn.execute('SELECT expires_at FROM gabriel_identity.sessions WHERE token_digest=%s',(_digest(token),)).fetchone()
             row = conn.execute('''INSERT INTO gabriel_identity.browser_leases
                 (organization_id,id,token_digest,issued_by,human_session_digest,task_id,case_id,browser,extension_version,
-                 installation_id,tab_id,document_id,page_url,account_label,intake_enabled,created_at,expires_at)
-                SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,t,LEAST(t+%s*interval '1 second',%s,%s)
+                 installation_id,tab_id,document_id,page_url,account_label,intake_enabled,scheduled_review_enabled,created_at,expires_at)
+                SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,t,LEAST(t+%s*interval '1 second',%s,%s)
                 FROM (SELECT clock_timestamp() AS t) admitted RETURNING *''',
                 (p.organization_id,uuid4(),browser_digest(secret),p.user_id,_digest(token),task['id'],case['id'],context['browser'],
                  context['extension_version'],context['installation_id'],context['tab_id'],context['document_id'],context['page_url'],
-                 context['account_label'],share_observations,ttl_seconds,task['expires_at'],session['expires_at'])).fetchone()
+                 context['account_label'],share_observations,monitoring_approved,ttl_seconds,task['expires_at'],session['expires_at'])).fetchone()
             conn.execute('INSERT INTO gabriel_identity.case_tasks VALUES (%s,%s,%s) ON CONFLICT DO NOTHING',(p.organization_id,case['id'],task['id']))
             _audit(conn,'browser.lease_issued',p,row['id'])
             return BrowserCredential(row['id'],secret,row['expires_at'])
@@ -156,7 +158,7 @@ class BrowserSessionService(EvidenceKeyService):
                 conn.execute("UPDATE gabriel_identity.browser_leases SET state='active',last_seen=clock_timestamp() WHERE organization_id=%s AND id=%s",(p.organization_id,row['id']))
             _audit(conn,'browser.paired',p,row['id'])
             return {'lease_id':str(row['id']),'paired':True,'expires_at':row['expires_at'],
-                'capabilities':['session.heartbeat','session.disconnect'],'page_content_received':False}
+                'scheduled_review_enabled':row['scheduled_review_enabled'],'capabilities':['session.heartbeat','session.disconnect'],'page_content_received':False}
 
     def heartbeat_browser(self,token,context):
         with connection(self._dsn) as conn:

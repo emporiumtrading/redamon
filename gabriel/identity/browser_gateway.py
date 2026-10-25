@@ -47,7 +47,7 @@ def ticket_digest(value):
     return sha256(('gabriel-browser-claim-v1|'+value).encode()).hexdigest()
 
 
-def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False):
+def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False,monitor_seconds=None):
     """Private operator enrollment, never exposed as a network operation."""
     target,origin=endpoint(target),extension_origin(origin)
     context=approved_context(context)
@@ -56,7 +56,10 @@ def prepare(service,human_token,task_id,case_id,context,target,origin,directory,
         raise ValueError('private_directory_required')
     directory.mkdir(mode=0o700)
     ticket='gbc1_'+secrets.token_urlsafe(32)
-    grant=service.issue_browser_lease(human_token,task_id,case_id,context,share_observations=share_observations)
+    if monitor_seconds is not None and (type(monitor_seconds) is not int or not 60<=monitor_seconds<=3600 or not share_observations):
+        raise ValueError('invalid_scheduled_review_consent')
+    grant=service.issue_browser_lease(human_token,task_id,case_id,context,share_observations=share_observations,
+        ttl_seconds=monitor_seconds if monitor_seconds is not None else 300,monitoring_approved=monitor_seconds is not None)
     try:
         write_document(directory/'human.json',{'token':human_token})
         write_document(directory/'peer.json',{'token':grant.token,'lease_id':str(grant.id),'expires_at':str(grant.expires_at)})
@@ -238,7 +241,46 @@ def load_gateway(path):
     return app
 
 
-def serve(configuration,certificate,key,bind='127.0.0.1:8443'):
+
+class BrowserGatewayGroup:
+    """One trusted HTTPS origin, independent tickets and authority for each approved tab."""
+    def __init__(self,gateways):
+        if not 1<=len(gateways)<=8: raise ValueError('gateway_group_size')
+        self.gateways=tuple(gateways)
+        first=gateways[0]
+        if len({g.lease_id for g in gateways})!=len(gateways): raise ValueError('duplicate_gateway_lease')
+        if any((g.target,g.origin,g._human)!=(first.target,first.origin,first._human) for g in gateways):
+            raise ValueError('gateway_group_operator_and_origin_required')
+
+    def __call__(self,environ,start_response):
+        from io import BytesIO
+        selected=self.gateways[0]
+        authorization=environ.get('HTTP_AUTHORIZATION','')
+        matches=[g for g in self.gateways if hmac.compare_digest(authorization,'Bearer '+g._peer)]
+        if len(matches)==1: selected=matches[0]
+        elif environ.get('PATH_INFO')=='/v1/browser/claim' and environ.get('REQUEST_METHOD')=='POST':
+            length=environ.get('CONTENT_LENGTH','')
+            if re.fullmatch('[0-9]{1,6}',length) and 2<=int(length)<=MAX_BODY:
+                raw=environ['wsgi.input'].read(int(length))
+                environ=dict(environ,**{'wsgi.input':BytesIO(raw)})
+                try:
+                    body=json.loads(raw,object_pairs_hook=_unique,parse_constant=_invalid_number)
+                    claimed=ticket_digest(body.get('ticket'))
+                    matches=[g for g in self.gateways if hmac.compare_digest(claimed,g._ticket)]
+                    if len(matches)==1: selected=matches[0]
+                except (ValueError,TypeError,AttributeError,IdentityError): pass
+        return selected(environ,start_response)
+
+
+def load_gateway_group(path):
+    value=read_document(path,private=True)
+    if (not isinstance(value,dict) or set(value)!={'purpose','configurations'} or value['purpose']!='gabriel-browser-group-v1'
+            or type(value['configurations']) is not list or not 1<=len(value['configurations'])<=8
+            or any(type(p) is not str for p in value['configurations']) or len(set(value['configurations']))!=len(value['configurations'])):
+        raise ValueError('invalid_gateway_group')
+    return BrowserGatewayGroup([load_gateway(p) for p in value['configurations']])
+
+def serve(configuration,certificate,key,bind='127.0.0.1:8443',*,group=False):
     from gunicorn.app.base import BaseApplication
     probe=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     probe.load_cert_chain(certificate,key)
@@ -248,5 +290,5 @@ def serve(configuration,certificate,key,bind='127.0.0.1:8443'):
                 'errorlog':'-','capture_output':False,'forwarded_allow_ips':'','secure_scheme_headers':{},
                 'timeout':30,'limit_request_line':2048,'limit_request_fields':32,'limit_request_field_size':4096}
             for name,value in options.items(): self.cfg.set(name,value)
-        def load(self): return load_gateway(configuration)
+        def load(self): return load_gateway_group(configuration) if group else load_gateway(configuration)
     Application().run()
