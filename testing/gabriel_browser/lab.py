@@ -365,7 +365,9 @@ def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,exten
             assert state['monitoring']['candidate_count']==1
             assert state['monitoring']['learning']['proposal_state']=='proposed'
             assert state['monitoring']['learning']['reviewed_reference_count']==0
-            assert len(navigation.list_memory(human,case['id'])['records'])==1
+            proposals=navigation.list_memory(human,case['id'])['records']
+            assert len(proposals)==2 and all(row['status']=='proposed' for row in proposals)
+            assert {row['id'] for row in proposals}=={row['text_review']['learning']['proposal_id'] for row in state['tour']['sections']}
             click(cdp,popup,'refresh-tabs')
             wait_for(lambda:'1 candidate passages requiring assessment' in (text(cdp,popup,'monitor-state') or ''))
             assert 'learning: proposed; 0 reviewed references attached' in text(cdp,popup,'monitor-state')
