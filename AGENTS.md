@@ -1,4 +1,4 @@
-# RedAmon - Agent Ruleset (Repository Root)
+# Gabriel — Agent Ruleset (Repository Root)
 
 > **Skills**: on-demand rulesets live in [`skills/`](skills/). The full list is
 > the **SKILLS CATALOGUE** at the bottom of this file. The table directly below
@@ -64,6 +64,10 @@ LLM-facing text is exempt: tool docstrings and prompt strings the agent reads at
 runtime are content, not code comments - size them for the model, not this rule.
 
 ---
+
+## Product identity
+
+The supported product is Gabriel — The Defender, implemented in `gabriel/` and the explicitly named Gabriel Docker compositions. Use its own graphics and public documentation. Inherited source remains for provenance and compatibility; do not present inherited offensive workflows as Gabriel functionality. Preserve required copyright and licensing notices.
 
 ## TECH STACK
 

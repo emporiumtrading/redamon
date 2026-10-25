@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug in RedAmon
+description: Report a bug in Gabriel
 title: "[Bug] "
 labels: ["bug"]
 body:
@@ -7,12 +7,12 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of RedAmon is affected?
+      description: Which part of Gabriel is affected?
       options:
-        - webapp (Next.js frontend)
-        - recon-orchestrator (Python backend)
-        - agent (AI agent)
-        - kali-sandbox / MCP servers
+        - Gabriel analyst workbench
+        - Browser companion and gateway
+        - Specialist reviews and memory
+        - Identity, encrypted evidence and custody
         - Docker / infrastructure
         - other
     validations:
