@@ -26,6 +26,11 @@ def main():
             response=conn.getresponse();body=response.read(1048576)
             if response.status!=expected:
                 print('Expected HTTP '+str(expected)+' observed '+str(response.status),file=sys.stderr)
+                # Numeric vendor error identifiers diagnose auth without exposing tokens or bodies.
+                try:
+                    error=json.loads(body).get('error')
+                    if type(error) is int: print('Wazuh error code '+str(error),file=sys.stderr)
+                except (ValueError,AttributeError): pass
                 raise ValueError('permission_or_setup_check_failed')
             return None if method=='HEAD' else body.decode() if raw else json.loads(body)
         finally: conn.close()
