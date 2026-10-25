@@ -21,7 +21,8 @@ def test_assigned_plan_is_read_only_and_has_no_peer_secrets(tenant,browser,grant
     assert plan['id']==navigation['id'] and plan['contract_version']==VERSION
     assert plan['destinations']==[DESTINATION,context['page_url']]
     assert plan['sharing_approved'] and not plan['source_verified']
-    assert set(plan)=={'id','contract_version','destinations','max_moves','expires_at','sharing_approved','source_verified'}
+    assert plan['monitoring_approved'] is False
+    assert set(plan)=={'id','contract_version','destinations','max_moves','expires_at','sharing_approved','monitoring_approved','source_verified'}
     assert not rows(tenant,'browser_navigation_intents') and not rows(tenant,'browser_navigation_receipts')
     with pytest.raises(AccessDenied): browser.navigation_plan(tenant.token,grant.token,dict(context,account_label='Other generated account'))
     browser.prepare_navigation(tenant.token,grant.token,uuid4(),DESTINATION)

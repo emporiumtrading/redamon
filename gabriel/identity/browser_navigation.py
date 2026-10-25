@@ -4,7 +4,8 @@ A separate explicit navigation grant adds bounded navigation authority to the
 paired observation task. This service never drives a browser or authenticates
 to an external system; completion is an unverified browser context claim.
 """
-from urllib.parse import urlsplit
+import re
+from urllib.parse import urlsplit,unquote
 from uuid import uuid4
 
 from psycopg.types.json import Jsonb
@@ -17,6 +18,18 @@ from gabriel.identity.specialist_contracts import digest
 from gabriel.identity.tasks import task_record,available
 
 CONTRACTS={}
+OPERATOR_PAGES='operator-reviewed-pages-v1'
+DISCOVERED_PAGES='operator-discovered-readonly-v1'
+
+
+def readonly_page(url):
+    parsed=urlsplit(url)
+    decoded=parsed.path+'#'+parsed.fragment
+    for _ in range(4):decoded=unquote(decoded)
+    decoded=decoded.lower()
+    if re.search(r'(?:^|[/?#._-])(?:logout|signout|delete|remove|disable|enable|execute|apply|save|create|reset|reboot|shutdown|terminate|block|unblock|approve|revoke|edit|settings|configuration)(?:$|[/?#._-])',decoded):
+        raise AccessDenied('navigation_readonly_route_required')
+
 
 
 def context_of(row):
@@ -32,7 +45,7 @@ def pending_navigation(conn,organization_id,lease_id):
 
 
 def contract(version,urls,context):
-    if not isinstance(version,str) or version not in CONTRACTS:
+    if not isinstance(version,str) or version not in CONTRACTS and version not in {OPERATOR_PAGES,DISCOVERED_PAGES}:
         raise AccessDenied('navigation_contract_not_admitted')
     if type(urls) is not list or not 1<=len(urls)<=20 or any(type(url) is not str for url in urls) or len(set(urls))!=len(urls):
         raise InvalidIdentityInput('invalid_navigation_destinations')
@@ -41,7 +54,8 @@ def contract(version,urls,context):
         approved_context(dict(context,page_url=url))
         parsed=urlsplit(url)
         path=parsed.path+('#'+parsed.fragment if parsed.fragment else '')
-        if (parsed.scheme,parsed.netloc)!=(original.scheme,original.netloc) or path not in CONTRACTS[version]:
+        if version in {OPERATOR_PAGES,DISCOVERED_PAGES}: readonly_page(url)
+        if (parsed.scheme,parsed.netloc)!=(original.scheme,original.netloc) or version not in {OPERATOR_PAGES,DISCOVERED_PAGES} and path not in CONTRACTS[version]:
             raise AccessDenied('navigation_destination_not_admitted')
     return urls
 
@@ -53,6 +67,10 @@ def public_intent(row,committed=False):
 
 
 class BrowserNavigationService(BrowserObservationService):
+    def review_browser_text(self,human,peer,context,observation_id):
+        from gabriel.identity.browser_text_review import process
+        return process(self,human,peer,context,observation_id)
+
     def review_browser_specialists(self,human,peer,context,observation_id):
         from gabriel.identity.browser_specialists import process
         return process(self,human,peer,context,observation_id)
@@ -70,7 +88,7 @@ class BrowserNavigationService(BrowserObservationService):
                 raise AccessDenied('navigation_outcome_unresolved')
             _audit(conn,'browser.navigation_plan_read',p,grant['id'])
             return dict(id=str(grant['id']),contract_version=grant['contract_version'],destinations=grant['destinations'],
-                max_moves=grant['max_moves'],expires_at=iso(grant['expires_at']),sharing_approved=lease['intake_enabled'],source_verified=False)
+                max_moves=grant['max_moves'],monitoring_approved=lease['scheduled_review_enabled'],expires_at=iso(grant['expires_at']),sharing_approved=lease['intake_enabled'],source_verified=False)
 
     def gateway_context(self,conn,p,lease,initial_context):
         current=context_of(lease)
@@ -112,10 +130,12 @@ class BrowserNavigationService(BrowserObservationService):
 
     def grant_navigation(self,human,peer,request_id,version,destinations,*,max_moves=10):
         request_id=identifier(request_id)
-        if type(max_moves) is not int or not 1<=max_moves<=20: raise InvalidIdentityInput('invalid_navigation_limit')
+        if type(max_moves) is not int or not 1<=max_moves<=1000: raise InvalidIdentityInput('invalid_navigation_limit')
         with connection(self._dsn) as conn:
             p,lease=self._actor(conn,human,peer)
             task=task_record(conn,p.organization_id,lease['task_id']);available(task)
+            if max_moves>20 and not lease['scheduled_review_enabled']: raise AccessDenied('scheduled_navigation_consent_required')
+            if version==DISCOVERED_PAGES and not lease['scheduled_review_enabled']: raise AccessDenied('discovery_consent_required')
             contract(version,destinations,context_of(lease))
             old=conn.execute('SELECT * FROM gabriel_identity.browser_navigation_grants WHERE organization_id=%s AND lease_id=%s',
                 (p.organization_id,lease['id'])).fetchone()
@@ -136,7 +156,14 @@ class BrowserNavigationService(BrowserObservationService):
         with connection(self._dsn) as conn:
             p,lease=self._actor(conn,human,peer)
             grant,at=self._grant(conn,p,lease)
-            if destination_url not in grant['destinations']: raise AccessDenied('navigation_destination_not_granted')
+            if grant['contract_version']==DISCOVERED_PAGES:
+                contract(DISCOVERED_PAGES,[destination_url],context_of(lease))
+                if destination_url not in grant['destinations']:
+                    conn.execute('''INSERT INTO gabriel_identity.browser_discovered_destinations
+                        (organization_id,grant_id,destination_url,source_url,created_by) VALUES (%s,%s,%s,%s,%s)
+                        ON CONFLICT DO NOTHING''',(p.organization_id,grant['id'],destination_url,lease['page_url'],p.user_id))
+                    _audit(conn,'browser.readonly_destination_discovered',p,grant['id'])
+            elif destination_url not in grant['destinations']: raise AccessDenied('navigation_destination_not_granted')
             if conn.execute("SELECT 1 FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s AND state='prepared'",
                             (p.organization_id,lease['id'])).fetchone():
                 raise AccessDenied('browser_capture_outcome_unresolved')

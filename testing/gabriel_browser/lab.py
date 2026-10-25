@@ -7,6 +7,7 @@ from html import escape
 import http.client
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import socket
@@ -114,7 +115,14 @@ def console_app(environ,start_response):
     if CONSOLE_MODES.get(path)=='slow': time.sleep(2)
     if CONSOLE_MODES.get(path)=='redirect':
         start_response('302 Found',[('Location','/outside'),('Content-Length','0')]);return [b'']
-    account='Other generated account' if CONSOLE_MODES.get(path)=='wrong_account' else 'Generated lab account'
+    if CONSOLE_MODES.get(path)=='agnostic':
+        body=('<!doctype html><html><head><title>Harbor Security Workspace</title></head><body><p>Generated lab account</p>'
+            '<h1>Investigation overview</h1><p>Failed login for generated-user</p>'
+            '<a href="/unfamiliar-audit?view=recent">Recent activity</a> '
+            '<a href="/configuration">Settings</a> <a href="/logout">Sign out</a> '
+            '<a href="https://outside.invalid/read">External</a></body></html>').encode()
+        start_response('200 OK',[('Content-Type','text/html'),('Content-Length',str(len(body))),('Cache-Control','no-store')]);return [body]
+    account='Other generated account'  if CONSOLE_MODES.get(path)=='wrong_account' else 'Generated lab account'
     section={'/security':'Generated event: unusual sign-in from a lab identity.',
              '/traffic':'Generated traffic: repeated connection failures.',
              '/threats':'Generated threat: suspicious file activity.'}.get(path,'Generated unsupported section.')
@@ -147,18 +155,20 @@ def native_popup(cdp,console_target,origin):
     existing=next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None)
     if existing:
         session=cdp.attach(existing['targetId'])
-        wait_for(lambda:cdp.evaluate(session,"Boolean(document.getElementById('select'))"))
+        wait_for(lambda:cdp.evaluate(session,"document.body?.dataset.gabrielReady==='true'"))
         return session
+    console_session=cdp.attach(console_target)
+    console_title=wait_for(lambda:cdp.evaluate(console_session,'document.title') or None)
     def visible_window():
         cdp.send('Target.activateTarget',{'targetId':console_target})
-        windows=subprocess.run(['xdotool','search','--onlyvisible','--name','Generated Gabriel Lab Console'],capture_output=True,text=True,timeout=5)
+        windows=subprocess.run(['xdotool','search','--onlyvisible','--name',re.escape(console_title)],capture_output=True,text=True,timeout=5)
         return windows.stdout.splitlines()[0] if windows.stdout.strip() else None
     window=wait_for(visible_window,15)
     subprocess.run(['xdotool','windowactivate','--sync',window],check=True,timeout=5)
     subprocess.run(['xdotool','key','--clearmodifiers','ctrl+shift+y'],check=True,timeout=5)
     target=wait_for(lambda:next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None))
     session=cdp.attach(target['targetId'])
-    wait_for(lambda:cdp.evaluate(session,"Boolean(document.getElementById('select'))"))
+    wait_for(lambda:cdp.evaluate(session,"document.body?.dataset.gabrielReady==='true'"))
     return session
 
 
@@ -188,7 +198,7 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
         cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
         click(cdp,popup,'select')
         scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
-        assert scope['extension_version']=='0.3.0'
+        assert scope['extension_version']=='0.4.0'
         assert scope['page_url']==console_origin+'/security'
         endpoint='https://localhost:'+str(port)
         assert cdp.evaluate(popup,'chrome.permissions.contains({origins:['+json.dumps(endpoint+'/*')+']})')
@@ -307,6 +317,155 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                 except subprocess.TimeoutExpired: process.kill();process.wait(timeout=5)
                 CONSOLE_MODES.clear()
     return checks
+
+
+def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,extension_origin,port):
+    mark(family+':console-agnostic-discovery')
+    CONSOLE_MODES.clear()
+    CONSOLE_MODES['/unfamiliar-dashboard']='agnostic'
+    CONSOLE_MODES['/unfamiliar-audit']='agnostic'
+    for old in cdp.targets():
+        if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
+    tab=cdp.send('Target.createTarget',{'url':console_origin+'/unfamiliar-dashboard'})['targetId']
+    session=cdp.attach(tab);wait_for(lambda:cdp.evaluate(session,'location.href')==console_origin+'/unfamiliar-dashboard' and cdp.evaluate(session,'document.readyState')=='complete')
+    cdp.send('Target.activateTarget',{'targetId':tab})
+    popup=native_popup(cdp,tab,extension_origin)
+    cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
+    click(cdp,popup,'select')
+    scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
+    navigation=BrowserNavigationService(service._dsn,service.store)
+    case=navigation.create_case(human,'Generated unknown console investigation')
+    task=navigation.create_browser_task(human,'Generated console agnostic task',900,100)
+    directory=root/'discovery'
+    endpoint='https://localhost:'+str(port)
+    enrolled=prepare(navigation,human,task['id'],case['id'],scope,endpoint,extension_origin,directory,
+        share_observations=True,monitor_seconds=300,auto_discover=True)
+    with open(root/'discovery.log','w+') as logfile:
+        process=subprocess.Popen([sys.executable,'-m','gabriel.identity.gateway_cli','serve','--configuration',str(directory/'gateway.json'),
+            '--certificate',str(tls['server.pem']),'--key',str(tls['server.key']),'--bind','127.0.0.1:'+str(port)],env=env,stdout=logfile,stderr=logfile)
+        try:
+            def ready():
+                if process.poll() is not None:raise AssertionError('discovery_gateway_exited')
+                try:
+                    with socket.create_connection(('127.0.0.1',port),timeout=.2):return True
+                except OSError:return False
+            wait_for(ready,12)
+            ticket=read_document(directory/'claim.json',private=True)['ticket']
+            cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint)+';document.getElementById("ticket").value='+json.dumps(ticket))
+            click(cdp,popup,'pair');wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
+            before=len(CONSOLE_REQUESTS)
+            result=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"monitor-start",mode:"discover",approved:true})')
+            assert result['ok'],result
+            captured=navigation.list_browser_observations(human,enrolled['lease_id'])['observations']
+            assert len(captured)==2 and all(row['state']=='captured' for row in captured)
+            assert cdp.evaluate(session,'location.href')==console_origin+'/unfamiliar-audit?view=recent'
+            state=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
+            assert state['monitoring']['interface_title']=='Harbor Security Workspace'
+            assert state['tour']['sections'][-1]['text_review']['candidate_count']==1
+            assert state['monitoring']['candidate_count']==1
+            click(cdp,popup,'refresh-tabs')
+            wait_for(lambda:'1 candidate passages requiring assessment' in (text(cdp,popup,'monitor-state') or ''))
+            assert not state['tour']['sections'][-1]['text_review']['incident_confirmed']
+            requests=CONSOLE_REQUESTS[before:]
+            assert all(method=='GET' and path not in {'/configuration','/logout','/outside'} for method,path in requests)
+            assert len(navigation.list_attack_reviews(human,case['id'])['runs'])==0
+            stopped=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"stop"})')
+            assert stopped['ok'] and navigation.get_browser_lease(human,enrolled['lease_id'])['state']=='disconnected'
+            return ['unrecognized_console_without_vendor_selection','unmarked_DOM_interface_identification','automatic_same_origin_link_discovery',
+                'nonsecret_query_route_binding','automatic_evidence_linked_text_review','action_and_external_links_excluded','candidate_is_not_incident_verdict']
+        finally:
+            process.terminate();process.wait(timeout=5)
+            if any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
+            CONSOLE_MODES.clear()
+
+
+def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,extension_origin,port,output):
+    mark(family+':multiple-tab-monitoring')
+    CONSOLE_MODES.clear()
+    navigation=BrowserNavigationService(service._dsn,service.store)
+    case=navigation.create_case(human,'Generated multiple tab scheduled review')
+    endpoint='https://localhost:'+str(port)
+    enrollments=[];tabs=[];contexts=[];logs=[]
+    for index,path in enumerate(('/security','/traffic')):
+        for old in cdp.targets():
+            if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
+        tab=cdp.send('Target.createTarget',{'url':console_origin+path})['targetId'];tabs.append(tab)
+        session=cdp.attach(tab)
+        wait_for(lambda:cdp.evaluate(session,'location.href')==console_origin+path and cdp.evaluate(session,'document.readyState')=='complete')
+        cdp.send('Target.activateTarget',{'targetId':tab})
+        popup=native_popup(cdp,tab,extension_origin)
+        cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
+        click(cdp,popup,'select')
+        scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None));contexts.append(scope)
+        assert scope['page_url']==console_origin+path
+        assert all(previous['tab_id']!=scope['tab_id'] for previous in contexts[:-1])
+        task=navigation.create_browser_task(human,'Generated tab '+str(index),900,20)
+        directory=root/('monitor-'+str(index))
+        enrollments.append(prepare(navigation,human,task['id'],case['id'],scope,endpoint,extension_origin,directory,
+            share_observations=True,monitor_seconds=300))
+    group=root/'monitor-group.json'
+    write_document(group,dict(purpose='gabriel-browser-group-v1',configurations=[str(root/('monitor-'+str(i))/'gateway.json') for i in range(2)]))
+    with open(root/'monitor-group.log','w+') as logfile:
+        process=subprocess.Popen([sys.executable,'-m','gabriel.identity.gateway_cli','serve-group','--configuration',str(group),
+            '--certificate',str(tls['server.pem']),'--key',str(tls['server.key']),'--bind','127.0.0.1:'+str(port)],env=env,stdout=logfile,stderr=logfile)
+        try:
+            def ready():
+                if process.poll() is not None: raise AssertionError('monitor_gateway_exited')
+                try:
+                    with socket.create_connection(('127.0.0.1',port),timeout=.2): return True
+                except OSError:return False
+            wait_for(ready,12)
+            for index,scope in enumerate(contexts):
+                result=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"channel-select",channel_id:'+json.dumps(str(scope['tab_id']))+'})')
+                assert result['ok']
+                ticket=read_document(root/('monitor-'+str(index))/'claim.json',private=True)['ticket']
+                cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint)+';document.getElementById("ticket").value='+json.dumps(ticket))
+                click(cdp,popup,'pair');wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
+                denied=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"monitor-start",mode:"page",approved:false})')
+                assert not denied['ok']
+                enabled=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"monitor-start",mode:"page",approved:true})')
+                assert enabled['ok']
+            def state():return cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
+            snapshot=state()
+            (output/(family+'-generated-monitoring-state.json')).write_text(json.dumps({'state':snapshot,'contexts':contexts},indent=2))
+            assert len(snapshot['channels'])==2 and all(row['paired'] and row['monitoring']['enabled'] for row in snapshot['channels'])
+            # Close the real action popup: alarm-driven capture must not rely on popup timers.
+            popup_target=next(t['targetId'] for t in cdp.targets() if t.get('url')==extension_origin+'/popup.html')
+            cdp.send('Target.closeTarget',{'targetId':popup_target})
+            def observations(index):return navigation.list_browser_observations(human,enrollments[index]['lease_id'])['observations']
+            wait_for(lambda:len(observations(0))==len(observations(1))==1,40)
+            cdp.evaluate(cdp.attach(tabs[0]),'document.querySelector("h1").textContent="Generated changed authentication view";true')
+            wait_for(lambda:len(observations(0))==2,40)
+            assert len(observations(1))==1
+            popup=native_popup(cdp,tabs[0],extension_origin)
+            cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"channel-select",channel_id:'+json.dumps(str(contexts[0]['tab_id']))+'})')
+            stopped=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"stop-tab"})')
+            assert stopped['ok']
+            wait_for(lambda:navigation.get_browser_lease(human,enrollments[0]['lease_id'])['state']=='disconnected')
+            assert navigation.get_browser_lease(human,enrollments[1]['lease_id'])['state']=='active'
+            cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"channel-select",channel_id:'+json.dumps(str(contexts[1]['tab_id']))+'})')
+            cdp.evaluate(popup,'chrome.alarms.clear("gabriel-review")')
+            popup_target=next(t['targetId'] for t in cdp.targets() if t.get('url')==extension_origin+'/popup.html')
+            cdp.send('Target.closeTarget',{'targetId':popup_target})
+            time.sleep(47)
+            popup=native_popup(cdp,tabs[1],extension_origin)
+            assert state()['monitoring']['scheduling_gap']
+            cdp.evaluate(popup,'chrome.alarms.create("gabriel-review",{delayInMinutes:0.01,periodInMinutes:0.5});true')
+            wait_for(lambda:state()['monitoring']['state']=='interrupted',35)
+            assert not state()['monitoring']['enabled'] and len(observations(1))==1
+            cdp.send('Target.closeTarget',{'targetId':tabs[1]})
+            wait_for(lambda:navigation.get_browser_lease(human,enrollments[1]['lease_id'])['state']=='disconnected',15)
+            popup=native_popup(cdp,tabs[0],extension_origin)
+            assert not state()['stored_pairing']
+            logfile.flush()
+            assert human not in (root/'monitor-group.log').read_text()
+            return ['two_independently_paired_tabs','server_and_browser_scheduled_consent','popup_closed_alarm_capture',
+                'changed_content_only_capture','unchanged_content_not_duplicated','stop_one_tab_preserves_other',
+                'actual_scheduler_gap_visible','scheduler_gap_stops_automatic_capture','tab_close_revokes_only_its_lease']
+        finally:
+            process.terminate();process.wait(timeout=5)
+            for tab in tabs:
+                if any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
 
 
 def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected):
@@ -616,10 +775,12 @@ def run_browser(family,executable,output):
             gateway.terminate();gateway.wait(timeout=10);gateway=None
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
                 'https://localhost:'+str(server.server_port),origin,gateway_port)
+            discovery_checks=discovery_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
+            monitoring_checks=monitoring_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port,output)
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
-                'extension_version':'0.3.0','extension_origin':origin,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
+                'extension_version':'0.4.0','extension_origin':origin,'discovery_checks':discovery_checks,'monitoring_checks':monitoring_checks,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','covered_text_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
@@ -650,7 +811,7 @@ def main():
     mark('database-migrate')
     migrate(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']))
     mark('extension-package')
-    metadata=package(SOURCE,output/'gabriel-browser-0.3.0.zip')
+    metadata=package(SOURCE,output/'gabriel-browser-0.4.0.zip')
     (output/'package.json').write_text(json.dumps(metadata,indent=2))
     manager=subprocess.Popen(['openbox'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     try:

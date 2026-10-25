@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Gabriel — The Defender</title><link rel="stylesheet" href="popup.css"></head>
-<body><main><header><h1><span class="eyebrow">◇ Gabriel</span>The Defender</h1><button id="stop" class="stop">Stop / Disconnect</button></header>
+<body><main><header><h1><span class="eyebrow">◇ Gabriel</span>The Defender</h1><button id="stop" class="stop">Stop all tabs</button></header>
 <p id="message" role="status" aria-live="polite">Disconnected. Nothing is shared.</p>
-<p id="scope">No paired organization, case or task.</p>
+<section aria-labelledby="tabs-heading"><h2 id="tabs-heading">Approved tabs</h2><label>Selected source<select id="channels"><option value="">No selected tabs</option></select></label><button id="refresh-tabs">Refresh tab status</button><button id="stop-tab">Stop this tab</button><p id="monitor-state" role="status" aria-live="polite"></p></section><p id="scope">No paired organization, case or task.</p>
 <section aria-labelledby="source-heading"><h2 id="source-heading">01 / Select your source</h2><p>Selected-page sharing. Sign in to external systems yourself. Page content is untrusted evidence.</p>
 <label>Browser <select id="browser"><option value="chrome">Chrome</option><option value="brave">Brave</option></select></label>
 <label>Account label (no secrets)<input id="account" maxlength="64" autocomplete="off"></label>
@@ -24,4 +24,4 @@
 <label><input id="approved" type="checkbox">I reviewed this text and approve sharing it with Gabriel.</label>
 <button id="share">Share reviewed text</button><button id="receipts">Check capture receipts</button>
 <p id="result" role="status" aria-live="polite"></p></section>
-</main><script type="module" src="popup.js"></script></body></html>
+<section aria-labelledby="monitor-heading"><h2 id="monitor-heading">05 / Scheduled investigation</h2><p>Review this tab approximately every 30 seconds while its approval remains valid. Browser sleep and inaccessible content create coverage gaps. Up to 32 changed captures are allowed for automatic discovery, or eight for other modes; unchanged content is not stored again. Plain text is evidence awaiting assessment; only supported typed events receive local specialist review.</p><label>Review scope<select id="monitor-mode"><option value="discover">Identify console and discover read-only pages</option><option value="page">Selected page</option><option value="tour">Previously reviewed section tour</option></select></label><label><input id="monitor-approved" type="checkbox">I approve automatic capture of future minimized visible text in this scope, including automatic discovery of up to 20 read-only pages on this site or the reviewed tour if selected, until pairing expires.</label><button id="monitor-start">Start scheduled review</button><button id="monitor-stop">Pause scheduled review</button></section></main><script type="module" src="popup.js"></script></body></html>

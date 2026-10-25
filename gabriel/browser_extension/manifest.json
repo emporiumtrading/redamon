@@ -1,14 +1,35 @@
 {
   "manifest_version": 3,
-  "name": "Gabriel — The Defender",
-  "version": "0.3.0",
+  "name": "Gabriel \u2014 The Defender",
+  "version": "0.4.0",
   "minimum_chrome_version": "120",
-  "description": "Share selected console evidence and run explicitly approved, bounded section tours with Gabriel.",
-  "permissions": ["activeTab", "scripting", "storage"],
-  "optional_host_permissions": ["https://*/*"],
-  "background": {"service_worker": "worker.js", "type": "module"},
-  "action": {"default_popup": "popup.html", "default_title": "Gabriel — The Defender"},
-  "commands": {"_execute_action": {"suggested_key": {"default": "Ctrl+Shift+Y"}}},
-  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"},
+  "description": "Review explicitly approved console tabs with bounded scheduled evidence collection and visible coverage gaps.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Gabriel \u2014 The Defender"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y"
+      }
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  },
   "incognito": "not_allowed"
 }

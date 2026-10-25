@@ -21,6 +21,24 @@ async function run(operation, extra = {}) {
     if (!value?.ok) throw new Error(value?.error || "Connection lost. Nothing is confirmed.");
     const result = value.result;
     if (operation === "state" && !result.stored_pairing) byId("scope").textContent = "No paired organization, case or task.";
+    if (result.channels) {
+      const select = byId("channels");
+      select.replaceChildren();
+      for (const row of result.channels) {
+        const item = document.createElement("option");
+        item.value = row.id;
+        item.textContent = row.account_label+" · "+new URL(row.page_url).hostname+" · "+(row.monitoring?.scheduling_gap ? "coverage gap" : row.monitoring?.state || (row.paired ? "paired" : "unpaired"));
+        item.selected = row.id===result.selected_channel;
+        select.append(item);
+      }
+      if (!result.channels.length) select.add(new Option("No selected tabs", ""));
+    }
+    if (operation === "state" || operation === "channel-select") {
+      const state = result.monitoring;
+      byId("monitor-state").textContent = state ? "Scheduled review: "+(state.scheduling_gap ? "coverage gap" : state.state)+
+        "; changed captures "+(state.captures || 0)+" of "+(state.max_captures || 8)+(state.last_checked ? "; last checked "+new Date(state.last_checked).toLocaleTimeString() : "")+
+        (state.interface_title ? "; interface: "+state.interface_title+" (page-reported)" : "")+(Number.isInteger(state.candidate_count) ? "; latest captured page: "+state.candidate_count+" candidate passages requiring assessment" : "")+(state.error ? "; "+state.error : "") : "Scheduled review is off.";
+    }
     if (result.organization_id) byId("scope").textContent = "Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id;
     if (["pair","resume"].includes(operation)) paired = true;
     if (operation === "state") paired = result.stored_pairing && !result.paused;
@@ -43,6 +61,15 @@ byId("pair").onclick = () => { const ticket = field("ticket"); byId("ticket").va
 byId("preview").onclick = () => run("preview");
 byId("share").onclick = () => run("share", {content: field("preview-text"), observed_at: observedAt, approved: byId("approved").checked});
 for (const operation of ["status", "receipts", "pause", "resume", "stop"]) byId(operation).onclick = () => run(operation);
+byId("channels").onchange = () => {
+  byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false;
+  byId("navigation-approved").checked = false; byId("monitor-approved").checked = false;
+  run("channel-select", {channel_id: field("channels")});
+};
+byId("refresh-tabs").onclick = () => run("state");
+byId("stop-tab").onclick = () => run("stop-tab").then(()=>run("state"));
+byId("monitor-start").onclick = () => run("monitor-start", {mode: field("monitor-mode"), approved: byId("monitor-approved").checked});
+byId("monitor-stop").onclick = () => run("monitor-stop");
 byId("navigation-plan").onclick = () => run("navigation-plan");
 byId("navigation-run").onclick = () => run("navigation-run", {approved: byId("navigation-approved").checked});
 byId("permission").onclick = async () => {
@@ -55,4 +82,5 @@ byId("permission").onclick = async () => {
 };
 document.addEventListener("visibilitychange", () => { if (document.hidden) { byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false; byId("navigation-approved").checked = false; } });
 setInterval(() => { if (paired && !document.hidden) run("status"); }, 20000);
+document.body.dataset.gabrielReady = "true";
 run("state");

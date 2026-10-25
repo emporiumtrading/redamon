@@ -242,7 +242,7 @@ class Workbench:
         if method=='GET' and path=='/sources':
             result=source_health(self.service,self._token)
             body='<p class="notice">Partial coverage. A recent heartbeat does not establish current page visibility or uninterrupted monitoring. Sources are sampled individually.</p>'
-            body+=table(['Browser','Health','Last heartbeat','Expires','Case'],[(e(row['browser']),e(row['health']),e(row['last_seen'] or 'Never recorded'),e(row['expires_at']),'<a href="/cases/'+e(row['case_id'])+'">'+e(row['case_id'])+'</a>') for row in result['sources']]) if result['sources'] else '<p>No browser sessions recorded.</p>'
+            body+=table(['Browser','Health','Last heartbeat','Captured','Last capture','Scheduled permission','Expires','Case'],[(e(row['browser']),e(row['health']),e(row['last_seen'] or 'Never recorded'),e(row['captured_observations']),e(row['last_capture'] or 'None'),e('Approved; activity unverified' if row['scheduled_permission'] else 'Not approved'),e(row['expires_at']),'<a href="/cases/'+e(row['case_id'])+'">'+e(row['case_id'])+'</a>') for row in result['sources']]) if result['sources'] else '<p>No browser sessions recorded.</p>'
             body+='<p>Showing up to 32 most recent sessions.'+(' Older sessions are omitted.' if result['truncated'] else '')+'</p>'
             return '200 OK',self._page('Browser health and coverage',body,principal),[]
         if method=='GET' and path=='/audit':
@@ -565,6 +565,9 @@ class Workbench:
                     body+=self._form(path+'/answer','Record analyst answer','<input type="hidden" name="question_id" value="'+e(question['id'])+'"><label>Supporting evidence<select name="evidence_id" required>'+options+'</select></label><label>Analyst answer<input name="answer" maxlength="1024" required></label>')
             body+='</section>'
         body+='<h2>Evidence</h2>'+table(['Artifact','Source','Storage'],[(f'<a href="{path}/evidence/{e(row["id"])}">{e(row["id"])}</a>',e(row['source_label']),e(row['storage_state'])) for row in snapshot['evidence']])
+        text_reviews=[row for row in snapshot['evidence'] if row['source_label']=='Browser text candidate passages - unqualified']
+        if text_reviews:
+            body+='<h2>Browser candidate reviews</h2><p>These source-linked local reviews identify candidate passages, not confirmed incidents. Open a review to inspect its quoted evidence and limitations.</p>'+table(['Review evidence','Source','Storage'],[('<a href="'+path+'/evidence/'+e(row['id'])+'">'+e(row['id'])+'</a>',e(row['source_label']),e(row['storage_state'])) for row in text_reviews])
         body+='<h2>Timeline</h2><p>Source and client clocks are unverified. Times do not establish causal ordering.</p>'+table(['Time','Time basis','Event','Evidence'],[(e(row['time']),e(row['time_basis']),e(row['kind']),e(row['evidence_id'] or '')) for row in snapshot['timeline']])
         body+='<h2>Browser observations</h2>'+table(['Observation','State','Visibility'],[(e(row['id']),e(row['state']),e(row['coverage'])) for row in snapshot['browser_observations']])
         return '200 OK',self._page(snapshot['case']['title'],body,principal),[]

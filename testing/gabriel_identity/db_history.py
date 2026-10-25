@@ -204,9 +204,34 @@ def remove_v25(conn):
 
 
 def remove_v26(conn):
+    remove_v27(conn)
     conn.execute('DROP TABLE IF EXISTS gabriel_identity.browser_specialist_suites')
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=26').fetchone():
         conn.execute('ALTER TABLE gabriel_identity.browser_event_snapshots DROP CONSTRAINT browser_snapshot_case_observation')
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
         conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version IN ('0.1.0','0.2.0'))")
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=26')
+
+
+def remove_v27(conn):
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=27').fetchone():
+        from pathlib import Path
+        from gabriel.identity import service
+        original=(Path(service.__file__).parent/'schema_v21.sql').read_text()
+        original=original[original.index('CREATE FUNCTION gabriel_identity.apply_browser_navigation'):]
+        conn.execute(original.replace('CREATE FUNCTION gabriel_identity.apply_browser_navigation','CREATE OR REPLACE FUNCTION gabriel_identity.apply_browser_navigation',1))
+        conn.execute('DROP TABLE gabriel_identity.browser_discovered_destinations')
+        conn.execute('DROP FUNCTION gabriel_identity.require_discovered_destination()')
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
+        conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version IN ('0.1.0','0.2.0','0.3.0'))")
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_lease_lifetime')
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP COLUMN discovery_enabled')
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP COLUMN scheduled_review_enabled')
+        conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_check CHECK (expires_at>created_at AND expires_at<=created_at+interval '5 minutes')")
+        conn.execute('ALTER TABLE gabriel_identity.browser_navigation_grants DROP CONSTRAINT navigation_grant_lifetime')
+        conn.execute("ALTER TABLE gabriel_identity.browser_navigation_grants ADD CONSTRAINT browser_navigation_grants_check CHECK (expires_at>created_at AND expires_at<=created_at+interval '5 minutes')")
+        conn.execute('ALTER TABLE gabriel_identity.browser_navigation_grants DROP CONSTRAINT browser_navigation_grants_max_moves_check')
+        conn.execute('ALTER TABLE gabriel_identity.browser_navigation_grants ADD CONSTRAINT browser_navigation_grants_max_moves_check CHECK (max_moves BETWEEN 1 AND 20)')
+        conn.execute('ALTER TABLE gabriel_identity.browser_navigation_intents DROP CONSTRAINT browser_navigation_intents_sequence_check')
+        conn.execute('ALTER TABLE gabriel_identity.browser_navigation_intents ADD CONSTRAINT browser_navigation_intents_sequence_check CHECK (sequence BETWEEN 1 AND 20)')
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=27')
