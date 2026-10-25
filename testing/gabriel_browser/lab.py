@@ -158,8 +158,7 @@ def native_popup(cdp,console_target,origin):
         wait_for(lambda:cdp.evaluate(session,"document.body?.dataset.gabrielReady==='true'"))
         return session
     console_session=cdp.attach(console_target)
-    console_title=cdp.evaluate(console_session,'document.title')
-    if not console_title:raise AssertionError('test_console_title_required')
+    console_title=wait_for(lambda:cdp.evaluate(console_session,'document.title') or None)
     def visible_window():
         cdp.send('Target.activateTarget',{'targetId':console_target})
         windows=subprocess.run(['xdotool','search','--onlyvisible','--name',re.escape(console_title)],capture_output=True,text=True,timeout=5)
@@ -328,7 +327,7 @@ def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,exten
     for old in cdp.targets():
         if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
     tab=cdp.send('Target.createTarget',{'url':console_origin+'/unfamiliar-dashboard'})['targetId']
-    session=cdp.attach(tab);wait_for(lambda:cdp.evaluate(session,'document.readyState')=='complete')
+    session=cdp.attach(tab);wait_for(lambda:cdp.evaluate(session,'location.href')==console_origin+'/unfamiliar-dashboard' and cdp.evaluate(session,'document.readyState')=='complete')
     cdp.send('Target.activateTarget',{'targetId':tab})
     popup=native_popup(cdp,tab,extension_origin)
     cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
@@ -392,7 +391,7 @@ def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,exte
             if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
         tab=cdp.send('Target.createTarget',{'url':console_origin+path})['targetId'];tabs.append(tab)
         session=cdp.attach(tab)
-        wait_for(lambda:cdp.evaluate(session,'document.readyState')=='complete')
+        wait_for(lambda:cdp.evaluate(session,'location.href')==console_origin+path and cdp.evaluate(session,'document.readyState')=='complete')
         cdp.send('Target.activateTarget',{'targetId':tab})
         popup=native_popup(cdp,tab,extension_origin)
         cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
