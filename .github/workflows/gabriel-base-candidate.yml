@@ -1,0 +1,50 @@
+name: Gabriel minimal base acceptance
+on:
+  pull_request:
+    paths: ['gabriel/identity/Dockerfile', 'compose.gabriel-identity.yml', 'tooling/scripts/gabriel_identity_check.sh', 'tooling/scripts/gabriel_image_scan.sh', '.github/workflows/gabriel-base-candidate.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gabriel-base-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  candidate:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Pin the evaluated minimal base to its actual registry digest
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-base"
+          docker pull python:3.11-alpine
+          base=$(docker image inspect python:3.11-alpine --format '{{index .RepoDigests 0}}')
+          printf '%s\n' "$base" > "$RUNNER_TEMP/gabriel-base/base-image.txt"
+          printf 'GABRIEL_IDENTITY_BASE=%s\n' "$base" >> "$GITHUB_ENV"
+      - name: Build the exact non-root candidate image
+        id: build
+        run: |
+          docker build --build-arg "IDENTITY_BASE=$GABRIEL_IDENTITY_BASE" --target production -f gabriel/identity/Dockerfile -t gabriel-minimal-base .
+          docker image inspect gabriel-minimal-base --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-base/image-id.txt"
+      - name: Scan the actual candidate with the unchanged high-severity threshold
+        if: steps.build.outcome == 'success'
+        run: bash tooling/scripts/gabriel_image_scan.sh "$(cat "$RUNNER_TEMP/gabriel-base/image-id.txt")" "$RUNNER_TEMP/gabriel-base/security"
+      - name: Full isolated component suite and actual PostgreSQL recovery on this base
+        if: (success() || failure()) && steps.build.outcome == 'success'
+        run: bash tooling/scripts/gabriel_identity_check.sh "$RUNNER_TEMP/gabriel-base/identity"
+      - name: Exact candidate installation, HTTPS and fresh-project restore
+        if: (success() || failure()) && steps.build.outcome == 'success'
+        run: python3 testing/gabriel_identity/installation_journey.py "$RUNNER_TEMP/gabriel-base-installation" "$(cat "$RUNNER_TEMP/gabriel-base/image-id.txt")"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-minimal-base-${{ matrix.runner }}
+          path: ${{ runner.temp }}/gabriel-base
+          if-no-files-found: error
+          retention-days: 14
