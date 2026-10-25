@@ -91,7 +91,7 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
         if tool=='wazuh':
             wait(lambda:cdp.evaluate(session,"(()=>{const t=document.body.innerText.toLowerCase();return ['endpoint security','threat intelligence','security operations'].some(x=>t.includes(x));})()"),180)
             phase='readonly_viewer_identity'
-            assert cdp.evaluate(session,"(()=>{const es=[...document.querySelectorAll('button')].filter(e=>e.getClientRects().length&&(e.getAttribute('data-test-subj')==='userMenuButton'||e.querySelector('[class*=euiAvatar]')));if(es.length!==1)return false;es[0].click();return true;})()")
+            assert cdp.evaluate(session,"(()=>{const es=[...document.querySelectorAll('button')].filter(e=>e.getClientRects().length&&(e.getAttribute('data-test-subj')==='userMenuButton'||e.querySelector('[class*=euiAvatar]')));if(es.length!==1)return false;const avatar=es[0].querySelector('[class*=euiAvatar]');(avatar||es[0]).click();return true;})()")
             identity="[...document.querySelectorAll('span,div,p,h1,h2,h3,h4,h5,h6')].some(e=>!e.childElementCount&&e.getClientRects().length&&e.innerText.trim()===USER)".replace('USER',json.dumps(creds['username']))
             wait(lambda:cdp.evaluate(session,identity))
             cdp.send('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27},session)
