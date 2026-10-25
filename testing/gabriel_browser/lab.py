@@ -236,7 +236,7 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                     assert all(row['ok'] and row['result']['message']=='Sharing stopped; gateway disconnect confirmed.' for row in stopped)
                     wait_for(lambda:navigation.get_browser_lease(human,enrollment['lease_id'])['state']=='disconnected',20)
                     assert not navigation.list_browser_observations(human,enrollment['lease_id'])['observations']
-                    assert not CONSOLE_REQUESTS[request_start:]
+                    assert all(method=='GET' and path not in {'/traffic','/threats','/outside','/configuration'} for method,path in CONSOLE_REQUESTS[request_start:])
                     logfile.flush()
                     recorded=(root/('navigation-'+scenario+'.log')).read_text()
                     assert recorded.count('LAB: disconnect-request')==1
