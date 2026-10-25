@@ -1,4 +1,4 @@
-ARG IDENTITY_BASE=python:3.11-slim
+ARG IDENTITY_BASE=python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd
 FROM ${IDENTITY_BASE} AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
@@ -65,7 +65,13 @@ COPY gabriel/identity/__init__.py gabriel/identity/checkpoints.py gabriel/identi
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.checkpoint_cli"]
 
-FROM runtime AS browser-lab
+# Browser binaries require glibc; this test harness installs its own Debian dependencies.
+FROM python:3.11-slim AS browser-lab
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /app
+COPY gabriel/identity/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+COPY --from=runtime /app/gabriel /app/gabriel
 USER 0:0
 ARG LAB_UID=10001
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip libnss3-tools xvfb xauth xdotool openbox scrot fonts-liberation \
