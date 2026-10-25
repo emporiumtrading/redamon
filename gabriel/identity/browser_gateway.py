@@ -261,7 +261,8 @@ class BrowserGatewayGroup:
         from io import BytesIO
         selected=self.gateways[0]
         authorization=environ.get('HTTP_AUTHORIZATION','')
-        matches=[g for g in self.gateways if hmac.compare_digest(authorization,'Bearer '+g._peer)]
+        if not isinstance(authorization,str):authorization=''
+        matches=[g for g in self.gateways if hmac.compare_digest(authorization.encode('utf-8'),('Bearer '+g._peer).encode('ascii'))]
         if len(matches)==1: selected=matches[0]
         elif environ.get('PATH_INFO')=='/v1/browser/claim' and environ.get('REQUEST_METHOD')=='POST':
             length=environ.get('CONTENT_LENGTH','')

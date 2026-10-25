@@ -24,8 +24,10 @@ DISCOVERED_PAGES='operator-discovered-readonly-v1'
 
 def readonly_page(url):
     parsed=urlsplit(url)
-    decoded=unquote(unquote(parsed.path+'#'+parsed.fragment)).lower()
-    if re.search(r'(?:^|[/#._-])(?:logout|signout|delete|remove|disable|enable|execute|apply|save|create|reset|reboot|shutdown|terminate|block|unblock|approve|revoke|edit|settings|configuration)(?:$|[/#._-])',decoded):
+    decoded=parsed.path+'#'+parsed.fragment
+    for _ in range(4):decoded=unquote(decoded)
+    decoded=decoded.lower()
+    if re.search(r'(?:^|[/?#._-])(?:logout|signout|delete|remove|disable|enable|execute|apply|save|create|reset|reboot|shutdown|terminate|block|unblock|approve|revoke|edit|settings|configuration)(?:$|[/?#._-])',decoded):
         raise AccessDenied('navigation_readonly_route_required')
 
 

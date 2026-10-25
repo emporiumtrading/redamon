@@ -59,7 +59,7 @@ export function approvedURL(value) {
   for (let i=0;i<4;i++) decoded=decodeURIComponent(decoded);
   const parameters=[...url.searchParams,...new URLSearchParams(url.hash.includes("?") ? url.hash.split("?").slice(1).join("?") : "")];
   if (decodeURIComponent(decoded)!==decoded || url.protocol!=="https:" || url.username || url.password ||
-      /[\\\x00-\x20\x7f]/.test(decoded) || url.href!==value || parameters.length>16 ||
+      /[\\\x00-\x1f\x7f]/.test(decoded) || /[\\\x00-\x20\x7f]/.test(value) || url.href!==value || parameters.length>16 ||
       parameters.some(([key,val])=>/token|password|passwd|secret|auth|session|cookie|signature|api.?key|otp|^code$|^key$|^action$|^method$|^operation$/i.test(decodeURIComponent(key)) || val.length>256) ||
       /(?:^|[?&#])(?:token|password|access_token|refresh_token|session|api_key|code|key|auth|secret|otp)[^=&]*=/i.test(decoded) ||
       /\/(login|signin|sign-in|oauth|sso|mfa|password|authorize)/i.test(decoded)) throw new Error("Unsupported or sensitive page. Restore access manually and select an approved page.");
@@ -69,8 +69,10 @@ export function approvedURL(value) {
 export function readOnlyURL(value) {
   approvedURL(value);
   const url=new URL(value);
-  const route=decodeURIComponent(decodeURIComponent(url.pathname+"#"+url.hash)).toLowerCase();
-  if (/(?:^|[/#._-])(?:logout|signout|delete|remove|disable|enable|execute|apply|save|create|reset|reboot|shutdown|terminate|block|unblock|approve|revoke|edit|settings|configuration)(?:$|[/#._-])/.test(route))
+  let route=url.pathname+"#"+url.hash;
+  for (let i=0;i<4;i++) route=decodeURIComponent(route);
+  route=route.toLowerCase();
+  if (/(?:^|[/?#._-])(?:logout|signout|delete|remove|disable|enable|execute|apply|save|create|reset|reboot|shutdown|terminate|block|unblock|approve|revoke|edit|settings|configuration)(?:$|[/?#._-])/.test(route))
     throw new Error("This page is outside read-only navigation scope.");
   return value;
 }

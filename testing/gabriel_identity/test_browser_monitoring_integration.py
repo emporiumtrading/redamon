@@ -149,3 +149,17 @@ def test_discovery_is_explicit_and_binds_discovered_query_routes_to_original_ori
     for denied in [url+'&token=generated',url+'&action=delete','https://outside.invalid/alerts']:
         with pytest.raises((AccessDenied,AuthenticationDenied,InvalidIdentityInput)):
             browser.prepare_navigation(tenant.token,lease.token,uuid4(),denied)
+
+
+def test_unrecognized_header_encoding_is_denied_by_group_without_raising(tenant,cases,case,context):
+    one=enrollment(tenant,cases,case,context)
+    status,result=call(BrowserGatewayGroup([one[3]]),'heartbeat',{'context':one[2]},'generated-invalid-ünicode')
+    assert status=='403 Forbidden' and result['status']=='denied'
+
+
+def test_generic_filters_allow_encoded_spaces_but_not_nested_action_routes(context):
+    from gabriel.identity.browser_sessions import approved_context
+    from gabriel.identity.browser_navigation import readonly_page
+    context=dict(context,extension_version='0.4.0',page_url='https://generated-console.invalid/alerts?q=failed%20login')
+    assert approved_context(context)['page_url'].endswith('failed%20login')
+    with pytest.raises(AccessDenied):readonly_page('https://generated-console.invalid/%252564elete')

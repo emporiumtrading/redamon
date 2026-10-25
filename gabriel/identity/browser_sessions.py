@@ -59,7 +59,8 @@ def approved_context(value):
                 or (not modern and (url.query or '?' in decoded)) or '\\' in decoded
                 or (not modern and any(c in unquote(url.fragment,errors='strict') for c in ('=','&')))
                 or (not modern and '#' in decoded and any(c in decoded.split('#',1)[1] for c in ('=','&')))
-                or any(ord(c)<33 or ord(c)==127 for c in decoded)):
+                or any(ord(c)<33 or ord(c)==127 for c in value['page_url'])
+                or any(ord(c)<(32 if modern else 33) or ord(c)==127 for c in decoded)):
             raise ValueError
         url.port
         expected = urlunsplit(('https',url.netloc.lower(),url.path or '/',url.query,url.fragment))
