@@ -154,7 +154,7 @@ def native_popup(cdp,console_target,origin):
     existing=next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None)
     if existing:
         session=cdp.attach(existing['targetId'])
-        wait_for(lambda:cdp.evaluate(session,"Boolean(document.getElementById('select'))"))
+        wait_for(lambda:cdp.evaluate(session,"document.body?.dataset.gabrielReady==='true'"))
         return session
     def visible_window():
         cdp.send('Target.activateTarget',{'targetId':console_target})
@@ -165,7 +165,7 @@ def native_popup(cdp,console_target,origin):
     subprocess.run(['xdotool','key','--clearmodifiers','ctrl+shift+y'],check=True,timeout=5)
     target=wait_for(lambda:next((t for t in cdp.targets() if t.get('url')==origin+'/popup.html'),None))
     session=cdp.attach(target['targetId'])
-    wait_for(lambda:cdp.evaluate(session,"Boolean(document.getElementById('select'))"))
+    wait_for(lambda:cdp.evaluate(session,"document.body?.dataset.gabrielReady==='true'"))
     return session
 
 
@@ -357,6 +357,9 @@ def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,exten
             state=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
             assert state['monitoring']['interface_title']=='Harbor Security Workspace'
             assert state['tour']['sections'][-1]['text_review']['candidate_count']==1
+            assert state['monitoring']['candidate_count']==1
+            click(cdp,popup,'refresh-tabs')
+            wait_for(lambda:'1 candidate passages requiring assessment' in (text(cdp,popup,'monitor-state') or ''))
             assert not state['tour']['sections'][-1]['text_review']['incident_confirmed']
             requests=CONSOLE_REQUESTS[before:]
             assert all(method=='GET' and path not in {'/configuration','/logout','/outside'} for method,path in requests)

@@ -565,6 +565,9 @@ class Workbench:
                     body+=self._form(path+'/answer','Record analyst answer','<input type="hidden" name="question_id" value="'+e(question['id'])+'"><label>Supporting evidence<select name="evidence_id" required>'+options+'</select></label><label>Analyst answer<input name="answer" maxlength="1024" required></label>')
             body+='</section>'
         body+='<h2>Evidence</h2>'+table(['Artifact','Source','Storage'],[(f'<a href="{path}/evidence/{e(row["id"])}">{e(row["id"])}</a>',e(row['source_label']),e(row['storage_state'])) for row in snapshot['evidence']])
+        text_reviews=[row for row in snapshot['evidence'] if row['source_label']=='Browser text candidate passages - unqualified']
+        if text_reviews:
+            body+='<h2>Browser candidate reviews</h2><p>These source-linked local reviews identify candidate passages, not confirmed incidents. Open a review to inspect its quoted evidence and limitations.</p>'+table(['Review evidence','Source','Storage'],[('<a href="'+path+'/evidence/'+e(row['id'])+'">'+e(row['id'])+'</a>',e(row['source_label']),e(row['storage_state'])) for row in text_reviews])
         body+='<h2>Timeline</h2><p>Source and client clocks are unverified. Times do not establish causal ordering.</p>'+table(['Time','Time basis','Event','Evidence'],[(e(row['time']),e(row['time_basis']),e(row['kind']),e(row['evidence_id'] or '')) for row in snapshot['timeline']])
         body+='<h2>Browser observations</h2>'+table(['Observation','State','Visibility'],[(e(row['id']),e(row['state']),e(row['coverage'])) for row in snapshot['browser_observations']])
         return '200 OK',self._page(snapshot['case']['title'],body,principal),[]

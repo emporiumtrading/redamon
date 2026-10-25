@@ -37,7 +37,7 @@ async function run(operation, extra = {}) {
       const state = result.monitoring;
       byId("monitor-state").textContent = state ? "Scheduled review: "+(state.scheduling_gap ? "coverage gap" : state.state)+
         "; changed captures "+(state.captures || 0)+" of "+(state.max_captures || 8)+(state.last_checked ? "; last checked "+new Date(state.last_checked).toLocaleTimeString() : "")+
-        (state.interface_title ? "; interface: "+state.interface_title+" (page-reported)" : "")+(state.error ? "; "+state.error : "") : "Scheduled review is off.";
+        (state.interface_title ? "; interface: "+state.interface_title+" (page-reported)" : "")+(Number.isInteger(state.candidate_count) ? "; latest captured page: "+state.candidate_count+" candidate passages requiring assessment" : "")+(state.error ? "; "+state.error : "") : "Scheduled review is off.";
     }
     if (result.organization_id) byId("scope").textContent = "Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id;
     if (["pair","resume"].includes(operation)) paired = true;
@@ -66,7 +66,8 @@ byId("channels").onchange = () => {
   byId("navigation-approved").checked = false; byId("monitor-approved").checked = false;
   run("channel-select", {channel_id: field("channels")});
 };
-byId("refresh-tabs").onclick = () => run("state");
+byId("refresh-tabs").onclick = () => document.body.dataset.gabrielReady = "true";
+run("state");
 byId("stop-tab").onclick = () => run("stop-tab").then(()=>run("state"));
 byId("monitor-start").onclick = () => run("monitor-start", {mode: field("monitor-mode"), approved: byId("monitor-approved").checked});
 byId("monitor-stop").onclick = () => run("monitor-stop");
@@ -82,4 +83,5 @@ byId("permission").onclick = async () => {
 };
 document.addEventListener("visibilitychange", () => { if (document.hidden) { byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false; byId("navigation-approved").checked = false; } });
 setInterval(() => { if (paired && !document.hidden) run("status"); }, 20000);
+document.body.dataset.gabrielReady = "true";
 run("state");
