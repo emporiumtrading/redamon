@@ -6,6 +6,7 @@ const trusted = chrome.runtime.getURL("popup.html");
 let busy = false;
 let generation = 0;
 let expectedMove = null;
+let stopping = null;
 const inflight = new Set();
 const ready = Promise.all([
   chrome.storage.session.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"}),
@@ -57,7 +58,8 @@ async function current(selected, collect = false) {
 
 async function request(session, operation, body) {
   const controller = new AbortController();
-  inflight.add(controller);
+  // Revocation must survive concurrent Stop/Pause events that cancel ordinary work.
+  if (operation !== "disconnect") inflight.add(controller);
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const response = await fetch(session.endpoint + "/v1/browser/" + operation, {method: "POST", redirect: "error", credentials: "omit",
@@ -76,11 +78,17 @@ async function stop() {
   generation++;
   expectedMove = null;
   for (const controller of inflight) controller.abort();
-  const {session} = await chrome.storage.session.get("session");
-  await chrome.storage.session.clear();
-  if (!session) return {message: "Stopped locally. No active pairing."};
-  try { await request(session, "disconnect", {}); return {message: "Sharing stopped; gateway disconnect confirmed."}; }
-  catch { return {message: "Stopped locally. Gateway disconnect is unconfirmed; lease expiry and human revocation remain authoritative."}; }
+  if (stopping) return stopping;
+  const pendingStop = (async () => {
+    const {session} = await chrome.storage.session.get("session");
+    await chrome.storage.session.clear();
+    if (!session) return {message: "Stopped locally. No active pairing."};
+    try { await request(session, "disconnect", {}); return {message: "Sharing stopped; gateway disconnect confirmed."}; }
+    catch { return {message: "Stopped locally. Gateway disconnect is unconfirmed; lease expiry and human revocation remain authoritative."}; }
+  })();
+  stopping = pendingStop;
+  try { return await pendingStop; }
+  finally { if (stopping === pendingStop) stopping = null; }
 }
 
 async function handle(message) {
