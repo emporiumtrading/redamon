@@ -28,9 +28,9 @@ The interface uses Gabriel's own halo and winged-shield emblem, midnight-blue su
 | --- | --- |
 | Analyst workbench | Cases, assignments, investigation questions, evidence, timeline, provenance and metadata reports |
 | Evidence | Encrypted storage, integrity checks, custody records and scoped content access |
-| Browser companion | Approved page selection, pairing, minimized-text preview/sharing, bounded tours, Pause and Stop |
+| Browser companion | Up to eight paired tabs, popup-closed scheduled review, same-origin read-only discovery, changed-content capture, Pause and Stop |
 | Specialists | Evidence-linked local assessments with explicit abstentions and limitations |
-| Organizational knowledge | Proposed memory, human review and forgetting controls |
+| Organizational knowledge | Automatic browser proposals, human review, approved-reference context in later reviews, expiry and forgetting controls |
 | Operations | Owner enrollment, role-scoped access, audit history, spending controls and tested backup/restore paths |
 
 The current source is a controlled manual-test candidate. Production AI qualification, operational/security acceptance and native Mac UAT remain open. Browser observations are partial; a heartbeat is not proof of uninterrupted visibility. Adding a provider key does not activate an unqualified model.
