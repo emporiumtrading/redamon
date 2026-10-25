@@ -50,7 +50,7 @@ assert c['services']['case-data']['volumes'][0]['source']=='evidence_data'
 print('PASS: private network; separate evidence/provider keys and encrypted evidence volume')
 PY
 "${compose[@]}" --profile test build identity identity-tests
-docker build --build-arg "IDENTITY_BASE=${GABRIEL_IDENTITY_BASE:-python:3.11-slim}" -f gabriel/identity/Dockerfile --target checkpoint-signer -t gabriel-checkpoint-signer:dev .
+docker build --build-arg "IDENTITY_BASE=${GABRIEL_IDENTITY_BASE:-python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd}" -f gabriel/identity/Dockerfile --target checkpoint-signer -t gabriel-checkpoint-signer:dev .
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
     --entrypoint python gabriel-checkpoint-signer:dev -c \
     "import importlib.util; from gabriel.identity.checkpoints import new_keypair,seal,verify; assert importlib.util.find_spec('psycopg') is None; assert importlib.util.find_spec('gabriel.identity.service') is None; print('PASS: offline signer excludes database drivers and application services')"

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import ssl
 import sys
+import time
 
 phase='configuration'
 
@@ -26,6 +27,11 @@ def main():
             response=conn.getresponse();body=response.read(1048576)
             if response.status!=expected:
                 print('Expected HTTP '+str(expected)+' observed '+str(response.status),file=sys.stderr)
+                # Numeric vendor error identifiers diagnose auth without exposing tokens or bodies.
+                try:
+                    error=json.loads(body).get('error')
+                    if type(error) is int: print('Wazuh error code '+str(error),file=sys.stderr)
+                except (ValueError,AttributeError): pass
                 raise ValueError('permission_or_setup_check_failed')
             return None if method=='HEAD' else body.decode() if raw else json.loads(body)
         finally: conn.close()
@@ -57,6 +63,8 @@ def main():
     rule=api('POST','/security/rules',dict(name=user,rule={'FIND':{'user_name':user}}))['data']['affected_items']
     if len(rule)!=1: raise ValueError('viewer_rule_missing')
     api('POST','/security/roles/'+str(matches[0]['id'])+'/rules?rule_ids='+str(rule[0]['id']))
+    # Wazuh 4.14.9 invalidates run_as tokens through the role-change second (strict nbf > cutoff).
+    time.sleep(1.1)
     viewer_token=request('localhost',55000,api_context,'POST','/security/user/authenticate/run_as?raw=true',
         basic(config['api_username'],config['api_password']),dict(name=user,auth=dict(user_name=user)),raw=True)
     phase='server_agents_read'
