@@ -146,6 +146,15 @@ def test_discovery_is_explicit_and_binds_discovered_query_routes_to_original_ori
     assert approved_context(dict(scope,page_url=url))['page_url']==url
     intent=browser.prepare_navigation(tenant.token,lease.token,uuid4(),url)
     assert intent['destination_url']==url
+    moved=dict(scope,page_url=url,document_id=str(uuid4()))
+    completed=browser.complete_navigation(tenant.token,lease.token,intent['id'],moved)
+    assert completed['current'] and browser.heartbeat_browser(lease.token,moved)
+    from datetime import datetime,timezone
+    captured=browser.observe_browser(tenant.token,lease.token,dict(schema_version=1,operation='browser.observe',request_id=str(uuid4()),
+        sequence=1,context=moved,observed_at=datetime.now(timezone.utc).isoformat(),visibility='partial',client_minimized=True,
+        content='Generated lab account\nFailed login for generated-user'))
+    assert captured['evidence_id']
+    assert browser.review_browser_text(tenant.token,lease.token,moved,captured['observation_id'])['candidate_count']==1
     for denied in [url+'&token=generated',url+'&action=delete','https://outside.invalid/alerts']:
         with pytest.raises((AccessDenied,AuthenticationDenied,InvalidIdentityInput)):
             browser.prepare_navigation(tenant.token,lease.token,uuid4(),denied)
@@ -163,3 +172,23 @@ def test_generic_filters_allow_encoded_spaces_but_not_nested_action_routes(conte
     context=dict(context,extension_version='0.4.0',page_url='https://generated-console.invalid/alerts?q=failed%20login')
     assert approved_context(context)['page_url'].endswith('failed%20login')
     with pytest.raises(AccessDenied):readonly_page('https://generated-console.invalid/%252564elete')
+
+
+def test_database_discovery_receipts_reject_other_origins_and_enforce_page_budget(tenant,cases,case,context):
+    browser,lease,scope,gateway,ticket=enrollment(tenant,cases,case,context,monitoring_approved=True,discovery_approved=True)
+    assert call(gateway,'claim',{'ticket':ticket,'context':scope})[0]=='200 OK'
+    plan=browser.navigation_plan(tenant.token,lease.token,scope)
+    from urllib.parse import urlsplit
+    url=urlsplit(scope['page_url']);origin=url.scheme+'://'+url.netloc
+    statement='''INSERT INTO gabriel_identity.browser_discovered_destinations
+        (organization_id,grant_id,destination_url,source_url,created_by) VALUES (%s,%s,%s,%s,%s)'''
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute(statement,(tenant.org,plan['id'],'https://outside.invalid/alerts',scope['page_url'],tenant.owner))
+    with psycopg.connect(tenant.db.app) as conn:
+        for i in range(19):conn.execute(statement,(tenant.org,plan['id'],origin+'/read-'+str(i),scope['page_url'],tenant.owner))
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.CheckViolation):conn.execute(statement,(tenant.org,plan['id'],origin+'/read-20',scope['page_url'],tenant.owner))
+    for statement in ['DELETE FROM gabriel_identity.browser_discovered_destinations','UPDATE gabriel_identity.browser_discovered_destinations SET source_url=source_url']:
+        with psycopg.connect(tenant.db.app) as conn:
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):conn.execute(statement)

@@ -158,6 +158,11 @@ class BrowserNavigationService(BrowserObservationService):
             grant,at=self._grant(conn,p,lease)
             if grant['contract_version']==DISCOVERED_PAGES:
                 contract(DISCOVERED_PAGES,[destination_url],context_of(lease))
+                if destination_url not in grant['destinations']:
+                    conn.execute('''INSERT INTO gabriel_identity.browser_discovered_destinations
+                        (organization_id,grant_id,destination_url,source_url,created_by) VALUES (%s,%s,%s,%s,%s)
+                        ON CONFLICT DO NOTHING''',(p.organization_id,grant['id'],destination_url,lease['page_url'],p.user_id))
+                    _audit(conn,'browser.readonly_destination_discovered',p,grant['id'])
             elif destination_url not in grant['destinations']: raise AccessDenied('navigation_destination_not_granted')
             if conn.execute("SELECT 1 FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s AND state='prepared'",
                             (p.organization_id,lease['id'])).fetchone():

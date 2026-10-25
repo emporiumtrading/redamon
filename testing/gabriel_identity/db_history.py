@@ -215,6 +215,13 @@ def remove_v26(conn):
 
 def remove_v27(conn):
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=27').fetchone():
+        from pathlib import Path
+        from gabriel.identity import service
+        original=(Path(service.__file__).parent/'schema_v21.sql').read_text()
+        original=original[original.index('CREATE FUNCTION gabriel_identity.apply_browser_navigation'):]
+        conn.execute(original.replace('CREATE FUNCTION gabriel_identity.apply_browser_navigation','CREATE OR REPLACE FUNCTION gabriel_identity.apply_browser_navigation',1))
+        conn.execute('DROP TABLE gabriel_identity.browser_discovered_destinations')
+        conn.execute('DROP FUNCTION gabriel_identity.require_discovered_destination()')
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
         conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version IN ('0.1.0','0.2.0','0.3.0'))")
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_lease_lifetime')
