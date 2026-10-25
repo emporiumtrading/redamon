@@ -173,7 +173,7 @@ def text(cdp,popup,identifier):
 def navigation_journey(cdp,family,service,human,tls,root,env,console_target,console_session,console_origin,extension_origin,port):
     checks=[]
     navigation=BrowserNavigationService(service._dsn,service.store)
-    for scenario in ('success','correlate','wrong_account','redirect','stop'):
+    for scenario in ('stop_race','success','correlate','wrong_account','redirect','stop'):
         mark(family+':navigation-'+scenario)
         CONSOLE_MODES.clear()
         if scenario in {'wrong_account','redirect'}: CONSOLE_MODES['/threats']=scenario
@@ -231,6 +231,18 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                     checks.append('tour_denies_unchecked_consent')
                 cdp.evaluate(popup,'document.getElementById("navigation-approved").checked=true')
                 request_start=len(CONSOLE_REQUESTS)
+                if scenario=='stop_race':
+                    stopped=cdp.evaluate(popup,"Promise.all([chrome.runtime.sendMessage({operation:'stop'}),chrome.runtime.sendMessage({operation:'stop'}),chrome.runtime.sendMessage({operation:'pause'}),chrome.runtime.sendMessage({operation:'stop'})]).then(results=>[results[0],results[1],results[3]])")
+                    assert all(row['ok'] and row['result']['message']=='Sharing stopped; gateway disconnect confirmed.' for row in stopped)
+                    wait_for(lambda:navigation.get_browser_lease(human,enrollment['lease_id'])['state']=='disconnected',20)
+                    assert not navigation.list_browser_observations(human,enrollment['lease_id'])['observations']
+                    assert all(method=='GET' and path not in {'/traffic','/threats','/outside','/configuration'} for method,path in CONSOLE_REQUESTS[request_start:])
+                    logfile.flush()
+                    recorded=(root/('navigation-'+scenario+'.log')).read_text()
+                    assert recorded.count('LAB: disconnect-request')==1
+                    assert human not in recorded and peer not in recorded and ticket not in recorded
+                    checks.append('concurrent_stop_pause_shares_one_confirmed_revocation')
+                    continue
                 click(cdp,popup,'navigation-run')
                 if scenario in {'success','correlate'}:
                     def captured_sections():
