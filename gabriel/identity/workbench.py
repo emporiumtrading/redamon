@@ -304,7 +304,7 @@ class Workbench:
                 return '303 See Other',b'',[('Location',path)]
             if method!='GET' or operation: raise AccessDenied('workbench_route_denied')
             writable=principal.role!='viewer' and case['case']['state']=='open'
-            body='<p class="notice">Reviewed reference data grants no authority and does not establish source truth. Forget and reset remove retrieval; encrypted source evidence and audit history remain under case retention and legal holds.</p>'
+            body='<p class="notice">Browser investigations automatically propose candidate passages here. Only explicitly approved references are reused in later browser review context, with up to eight references per review. This is reviewed learning, not model training. Reviewed reference data grants no authority and does not establish source truth. Forget and reset remove future retrieval; encrypted source evidence and historical review context remain under case retention and legal holds.</p>'
             if writable:
                 options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in case['evidence'] if row['state']=='ready' and row['storage_state']=='active' and row['byte_length']<=4096)
                 if options:
@@ -568,6 +568,7 @@ class Workbench:
         text_reviews=[row for row in snapshot['evidence'] if row['source_label']=='Browser text candidate passages - unqualified']
         if text_reviews:
             body+='<h2>Browser candidate reviews</h2><p>These source-linked local reviews identify candidate passages, not confirmed incidents. Open a review to inspect its quoted evidence and limitations.</p>'+table(['Review evidence','Source','Storage'],[('<a href="'+path+'/evidence/'+e(row['id'])+'">'+e(row['id'])+'</a>',e(row['source_label']),e(row['storage_state'])) for row in text_reviews])
+            body+='<p><a href="'+path+'/memory">Review learning proposals and approved references</a>. Later browser reviews attach approved reference context as separate historical evidence. Forgotten or expired references are excluded from new context.</p>'
         body+='<h2>Timeline</h2><p>Source and client clocks are unverified. Times do not establish causal ordering.</p>'+table(['Time','Time basis','Event','Evidence'],[(e(row['time']),e(row['time_basis']),e(row['kind']),e(row['evidence_id'] or '')) for row in snapshot['timeline']])
         body+='<h2>Browser observations</h2>'+table(['Observation','State','Visibility'],[(e(row['id']),e(row['state']),e(row['coverage'])) for row in snapshot['browser_observations']])
         return '200 OK',self._page(snapshot['case']['title'],body,principal),[]

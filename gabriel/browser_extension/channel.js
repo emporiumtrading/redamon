@@ -318,8 +318,8 @@ async function waitForDestination(selected, destination, deadline, revision, ver
 
 function publicMonitoring(value) {
   if (!value) return null;
-  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id} = value;
-  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,
+  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning} = value;
+  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning,
     coverage: "partial", scheduling_gap: Boolean(enabled && Date.now()-last_tick>45000)};
 }
 
@@ -369,7 +369,7 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
           stillCurrent(revision);
           tour.sections.at(-1).text_review=reviewed;
           const {monitoring: latest}=await storage.get("monitoring");
-          await persist({tour,monitoring:{...latest,candidate_count:reviewed.candidate_count,review_evidence_id:reviewed.review_evidence_id}},revision);
+          await persist({tour,monitoring:{...latest,candidate_count:reviewed.candidate_count,review_evidence_id:reviewed.review_evidence_id,learning:reviewed.learning}},revision);
         }
         await storage.remove("pending");
         if (deduplicate) {

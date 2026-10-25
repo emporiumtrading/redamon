@@ -52,9 +52,12 @@ def process(service,human,peer,context,observation_id):
     with connection(service._dsn) as conn:bound(conn)
     holder=service.acquire(human,case_id,uuid5(observation_id,VERSION),canonical(value).decode(),
         'Browser text candidate passages - unqualified',approved=True,parent_id=parent_id,redaction_state='user_declared_redacted')
+    from gabriel.identity.browser_memory import integrate
+    with connection(service._dsn) as conn:bound(conn)
+    learning=integrate(service,human,observation_id,value,holder['id'])
     with connection(service._dsn) as conn:
         p,_=bound(conn)
         _audit(conn,'browser.text_candidates_reviewed',p,observation_id)
     return dict(review_evidence_id=str(holder['id']),candidate_count=len(value['findings']),
         families=sorted({row['family'] for row in value['findings']}),omitted_matches=value['omitted_matches'],
-        source_verified=False,quality_qualified=False,incident_confirmed=False,model_cost_usd='0')
+        source_verified=False,quality_qualified=False,incident_confirmed=False,model_cost_usd='0',learning=learning)

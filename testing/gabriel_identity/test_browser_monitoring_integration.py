@@ -192,3 +192,67 @@ def test_database_discovery_receipts_reject_other_origins_and_enforce_page_budge
     for statement in ['DELETE FROM gabriel_identity.browser_discovered_destinations','UPDATE gabriel_identity.browser_discovered_destinations SET source_url=source_url']:
         with psycopg.connect(tenant.db.app) as conn:
             with pytest.raises(psycopg.errors.InsufficientPrivilege):conn.execute(statement)
+
+
+def captured_text(browser,tenant,lease,scope,sequence,content):
+    from datetime import datetime,timezone
+    observation=browser.observe_browser(tenant.token,lease.token,dict(schema_version=1,operation='browser.observe',
+        request_id=str(uuid4()),sequence=sequence,context=scope,observed_at=datetime.now(timezone.utc).isoformat(),
+        visibility='partial',client_minimized=True,content=content))
+    return browser.review_browser_text(tenant.token,lease.token,scope,observation['observation_id'])
+
+
+def test_browser_learning_requires_review_then_reuses_and_forgets_references(tenant,cases,case,context):
+    from gabriel.identity.model_protocol import decode
+    browser,lease,scope,_,_=enrollment(tenant,cases,case,context,monitoring_approved=True)
+    browser.connect_browser(lease.token,scope)
+    first=captured_text(browser,tenant,lease,scope,1,'Generated lab account\nFailed login for generated-user')
+    learning=first['learning']
+    assert learning['proposal_state']=='proposed' and learning['reviewed_reference_count']==0
+    assert not learning['automatic_approval'] and not learning['model_training_performed']
+    assert cases.retrieve_memory(tenant.token,case['id'])==[]
+    record=next(r for r in cases.list_memory(tenant.token,case['id'])['records'] if r['id']==learning['proposal_id'])
+    summary=decode(cases.read_evidence(tenant.token,record['evidence_id']).reveal().decode())
+    assert summary['findings'][0]['quote']=='Failed login for generated-user'
+    assert not summary['incident_confirmed'] and not summary['source_verified']
+    cases.review_memory(tenant.token,record['id'],'approved',record['source_digest'],True)
+    second=captured_text(browser,tenant,lease,scope,2,'Generated lab account\nFailed login for another-generated-user')
+    assert second['learning']['reviewed_reference_count']==1
+    dossier=decode(cases.read_evidence(tenant.token,second['learning']['context_evidence_id']).reveal().decode())
+    assert dossier['references'][0]['memory_id']==record['id']
+    assert dossier['references'][0]['source_digest']==record['source_digest']
+    assert decode(dossier['references'][0]['content'])['findings']==summary['findings']
+    assert not dossier['grants_authority'] and not dossier['model_used']
+    cases.forget_memory(tenant.token,record['id'])
+    third=captured_text(browser,tenant,lease,scope,3,'Generated lab account\nNo visible alerts')
+    assert third['learning']['reviewed_reference_count']==0 and third['learning']['context_evidence_id'] is None
+    assert third['learning']['proposal_state']=='no_candidates' and third['learning']['proposal_id'] is None
+
+
+def test_browser_learning_does_not_reuse_other_case_pending_or_rejected_records(tenant,cases,case,context):
+    other=cases.create_case(tenant.token,'Generated other learning case')
+    source=cases.acquire(tenant.token,other['id'],uuid4(),'Generated private other-case baseline','Generated baseline',approved=True)
+    row=cases.propose_memory(tenant.token,other['id'],source['id'],uuid4(),'fact','case','generated.other')
+    cases.review_memory(tenant.token,row['id'],'approved',row['source_digest'],True)
+    browser,lease,scope,_,_=enrollment(tenant,cases,case,context,monitoring_approved=True)
+    browser.connect_browser(lease.token,scope)
+    one=captured_text(browser,tenant,lease,scope,1,'Failed login for generated-user')
+    assert one['learning']['reviewed_reference_count']==0
+    pending=next(r for r in cases.list_memory(tenant.token,case['id'])['records'] if r['id']==one['learning']['proposal_id'])
+    cases.review_memory(tenant.token,pending['id'],'rejected',pending['source_digest'],True)
+    two=captured_text(browser,tenant,lease,scope,2,'Failed login for next-generated-user')
+    assert two['learning']['reviewed_reference_count']==0
+
+
+def test_browser_learning_proposal_bounds_unicode_bytes_without_inventing_quotes(tenant,cases,case,context):
+    import json
+    browser,lease,scope,_,_=enrollment(tenant,cases,case,context,monitoring_approved=True)
+    browser.connect_browser(lease.token,scope)
+    quote='Failed login '+('界'*450)
+    result=captured_text(browser,tenant,lease,scope,1,(quote+'\n')*8)
+    record=next(r for r in cases.list_memory(tenant.token,case['id'])['records'] if r['id']==result['learning']['proposal_id'])
+    raw=cases.read_evidence(tenant.token,record['evidence_id']).reveal()
+    assert len(raw)<=4096
+    summary=json.loads(raw)
+    assert summary['findings'] and all(r['quote']==quote for r in summary['findings'])
+    assert summary['omitted_findings']+len(summary['findings'])==8 and summary['omitted_findings']>0
