@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import ssl
 import sys
+import time
 
 phase='configuration'
 
@@ -62,6 +63,8 @@ def main():
     rule=api('POST','/security/rules',dict(name=user,rule={'FIND':{'user_name':user}}))['data']['affected_items']
     if len(rule)!=1: raise ValueError('viewer_rule_missing')
     api('POST','/security/roles/'+str(matches[0]['id'])+'/rules?rule_ids='+str(rule[0]['id']))
+    # Wazuh 4.14.9 invalidates run_as tokens through the role-change second (strict nbf > cutoff).
+    time.sleep(1.1)
     viewer_token=request('localhost',55000,api_context,'POST','/security/user/authenticate/run_as?raw=true',
         basic(config['api_username'],config['api_password']),dict(name=user,auth=dict(user_name=user)),raw=True)
     phase='server_agents_read'
