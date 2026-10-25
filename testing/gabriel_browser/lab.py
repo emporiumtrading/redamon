@@ -363,8 +363,12 @@ def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,exten
             assert state['monitoring']['interface_title']=='Harbor Security Workspace'
             assert state['tour']['sections'][-1]['text_review']['candidate_count']==1
             assert state['monitoring']['candidate_count']==1
+            assert state['monitoring']['learning']['proposal_state']=='proposed'
+            assert state['monitoring']['learning']['reviewed_reference_count']==0
+            assert len(navigation.list_memory(human,case['id'])['records'])==1
             click(cdp,popup,'refresh-tabs')
             wait_for(lambda:'1 candidate passages requiring assessment' in (text(cdp,popup,'monitor-state') or ''))
+            assert 'learning: proposed; 0 reviewed references attached' in text(cdp,popup,'monitor-state')
             assert not state['tour']['sections'][-1]['text_review']['incident_confirmed']
             requests=CONSOLE_REQUESTS[before:]
             assert all(method=='GET' and path not in {'/configuration','/logout','/outside'} for method,path in requests)
@@ -372,7 +376,8 @@ def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,exten
             stopped=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"stop"})')
             assert stopped['ok'] and navigation.get_browser_lease(human,enrolled['lease_id'])['state']=='disconnected'
             return ['unrecognized_console_without_vendor_selection','unmarked_DOM_interface_identification','automatic_same_origin_link_discovery',
-                'nonsecret_query_route_binding','automatic_evidence_linked_text_review','action_and_external_links_excluded','candidate_is_not_incident_verdict']
+                'nonsecret_query_route_binding','automatic_evidence_linked_text_review','action_and_external_links_excluded','candidate_is_not_incident_verdict',
+                'automatic_learning_proposal_not_approved','visible_reviewed_learning_status']
         finally:
             process.terminate();process.wait(timeout=5)
             if any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
