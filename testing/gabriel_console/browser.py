@@ -89,7 +89,8 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
         wait(lambda:cdp.evaluate(session,"document.readyState==='complete'"))
         phase='application_content'
         if tool=='wazuh':
-            wait(lambda:cdp.evaluate(session,"(()=>{const t=document.body.innerText.toLowerCase();return ['endpoint security','threat intelligence','security operations'].some(x=>t.includes(x));})()"),180)
+            ready=wait(lambda:cdp.evaluate(session,"(()=>{const t=document.body.innerText.toLowerCase();if(t.includes('security_exception')&&t.includes('go to settings'))return 'permission_error';return ['endpoint security','threat intelligence','security operations'].some(x=>t.includes(x))?'ready':null;})()"),180)
+            assert ready=='ready'
             phase='readonly_viewer_identity'
             assert cdp.evaluate(session,"(()=>{const es=[...document.querySelectorAll('button')].filter(e=>e.getClientRects().length&&(e.getAttribute('data-test-subj')==='userMenuButton'||e.querySelector('[class*=euiAvatar]')));if(es.length!==1)return false;const avatar=es[0].querySelector('[class*=euiAvatar]');(avatar||es[0]).click();return true;})()")
             identity="[...document.querySelectorAll('span,div,p,h1,h2,h3,h4,h5,h6')].some(e=>!e.childElementCount&&e.getClientRects().length&&e.innerText.trim()===USER)".replace('USER',json.dumps(creds['username']))
