@@ -66,8 +66,7 @@ byId("channels").onchange = () => {
   byId("navigation-approved").checked = false; byId("monitor-approved").checked = false;
   run("channel-select", {channel_id: field("channels")});
 };
-byId("refresh-tabs").onclick = () => document.body.dataset.gabrielReady = "true";
-run("state");
+byId("refresh-tabs").onclick = () => run("state");
 byId("stop-tab").onclick = () => run("stop-tab").then(()=>run("state"));
 byId("monitor-start").onclick = () => run("monitor-start", {mode: field("monitor-mode"), approved: byId("monitor-approved").checked});
 byId("monitor-stop").onclick = () => run("monitor-stop");
