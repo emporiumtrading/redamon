@@ -1,0 +1,40 @@
+{
+  "source_checkout": "36b216e58602134a1cc80c81388f96d3d5f86464",
+  "source_head": "f46e9a055867d70d1f6628fc9e10ac4f8ae8d7bd",
+  "workflow_run": 40242468585,
+  "artifact_id": 12618140032,
+  "artifact_sha256": "a156f552aeb0754b8e79a42d0fcb16b27ca0d7d64c840534787b9818deb12186",
+  "environment": "Isolated Chrome generated-data browser lab; screenshots are actual rendered UI, not production telemetry or AI qualification.",
+  "images": [
+    {
+      "file": "investigations.png",
+      "title": "Investigation queue",
+      "sha256": "08ca6b147c2161b97ec6d4083ad37da47d0da165b0eea6bab7a9d16d000e671f"
+    },
+    {
+      "file": "case-workspace.png",
+      "title": "Case workspace",
+      "sha256": "7585bdf000bed9b6e142090b48d281a002a647c7f0eecd161cd953e143128e3a"
+    },
+    {
+      "file": "specialist-assessments.png",
+      "title": "Specialist assessments",
+      "sha256": "545b0b7bf12e22012c12d2ddb41499fc7fbc4fc208444f68b4f9370dd61ab39c"
+    },
+    {
+      "file": "spending-controls.png",
+      "title": "Spending controls",
+      "sha256": "ef289cc13e1adfd41695256e5da701669832c0f4688f2bdaae8e62c20b9afe6d"
+    },
+    {
+      "file": "case-provenance.png",
+      "title": "Case provenance",
+      "sha256": "7a2b10423ad2a2d26c0b9d679b747a3e4f675a6856448e14f8bb1005ccec9d67"
+    },
+    {
+      "file": "mobile-case.png",
+      "title": "Mobile layout",
+      "sha256": "2288b1511aabd51ed1d0af950f4f29cb0b04a4a27a7a716c822f64f2ef96c7a4"
+    }
+  ]
+}
