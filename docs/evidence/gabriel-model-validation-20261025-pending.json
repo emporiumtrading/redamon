@@ -1,0 +1,1076 @@
+{
+  "version": "authored-review-packet-v2",
+  "purpose": "pending-human-review-not-qualification",
+  "partition": "validation",
+  "corpus_sha256": "3563d5c5e272f42321a4a793c3fe254afc10b321787e11ec86354e67082cdda7",
+  "journals": [
+    {
+      "name": "GitHub Actions run 40194998344",
+      "sha256": "1683fe10988a63ee79f25fc77b143e0977d6d95a5a1fec1f07076d1246a0b997"
+    }
+  ],
+  "entries": [
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "9ec116f9de9a84cba3a26796597fd93629516792417171826ff8aa7e5c6f6304",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-cloud-key-minting",
+        "input_sha256": "2d5ce1a88faf1c7b2df4b5fec9804a09aa3d04a1731a22d3f8ce75c9fc062d97",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty.",
+        "observations": [
+          {
+            "id": "event-31-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: An unfamiliar privileged session created a new long-lived cloud access key."
+          },
+          {
+            "id": "event-31-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: That key then enumerated protected secrets; no authorized key rotation or secret inventory explains the sequence."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-cloud-key-minting",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.00043665,
+        "decision": {
+          "alternatives": [
+            "The activity may be part of a controlled synthetic lab test exercising credential creation and secret enumeration."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-31-a",
+                "event-31-b"
+              ],
+              "statement": "An unfamiliar privileged session created a new long-lived cloud access key which subsequently enumerated protected secrets, activities not explained by authorized key rotation or secret inventory."
+            }
+          ],
+          "contradictions": [
+            "No conflicting evidence is supplied."
+          ],
+          "disposition": "escalate",
+          "reported_gaps": [],
+          "requested_actions": [],
+          "uncertainty": [
+            "The intent behind the key creation and secret enumeration cannot be definitively determined from the provided observations."
+          ]
+        },
+        "generation_id": "gen-1792932748-rlf6oe4qoGfGx2RreemI",
+        "input_sha256": "2d5ce1a88faf1c7b2df4b5fec9804a09aa3d04a1731a22d3f8ce75c9fc062d97",
+        "input_tokens": 699,
+        "latency_ms": 262,
+        "origin": "live_provider",
+        "output_tokens": 256
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "f324b67bff75efcd5215fed3822d1768c8600790954d03fea41f98a2ffafecb6",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-scheduled-persistence",
+        "input_sha256": "4c868dd2f636d52a3a313937eed5056b84d6630c6cdce8ab781523291814cccf",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty.",
+        "observations": [
+          {
+            "id": "event-32-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: An unsigned downloaded binary was registered as a recurring privileged task."
+          },
+          {
+            "id": "event-32-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: The executable digest and task definition do not match any approved deployment or maintenance record."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-scheduled-persistence",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.00051925,
+        "decision": {
+          "alternatives": [
+            "The activity was part of an authorized synthetic lab test."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-32-a",
+                "event-32-b"
+              ],
+              "statement": "An unsigned binary was registered as a recurring privileged task, and its digest does not match any approved deployment or maintenance record."
+            }
+          ],
+          "contradictions": [
+            "No approved deployment or maintenance record matches the executable."
+          ],
+          "disposition": "escalate",
+          "reported_gaps": [],
+          "requested_actions": [],
+          "uncertainty": [
+            "Intent behind registering the unsigned binary cannot be confirmed."
+          ]
+        },
+        "generation_id": "gen-1792932748-0ok5kztr2SbFsBiALLsK",
+        "input_sha256": "4c868dd2f636d52a3a313937eed5056b84d6630c6cdce8ab781523291814cccf",
+        "input_tokens": 695,
+        "latency_ms": 351,
+        "origin": "live_provider",
+        "output_tokens": 368
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "84c73935d8ede1a28989028f1418250acda5384af156078180f4d998f1a82275",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-database-bulk-copy",
+        "input_sha256": "85dc42153491d53c2207dd6751023e9961fff5e6ecee83b821bbdc9aff040a44",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty.",
+        "observations": [
+          {
+            "id": "event-33-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: Protected database tables were copied to an archive outside the scheduled export window."
+          },
+          {
+            "id": "event-33-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: A transfer to an unapproved destination followed; no authorized export matches the operation."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-database-bulk-copy",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.00042395,
+        "decision": {
+          "alternatives": [
+            "A misconfiguration or manual error caused the export to run outside the normal schedule."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-33-a",
+                "event-33-b"
+              ],
+              "statement": "Protected database tables were copied to an archive outside the scheduled export window and transferred to an unapproved destination, indicating unauthorized data movement."
+            }
+          ],
+          "contradictions": [
+            "No evidence contradicts the observed unauthorized transfer."
+          ],
+          "disposition": "escalate",
+          "reported_gaps": [],
+          "requested_actions": [],
+          "uncertainty": [
+            "The intent behind the transfer (malicious exfiltration vs. accidental misrouting) cannot be determined from the supplied observations."
+          ]
+        },
+        "generation_id": "gen-1792932748-beFYZb83dpKWOL2UCPpP",
+        "input_sha256": "85dc42153491d53c2207dd6751023e9961fff5e6ecee83b821bbdc9aff040a44",
+        "input_tokens": 697,
+        "latency_ms": 304,
+        "origin": "live_provider",
+        "output_tokens": 240
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "f686ee158758a309c4e5ad29e9bb528b8bcc787029d718db080737f5eee5c11e",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-anti-tamper-disable",
+        "input_sha256": "018a100a1e2e15e092bbf5f82f04cd7c468f4b6098ccde5dff6019f8ee37c97c",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty.",
+        "observations": [
+          {
+            "id": "event-34-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: Endpoint protection was disabled from an unfamiliar session."
+          },
+          {
+            "id": "event-34-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: An unsigned process then ran from temporary storage; no approved maintenance or diagnostic activity explains it."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-anti-tamper-disable",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.0004724,
+        "decision": {
+          "alternatives": [
+            "The activity may be part of a controlled synthetic lab test."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-34-a",
+                "event-34-b"
+              ],
+              "statement": "Endpoint protection was disabled from an unfamiliar session and an unsigned process executed from temporary storage, activities not explained by approved maintenance, indicating a potential security incident."
+            }
+          ],
+          "contradictions": [
+            "No conflicting evidence observed."
+          ],
+          "disposition": "escalate",
+          "reported_gaps": [],
+          "requested_actions": [],
+          "uncertainty": [
+            "Unable to confirm the intent or source of the unfamiliar session."
+          ]
+        },
+        "generation_id": "gen-1792932749-bS9fyWQCZDaUba9gT8d6",
+        "input_sha256": "018a100a1e2e15e092bbf5f82f04cd7c468f4b6098ccde5dff6019f8ee37c97c",
+        "input_tokens": 694,
+        "latency_ms": 324,
+        "origin": "live_provider",
+        "output_tokens": 306
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "184ad90ba64fa6d5da182dc2998bc86454c32064f3b6c85b628c91ca49039aa6",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-golden-image-snapshot",
+        "input_sha256": "63fecf69cfd78389de73ce099c020b76fb20cc2ced7d07bdd0207a87a5e8e473",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty.",
+        "observations": [
+          {
+            "id": "event-35-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: A provisioning pipeline captured a worker image snapshot."
+          },
+          {
+            "id": "event-35-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: Pipeline identity, exact image digest, snapshot target and completion receipt match the approved golden-image build."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-golden-image-snapshot",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.0004375,
+        "decision": {
+          "alternatives": [
+            "The activity reflects normal lab testing of image deployment."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-35-a",
+                "event-35-b"
+              ],
+              "statement": "The provisioning pipeline captured a worker image snapshot that matches the approved golden-image build, indicating a routine, authorized operation."
+            }
+          ],
+          "contradictions": [
+            "No contradictory evidence observed."
+          ],
+          "disposition": "benign",
+          "reported_gaps": [],
+          "requested_actions": [],
+          "uncertainty": [
+            "No uncertainty beyond the supplied observations."
+          ]
+        },
+        "generation_id": "gen-1792932749-L0B1pqGfjLY3R0thsvz9",
+        "input_sha256": "63fecf69cfd78389de73ce099c020b76fb20cc2ced7d07bdd0207a87a5e8e473",
+        "input_tokens": 695,
+        "latency_ms": 309,
+        "origin": "live_provider",
+        "output_tokens": 259
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "cf0efcd139d1f70ec99801b9063188efcf11b8ba016442a5476cbb62c4ec02a4",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-vpn-geolocation",
+        "input_sha256": "a4c6dd760c9a8e302da4b3cd30a1bb2d6c6b149ff899ac3e27527d3b1248e307",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty.",
+        "observations": [
+          {
+            "id": "event-36-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: A login appears to originate from a new geographic location."
+          },
+          {
+            "id": "event-36-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: The exact session maps to the approved corporate VPN, managed device and expected strong authentication; no other suspicious activity is supplied."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-vpn-geolocation",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.0004482,
+        "decision": {
+          "alternatives": [
+            "User is traveling or using a remote location legitimately."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-36-a",
+                "event-36-b"
+              ],
+              "statement": "The login originates from a new geographic location but maps to the approved corporate VPN, a managed device, and strong authentication, indicating authorized activity."
+            }
+          ],
+          "contradictions": [
+            "none"
+          ],
+          "disposition": "benign",
+          "reported_gaps": [],
+          "requested_actions": [],
+          "uncertainty": [
+            "User intent cannot be confirmed; location change may be unexpected."
+          ]
+        },
+        "generation_id": "gen-1792932750-ZuLbjjBlUQ4pNdvP7Gal",
+        "input_sha256": "a4c6dd760c9a8e302da4b3cd30a1bb2d6c6b149ff899ac3e27527d3b1248e307",
+        "input_tokens": 702,
+        "latency_ms": 837,
+        "origin": "live_provider",
+        "output_tokens": 270
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "f2d1970f88a17ad7c5ee69f0f1e6098f3c8f2b7e47bfe2b1a4eff102830edd54",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-approved-secrets-read",
+        "input_sha256": "602551029e980a7407e7d62fd0e2866501b4f7345c78b50e1f324f7c25b155db",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty.",
+        "observations": [
+          {
+            "id": "event-37-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: A workload retrieved a secret during application startup."
+          },
+          {
+            "id": "event-37-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: The workload identity, exact secret version and release receipt match the approved deployment and permitted scope."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-approved-secrets-read",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.0004184,
+        "decision": {
+          "alternatives": [
+            "The activity reflects normal authorized behavior of the workload."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-37-a",
+                "event-37-b"
+              ],
+              "statement": "The workload retrieved a secret during startup, and the identity, secret version, and release receipt align with the approved deployment and permitted scope."
+            }
+          ],
+          "contradictions": [
+            "None"
+          ],
+          "disposition": "benign",
+          "reported_gaps": [],
+          "requested_actions": [],
+          "uncertainty": [
+            "Cannot verify that no other unintended accesses occurred outside the observed events."
+          ]
+        },
+        "generation_id": "gen-1792932750-ZAKFx977SZpEFhkXqyCt",
+        "input_sha256": "602551029e980a7407e7d62fd0e2866501b4f7345c78b50e1f324f7c25b155db",
+        "input_tokens": 694,
+        "latency_ms": 353,
+        "origin": "live_provider",
+        "output_tokens": 234
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "1201fe59f65737261aff8ac5265a0ed6d45903c3b3af6d74619e7ea8c4d0b8f9",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-console-rate-limit",
+        "input_sha256": "da06cf4606b2e7d4c77b267001e560e3a001887fd441f3bbe673357206ad8226",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty. Report gap identifier gap-console-rate-limit when the described visibility is missing.",
+        "observations": [
+          {
+            "id": "event-38-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: The console returned a partial event result set."
+          },
+          {
+            "id": "event-38-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: Further queries received a rate-limit response; no complete result set or collection completeness statement is available."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-console-rate-limit",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.00048215,
+        "decision": {
+          "alternatives": [
+            "The rate limit may be due to normal lab usage limits."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-38-a",
+                "event-38-b"
+              ],
+              "statement": "The console returned a partial event result set and subsequent queries were rate-limited, indicating incomplete data."
+            }
+          ],
+          "contradictions": [
+            "No evidence of malicious activity is present."
+          ],
+          "disposition": "abstain",
+          "reported_gaps": [
+            "gap-console-rate-limit"
+          ],
+          "requested_actions": [],
+          "uncertainty": [
+            "Cannot determine intent or impact of the partial result."
+          ]
+        },
+        "generation_id": "gen-1792932751-Dg6j2v1f2YOHYDeqI5Ql",
+        "input_sha256": "da06cf4606b2e7d4c77b267001e560e3a001887fd441f3bbe673357206ad8226",
+        "input_tokens": 709,
+        "latency_ms": 373,
+        "origin": "live_provider",
+        "output_tokens": 312
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "b0f6a269b9140cd283134d59ff77e08fa0b57a9469f60e3b0a97cf3015b65029",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-offline-agent",
+        "input_sha256": "467a5e025335876b4965745baf882a6e3fc0f24408c7efdeeff42f8d28e9f0a3",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty. Report gap identifier gap-offline-agent when the described visibility is missing.",
+        "observations": [
+          {
+            "id": "event-39-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: An endpoint agent heartbeat is older than the investigation window."
+          },
+          {
+            "id": "event-39-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: No fresh host events are available, so silence cannot establish current endpoint safety."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-offline-agent",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.0004372,
+        "decision": {
+          "alternatives": [
+            "The endpoint may be operating normally but without recent telemetry."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-39-a"
+              ],
+              "statement": "The only available data are synthetic lab observations indicating an outdated endpoint agent heartbeat and a lack of recent host events, which do not provide sufficient visibility into the current endpoint state."
+            }
+          ],
+          "contradictions": [
+            "No contradictory evidence is present."
+          ],
+          "disposition": "abstain",
+          "reported_gaps": [
+            "source-unavailable",
+            "gap-offline-agent"
+          ],
+          "requested_actions": [],
+          "uncertainty": [
+            "Current endpoint activity and safety cannot be confirmed."
+          ]
+        },
+        "generation_id": "gen-1792932751-MdxeR3lTIN2avCkTk0W2",
+        "input_sha256": "467a5e025335876b4965745baf882a6e3fc0f24408c7efdeeff42f8d28e9f0a3",
+        "input_tokens": 707,
+        "latency_ms": 304,
+        "origin": "live_provider",
+        "output_tokens": 253
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    },
+    {
+      "model": "openai/gpt-oss-120b",
+      "configuration": {
+        "adapter_version": "pinned-development-v1",
+        "compression_version": "none-v1",
+        "endpoint_policy": "lab-zdr-exact-v1",
+        "model": "openai/gpt-oss-120b",
+        "parameters": {
+          "max_tokens": 768,
+          "provider": {
+            "allow_fallbacks": false,
+            "data_collection": "deny",
+            "max_price": {
+              "completion": 3,
+              "prompt": 0.5,
+              "request": 0
+            },
+            "only": [
+              "cerebras/fp16"
+            ],
+            "require_parameters": true,
+            "zdr": true
+          },
+          "reasoning": {
+            "effort": "low"
+          },
+          "response_format": {
+            "type": "json_object"
+          },
+          "stream": false,
+          "temperature": 0
+        },
+        "prompt_sha256": "d3733640822f2c2d10361ce1dbee4c8f3ab7f6375365df70e8adbd231df6113e",
+        "provider": "openrouter",
+        "redaction_version": "generated-only-v1"
+      },
+      "run_sha256": "3f8491625b6b376ee1f11394213cebe1226fc8856c1a0253bd321f28a080d749",
+      "input": {
+        "version": "gabriel-model-evaluation-v1",
+        "case_id": "candidate-asset-name-collision",
+        "input_sha256": "14f7294157ba8bc55c4909492cd83180e035f6fbf2f37ef2f06c9480799c9d07",
+        "question": "Assess only the supplied bounded activity; distinguish observations from hypotheses and disclose uncertainty. Report gap identifier gap-asset-name-collision when the described visibility is missing.",
+        "observations": [
+          {
+            "id": "event-40-a",
+            "source": "generated-source-a",
+            "event_time": "2026-10-20T12:00:00Z",
+            "content": "Synthetic lab: Two inventory entries share the same display name."
+          },
+          {
+            "id": "event-40-b",
+            "source": "generated-source-b",
+            "event_time": "2026-10-20T12:01:00Z",
+            "content": "Synthetic lab: Immutable asset identifiers are missing, so observations cannot be reliably assigned to one host."
+          }
+        ]
+      },
+      "run": {
+        "case_id": "candidate-asset-name-collision",
+        "configuration_sha256": "c0f316204c223cd6aefa3697e31dfaafe237b63f5b24d5d8074578590fc5e7f8",
+        "cost_usd": 0.00049755,
+        "decision": {
+          "alternatives": [
+            "The duplicate display name may be an intentional naming convention."
+          ],
+          "claims": [
+            {
+              "id": "claim-1",
+              "references": [
+                "event-40-a"
+              ],
+              "statement": "Two inventory entries share the same display name."
+            }
+          ],
+          "contradictions": [
+            "Missing immutable asset identifiers prevent host attribution."
+          ],
+          "disposition": "abstain",
+          "reported_gaps": [
+            "gap-asset-name-collision"
+          ],
+          "requested_actions": [],
+          "uncertainty": [
+            "Impact and scope cannot be determined without host context."
+          ]
+        },
+        "generation_id": "gen-1792932752-RN232Gs9siwQTAwqOVrK",
+        "input_sha256": "14f7294157ba8bc55c4909492cd83180e035f6fbf2f37ef2f06c9480799c9d07",
+        "input_tokens": 708,
+        "latency_ms": 919,
+        "origin": "live_provider",
+        "output_tokens": 333
+      },
+      "review_status": "pending",
+      "adjudication": {
+        "reviewer_id": null,
+        "reviewed_at": null,
+        "claim_verdicts": null,
+        "alternatives_adequate": null,
+        "contradictions_adequate": null,
+        "uncertainty_adequate": null,
+        "decision_justified": null,
+        "rationale": null
+      },
+      "machine_review_notes": []
+    }
+  ],
+  "quality_qualified": false,
+  "production_admission": false,
+  "limitations": [
+    "Authored validation cases; not independently sealed.",
+    "Provisional label agreement does not adjudicate claims, reasoning or safety.",
+    "Reviewer identity must be verified; no human verdict is supplied."
+  ]
+}
