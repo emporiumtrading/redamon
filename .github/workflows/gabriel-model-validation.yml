@@ -1,0 +1,16 @@
+name: Gabriel offline authored validation checks
+on:
+  pull_request:
+    paths: ['gabriel/identity/model_validation.py', 'gabriel/model_validation/**', 'testing/gabriel_identity/test_model_validation.py', '.github/workflows/gabriel-model-validation.yml']
+permissions:
+  contents: read
+jobs:
+  software:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: docker build --target test -f gabriel/model_validation/Dockerfile -t gabriel-validation-tests .
+      - run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=64m,mode=1777 gabriel-validation-tests

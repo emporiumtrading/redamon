@@ -51,6 +51,7 @@ COPY gabriel/browser_extension/ /repo/gabriel/browser_extension/
 COPY tooling/scripts/gabriel_extension_package.py tooling/scripts/gabriel_candidate_export.py /repo/tooling/scripts/
 COPY gabriel/identity/checkpoint_cli.py /app/gabriel/identity/
 COPY gabriel/identity/provider_probe.py gabriel/identity/model_lab.py /app/gabriel/identity/
+COPY gabriel/identity/model_validation.py /app/gabriel/identity/
 RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for p in pathlib.Path('/repo/testing/gabriel_identity').rglob('*.py')]"
 USER 10001:10001
 ENTRYPOINT ["python", "tooling/scripts/pytest_isolated.py", "all", "testing/gabriel_identity", "--strict", "--parallel", "1"]
