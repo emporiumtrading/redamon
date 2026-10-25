@@ -51,7 +51,7 @@ def process(service,human,peer,context,observation_id):
         case_id=lease['case_id'];parent_id=artifact['id']
     with connection(service._dsn) as conn:bound(conn)
     holder=service.acquire(human,case_id,uuid5(observation_id,VERSION),canonical(value).decode(),
-        'Browser text candidate passages; unqualified',approved=True,parent_id=parent_id,redaction_state='user_declared_redacted')
+        'Browser text candidate passages - unqualified',approved=True,parent_id=parent_id,redaction_state='user_declared_redacted')
     with connection(service._dsn) as conn:
         p,_=bound(conn)
         _audit(conn,'browser.text_candidates_reviewed',p,observation_id)
