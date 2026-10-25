@@ -336,9 +336,22 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
                     except AssertionError: return False
                 return wait_for(read)
             loaded("Boolean(document.querySelector('input[name=ticket]'))")
+            def visual_check(name):
+                for width in (1280,390):
+                    cdp.send('Emulation.setDeviceMetricsOverride',{'width':width,'height':900,'deviceScaleFactor':1,'mobile':False},session)
+                    assert cdp.evaluate(session,"document.documentElement.scrollWidth<=innerWidth"), (name,width,'page overflow')
+                    assert cdp.evaluate(session,"Array.from(document.querySelectorAll('main input:not([type=hidden]),main select,main button')).every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth})"), (name,width,'form control overflow')
+                    assert cdp.evaluate(session,"getComputedStyle(document.body).backgroundColor==='rgb(10, 16, 25)'"), 'CSP must admit the actual theme'
+                    assert cdp.evaluate(session,"document.querySelector('main h1')!==null&&document.querySelector('.skip-link').getAttribute('href')==='#main'")
+                    shot=cdp.send('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False},session)
+                    (output/(family+'-generated-'+name+'-'+str(width)+'.png')).write_bytes(base64.b64decode(shot['data']))
+                cdp.send('Emulation.clearDeviceMetricsOverride',session=session)
+            visual_check('claim')
             mark(family+':workbench-claim-submit')
             cdp.evaluate(session,"document.querySelector('input[name=ticket]').value="+json.dumps(ticket)+";document.querySelector('form').requestSubmit();true")
             loaded("document.title==='Investigations · Gabriel'")
+            visual_check('case-queue')
+            assert cdp.evaluate(session,"document.querySelector('nav a[aria-current=page]').getAttribute('href')==='/cases'")
             html=cdp.evaluate(session,'document.documentElement.outerHTML')
             assert human not in html and ticket not in html and '__Host-gabriel_workbench' not in cdp.evaluate(session,'document.cookie')
             cdp.send('Page.navigate',{'url':target+'/sources'},session)
@@ -347,6 +360,7 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             mark(family+':workbench-case')
             cdp.send('Page.navigate',{'url':target+'/cases/new'},session)
             loaded("Boolean(document.querySelector('input[name=title]'))")
+            visual_check('new-case')
             title='Generated '+family+' workbench case'
             cdp.evaluate(session,"document.querySelector('input[name=title]').value="+json.dumps(title)+";document.querySelector('main form').requestSubmit();true")
             loaded('document.title==='+json.dumps(title+' · Gabriel'))
@@ -355,11 +369,13 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])},session)
             loaded("Boolean(document.querySelector('a[href*=evidence]'))")
             assert 'unverified_client_clock' in cdp.evaluate(session,'document.body.innerText')
+            visual_check('case-detail')
             mark(family+':workbench-provenance')
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/relationships'},session)
             loaded("document.title==='Case provenance · Gabriel'")
             content=cdp.evaluate(session,'document.body.innerText')
             assert 'contains evidence' in content and 'received observation' in content and 'not prove causality' in content
+            visual_check('provenance')
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/environment'},session)
             loaded("document.title==='Environment and control profile · Gabriel'")
             assert 'No supported event snapshot has been reviewed' in cdp.evaluate(session,'document.body.innerText')
@@ -387,6 +403,7 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             loaded("document.getElementById('specialist-attack-status')?.textContent==='Attacker status: unknown'")
             runs=service.list_specialist_runs(human,case['id'])['runs']
             assert len(runs)==1 and service.get_specialist_run(human,case['id'],runs[0]['id'])['result']['attack_status']=='unknown'
+            visual_check('specialists')
             mark(family+':workbench-coordinator')
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])+'/coordinator'},session)
             loaded("document.title==='Local investigation plan · Gabriel'")
@@ -428,6 +445,7 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             cdp.send('Page.navigate',{'url':target+'/spending'},session)
             loaded("document.title==='AI spending · Gabriel'")
             assert 'Models are not active' in cdp.evaluate(session,'document.body.innerText')
+            visual_check('spending')
             cdp.evaluate(session,"document.querySelector('input[name=day]').value='0.25';document.querySelector('select[name=enabled]').value='no';document.querySelector('form[action=\"/spending/limits\"]').requestSubmit();true")
             loaded("document.getElementById('spending-state')?.textContent==='New reservations paused'")
             spending=ModelBudgetService(service._dsn).status(human)
@@ -442,6 +460,7 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             cdp.evaluate(session,"document.querySelector('form[action$=content]').requestSubmit();true")
             loaded("Boolean(document.getElementById('evidence-content'))")
             assert cdp.evaluate(session,"document.getElementById('evidence-content').textContent")==expected
+            visual_check('evidence')
             html=cdp.evaluate(session,'document.documentElement.outerHTML')
             assert human not in html and ticket not in html
             shot=cdp.send('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False},session)
@@ -604,7 +623,7 @@ def run_browser(family,executable,output):
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','covered_text_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
-                'workbench_checks':['private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','environment_unknown_state','separate_security_compliance_states','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','local_plan_creation','persisted_local_steps','local_receipt_link','persisted_local_plan_stop','memory_proposal','memory_review','memory_forget','spending_screen','persisted_spending_pause_and_limits','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
+                'workbench_checks':['responsive_390_and_1280','form_controls_within_viewport','theme_CSP_admission','skip_navigation','current_navigation','private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','environment_unknown_state','separate_security_compliance_states','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','local_plan_creation','persisted_local_steps','local_receipt_link','persisted_local_plan_stop','memory_proposal','memory_review','memory_forget','spending_screen','persisted_spending_pause_and_limits','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
         except Exception:
