@@ -1,4 +1,5 @@
-FROM python:3.11-slim AS runtime
+ARG IDENTITY_BASE=python:3.11-slim
+FROM ${IDENTITY_BASE} AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
@@ -53,7 +54,7 @@ RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for
 USER 10001:10001
 ENTRYPOINT ["python", "tooling/scripts/pytest_isolated.py", "all", "testing/gabriel_identity", "--strict", "--parallel", "1"]
 
-FROM python:3.11-slim AS checkpoint-signer
+FROM ${IDENTITY_BASE} AS checkpoint-signer
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 RUN pip install --no-cache-dir cryptography==50.0.2
