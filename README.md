@@ -6,6 +6,12 @@ Gabriel is a defensive investigation workbench for security analysts. It brings 
 
 The interface uses Gabriel's own halo and winged-shield emblem, midnight-blue surfaces, pearl text and warm gold accents. Product graphics are maintained in [the Gabriel brand directory](docs/assets/gabriel/).
 
+## Inside Gabriel
+
+![Gabriel investigation queue](docs/assets/gabriel/screenshots/investigations.png)
+
+[View six actual desktop and mobile screens](docs/assets/gabriel/screenshots/README.md). Captured with generated demo data; displayed features and limitations reflect the tested source.
+
 ## Start here
 
 - [Install the private Docker workbench](docs/readmes/GABRIEL_TEST_INSTALLATION.md)
