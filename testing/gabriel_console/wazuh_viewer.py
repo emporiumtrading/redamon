@@ -65,7 +65,7 @@ def main():
     before=api('GET','/groups')['data']['affected_items']
     denied_group='gabriel-denied-'+user.rsplit('-',1)[-1]
     phase='server_group_write_denial'
-    api('POST','/groups?group_id='+denied_group,token=viewer_token,expected=403)
+    api('POST','/groups',dict(group_id=denied_group),token=viewer_token,expected=403)
     phase='server_security_read_denial'
     api('GET','/security/users',token=viewer_token,expected=403)
     phase='server_groups_after'
