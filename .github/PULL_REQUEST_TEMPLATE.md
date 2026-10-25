@@ -13,10 +13,10 @@
 
 ## Component(s)
 <!-- Which services does this touch? -->
-- [ ] webapp (Next.js)
-- [ ] recon-orchestrator (Python)
-- [ ] agent (Python)
-- [ ] kali-sandbox / MCP servers
+- [ ] Gabriel analyst workbench
+- [ ] Browser companion / gateway
+- [ ] Identity / evidence / specialists
+- [ ] Docker installation / recovery
 - [ ] docs / wiki
 - [ ] other: ___
 

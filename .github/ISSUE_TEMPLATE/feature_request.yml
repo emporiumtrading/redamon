@@ -1,5 +1,5 @@
 name: Feature Request
-description: Suggest a new feature or enhancement for RedAmon
+description: Suggest a new feature or enhancement for Gabriel
 title: "[Feature] "
 labels: ["enhancement"]
 body:
@@ -7,12 +7,12 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of RedAmon would this affect?
+      description: Which part of Gabriel would this affect?
       options:
-        - webapp (Next.js frontend)
-        - recon-orchestrator (Python backend)
-        - agent (AI agent)
-        - kali-sandbox / MCP servers
+        - Gabriel analyst workbench
+        - Browser companion and gateway
+        - Specialist reviews and memory
+        - Identity, encrypted evidence and custody
         - recon tools / modules
         - docs / wiki
         - other
