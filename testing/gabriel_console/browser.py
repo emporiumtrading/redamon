@@ -39,7 +39,8 @@ class CDP:
                 self.network[key]=self.network.get(key,0)+1
                 if response['status']>=400:
                     path=urlsplit(response['url']).path
-                    route=path if re.fullmatch(r'/(?:api|internal|auth)/[a-z_/-]{1,100}',path) else '[other-route]'
+                    route=path if re.fullmatch(r'/(?:api|internal|auth|_plugins|_opendistro)/[a-zA-Z0-9_./-]{1,120}',path) else '[other-route]'
+                    route='/'.join(part if len(part)<=32 else '[id]' for part in route.split('/'))
                     error=key+' '+route;self.errors[error]=self.errors.get(error,0)+1
             if value.get('id')==ident:
                 if 'error' in value: raise AssertionError('console_cdp_command_failed')
@@ -54,7 +55,7 @@ def snapshot(cdp,session):
     return cdp.evaluate(session,"""(()=>{
 const visible=e=>Boolean(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
 const clean=e=>e.innerText.trim().replace(/\\s+/g,' ').slice(0,160);
-return {title:document.title,path:location.pathname,has_search:Boolean(location.search),has_fragment:Boolean(location.hash),headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
+return {error_terms:['Unauthorized','Forbidden','security_exception','run_as','No API available','Error','not allowed','permissions','Wazuh API','3003','5013','account','403','401'].filter(t=>document.body.innerText.includes(t)),title:document.title,path:location.pathname,has_search:Boolean(location.search),has_fragment:Boolean(location.hash),headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
 table_headers:[...document.querySelectorAll('th,[role=columnheader]')].filter(visible).map(clean).slice(0,80),
 links:[...document.querySelectorAll('a[href]')].filter(visible).map(e=>{let u=new URL(e.href);return u.origin===location.origin?{text:clean(e),path:u.pathname,fragment:u.hash.slice(0,180)}:null}).filter(Boolean).slice(0,100),
 buttons:[...document.querySelectorAll('button')].filter(visible).map(e=>({text:clean(e),label:e.getAttribute('aria-label')||'',test_subject:e.getAttribute('data-test-subj')||''})).slice(0,80),
