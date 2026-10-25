@@ -2,7 +2,9 @@
 
 Release state: IN_PROGRESS. No merge, production deployment or production acceptance occurred.
 
-## Gate status
+Later on 25 October, the owner approved the ten-case paid validation batch. Its observed results and the subsequent browser revocation repair are recorded in the [validation and release handoff](GABRIEL_MODEL_VALIDATION_2026_10_25.md). That follow-up supersedes the pending-paid-batch and earlier browser status below; the source-specific evidence remains historical.
+
+## Gate status at the earlier repair checkpoint
 
 | Gate | Verified engineering result | Remaining acceptance |
 | --- | --- | --- |
