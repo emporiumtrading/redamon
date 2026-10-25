@@ -54,7 +54,7 @@ def snapshot(cdp,session):
     return cdp.evaluate(session,"""(()=>{
 const visible=e=>Boolean(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
 const clean=e=>e.innerText.trim().replace(/\\s+/g,' ').slice(0,160);
-return {title:document.title,path:location.pathname,headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
+return {title:document.title,path:location.pathname,has_search:Boolean(location.search),has_fragment:Boolean(location.hash),headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
 table_headers:[...document.querySelectorAll('th,[role=columnheader]')].filter(visible).map(clean).slice(0,80),
 links:[...document.querySelectorAll('a[href]')].filter(visible).map(e=>{let u=new URL(e.href);return u.origin===location.origin?{text:clean(e),path:u.pathname,fragment:u.hash.slice(0,180)}:null}).filter(Boolean).slice(0,100),
 buttons:[...document.querySelectorAll('button')].filter(visible).map(e=>({text:clean(e),label:e.getAttribute('aria-label')||'',test_subject:e.getAttribute('data-test-subj')||''})).slice(0,80),
@@ -88,6 +88,12 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
         phase='application_content'
         if tool=='wazuh':
             wait(lambda:cdp.evaluate(session,"(()=>{const t=document.body.innerText.toLowerCase();return ['endpoint security','threat intelligence','security operations'].some(x=>t.includes(x));})()"),180)
+            phase='readonly_viewer_identity'
+            assert cdp.evaluate(session,"(()=>{const es=[...document.querySelectorAll('button')].filter(e=>e.getClientRects().length&&(e.getAttribute('data-test-subj')==='userMenuButton'||e.querySelector('[class*=euiAvatar]')));if(es.length!==1)return false;es[0].click();return true;})()")
+            identity="[...document.querySelectorAll('span,div,p,h1,h2,h3,h4')].some(e=>!e.childElementCount&&e.getClientRects().length&&e.innerText.trim()===USER)".replace('USER',json.dumps(creds['username']))
+            wait(lambda:cdp.evaluate(session,identity))
+            cdp.send('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27},session)
+            cdp.send('Input.dispatchKeyEvent',{'type':'keyUp','key':'Escape','code':'Escape','windowsVirtualKeyCode':27},session)
         else: time.sleep(3)
         pages=[snapshot(cdp,session)]
         if tool=='iris':
@@ -169,7 +175,7 @@ e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('ch
             replay_check['native_details']=details
             replay_check['native_id_visible']=True
             replay_check['observed_event_count']=len(details)
-        result=dict(status='PASS',tool=tool,operator_login_only=True,gabriel_adapter_admitted=False,attack_detection_verified=False,
+        result=dict(status='PASS',tool=tool,operator_login_only=True,generated_viewer_used=True,viewer_username=creds['username'],gabriel_adapter_admitted=False,attack_detection_verified=False,
             browser_version=subprocess.check_output(['/usr/bin/chromium','--version']).decode().strip(),login_structure=login,pages=pages,
             http_response_status_counts=cdp.network,
             http_error_routes=cdp.errors,

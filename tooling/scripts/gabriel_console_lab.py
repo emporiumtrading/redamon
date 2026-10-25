@@ -303,6 +303,7 @@ def reconcile(root,browser_path):
 def analyst(root):
     """Provision a case-scoped viewer only in the generated IRIS lab."""
     info=json.loads((root/'lab.json').read_text())
+    if info['tool']=='wazuh': return wazuh_analyst(root,info)
     if info['tool']!='iris': raise ValueError('iris_analyst_only')
     if (root/'analyst-credentials.json').exists(): raise ValueError('analyst_already_prepared')
     if sha256((root/'compose.json').read_bytes()).hexdigest()!=info['compose_sha256']: raise ValueError('configuration_changed')
@@ -338,6 +339,22 @@ def analyst(root):
         group_permissions=1,case_access_level=2,case_read_http=200,case_write_http=403,admin_read_http=403,
         case_summary_unchanged=True,browser_session_verified=False,gabriel_adapter_admitted=False))
     return {'generated_case_viewer_prepared':True,'case_write_denied':True,'admin_read_denied':True}
+
+
+def wazuh_analyst(root,info):
+    if (root/'analyst-credentials.json').exists(): raise ValueError('analyst_already_prepared')
+    config=json.loads((root/'compose.json').read_text())
+    environment=config['services']['wazuh.manager']['environment']
+    username='gabriel-viewer-'+uuid4().hex[:10];password=secret()
+    credentials=dict(username=username,password=password,indexer_username=environment['INDEXER_USERNAME'],
+        indexer_password=environment['INDEXER_PASSWORD'],api_username=environment['API_USERNAME'],api_password=environment['API_PASSWORD'])
+    script=(REPO/'testing/gabriel_console/wazuh_viewer.py').read_text()
+    report=json.loads(compose(root,'exec','-T','wazuh.manager','/var/ossec/framework/python/bin/python3','-c',script,
+        data=json.dumps(credentials).encode()))
+    if report.get('status')!='PASS' or report.get('username')!=username: raise ValueError('viewer_acceptance_failed')
+    write(root/'analyst-credentials.json',dict(tool='wazuh',username=username,password=password,port=info['port']))
+    write(root/'analyst-access.json',report)
+    return {'generated_readonly_viewer_prepared':True,'index_write_denied':True,'server_group_write_denied':True}
 
 
 def main():

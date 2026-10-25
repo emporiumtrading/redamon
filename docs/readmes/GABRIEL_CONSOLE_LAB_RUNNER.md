@@ -49,7 +49,13 @@ The next lab gate requires twelve distinct manager alerts (5710 failures or the 
 
 The existing local candidate kernel then reviews the twelve typed authentication failures. It must return a repeated-failure candidate with benign alternatives, while nine distinct events padded with duplicate copies remain below threshold. The normalized event document, candidate review and twelve specialist receipts are stored in the disposable case database; restart and idempotent replay must retain exactly one candidate review. Other telemetry, source authenticity, AI quality, real-attack effectiveness and Gabriel's scoped browser admission remain unverified. Validation is pending the actual Docker lab run; syntax checks alone do not accept this increment.
 
-## Destructive lab cleanup commands
+## Separate Wazuh viewer acceptance
+
+The next increment creates a fresh indexer user with read-only cluster/index/global-tenant permissions, maps the generated username to the Wazuh server's built-in readonly role, and checks read success plus HTTP 403 for index creation, indexer user administration, server group creation and server user administration. The denied index must remain absent and groups unchanged. The browser receives only the viewer login, verifies the displayed generated username, and repeats the complete twelve-event search/reconciliation/persistence demonstration. Setup credentials and authorization-context tokens stay inside private setup operations. The indexer role covers only this disposable lab's indexes, not a production tenant scope. These backend and browser checks remain pending until their exact-source workflow passes; they do not enable Gabriel's production navigation registry.
+
+The server's self-signed API certificate is explicitly trusted for a fixed loopback setup connection; hostname matching is disabled only for that pinned local certificate. Indexer HTTPS retains its generated CA and hostname checks. This setup helper is never a production connector or a browser credential channel.
+
+## Cleanup command
 
 ```bash
 python3 tooling/scripts/gabriel_console_lab.py down iris /absolute/private/new-iris-lab
