@@ -19,6 +19,7 @@ from gabriel.identity.tasks import task_record,available
 
 CONTRACTS={}
 OPERATOR_PAGES='operator-reviewed-pages-v1'
+DISCOVERED_PAGES='operator-discovered-readonly-v1'
 
 
 def readonly_page(url):
@@ -42,7 +43,7 @@ def pending_navigation(conn,organization_id,lease_id):
 
 
 def contract(version,urls,context):
-    if not isinstance(version,str) or version not in CONTRACTS and version!=OPERATOR_PAGES:
+    if not isinstance(version,str) or version not in CONTRACTS and version not in {OPERATOR_PAGES,DISCOVERED_PAGES}:
         raise AccessDenied('navigation_contract_not_admitted')
     if type(urls) is not list or not 1<=len(urls)<=20 or any(type(url) is not str for url in urls) or len(set(urls))!=len(urls):
         raise InvalidIdentityInput('invalid_navigation_destinations')
@@ -51,8 +52,8 @@ def contract(version,urls,context):
         approved_context(dict(context,page_url=url))
         parsed=urlsplit(url)
         path=parsed.path+('#'+parsed.fragment if parsed.fragment else '')
-        if version==OPERATOR_PAGES: readonly_page(url)
-        if (parsed.scheme,parsed.netloc)!=(original.scheme,original.netloc) or version!=OPERATOR_PAGES and path not in CONTRACTS[version]:
+        if version in {OPERATOR_PAGES,DISCOVERED_PAGES}: readonly_page(url)
+        if (parsed.scheme,parsed.netloc)!=(original.scheme,original.netloc) or version not in {OPERATOR_PAGES,DISCOVERED_PAGES} and path not in CONTRACTS[version]:
             raise AccessDenied('navigation_destination_not_admitted')
     return urls
 
@@ -64,6 +65,10 @@ def public_intent(row,committed=False):
 
 
 class BrowserNavigationService(BrowserObservationService):
+    def review_browser_text(self,human,peer,context,observation_id):
+        from gabriel.identity.browser_text_review import process
+        return process(self,human,peer,context,observation_id)
+
     def review_browser_specialists(self,human,peer,context,observation_id):
         from gabriel.identity.browser_specialists import process
         return process(self,human,peer,context,observation_id)
@@ -128,6 +133,7 @@ class BrowserNavigationService(BrowserObservationService):
             p,lease=self._actor(conn,human,peer)
             task=task_record(conn,p.organization_id,lease['task_id']);available(task)
             if max_moves>20 and not lease['scheduled_review_enabled']: raise AccessDenied('scheduled_navigation_consent_required')
+            if version==DISCOVERED_PAGES and not lease['scheduled_review_enabled']: raise AccessDenied('discovery_consent_required')
             contract(version,destinations,context_of(lease))
             old=conn.execute('SELECT * FROM gabriel_identity.browser_navigation_grants WHERE organization_id=%s AND lease_id=%s',
                 (p.organization_id,lease['id'])).fetchone()
@@ -148,7 +154,9 @@ class BrowserNavigationService(BrowserObservationService):
         with connection(self._dsn) as conn:
             p,lease=self._actor(conn,human,peer)
             grant,at=self._grant(conn,p,lease)
-            if destination_url not in grant['destinations']: raise AccessDenied('navigation_destination_not_granted')
+            if grant['contract_version']==DISCOVERED_PAGES:
+                contract(DISCOVERED_PAGES,[destination_url],context_of(lease))
+            elif destination_url not in grant['destinations']: raise AccessDenied('navigation_destination_not_granted')
             if conn.execute("SELECT 1 FROM gabriel_identity.browser_observations WHERE organization_id=%s AND lease_id=%s AND state='prepared'",
                             (p.organization_id,lease['id'])).fetchone():
                 raise AccessDenied('browser_capture_outcome_unresolved')

@@ -219,6 +219,7 @@ def remove_v27(conn):
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_leases_extension_version_check')
         conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_extension_version_check CHECK (extension_version IN ('0.1.0','0.2.0','0.3.0'))")
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP CONSTRAINT browser_lease_lifetime')
+        conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP COLUMN discovery_enabled')
         conn.execute('ALTER TABLE gabriel_identity.browser_leases DROP COLUMN scheduled_review_enabled')
         conn.execute("ALTER TABLE gabriel_identity.browser_leases ADD CONSTRAINT browser_leases_check CHECK (expires_at>created_at AND expires_at<=created_at+interval '5 minutes')")
         conn.execute('ALTER TABLE gabriel_identity.browser_navigation_grants DROP CONSTRAINT navigation_grant_lifetime')

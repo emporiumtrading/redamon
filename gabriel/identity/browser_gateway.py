@@ -20,7 +20,7 @@ from gabriel.identity.cli import read_secret
 from gabriel.identity.service import AccessDenied,IdentityError,IdentityUnavailable,_digest,connection
 
 MAX_BODY = 262144
-OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review','specialists-review'}
+OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review','specialists-review','text-review'}
 
 
 def endpoint(value):
@@ -47,7 +47,7 @@ def ticket_digest(value):
     return sha256(('gabriel-browser-claim-v1|'+value).encode()).hexdigest()
 
 
-def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False,monitor_seconds=None):
+def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False,monitor_seconds=None,auto_discover=False):
     """Private operator enrollment, never exposed as a network operation."""
     target,origin=endpoint(target),extension_origin(origin)
     context=approved_context(context)
@@ -59,7 +59,7 @@ def prepare(service,human_token,task_id,case_id,context,target,origin,directory,
     if monitor_seconds is not None and (type(monitor_seconds) is not int or not 60<=monitor_seconds<=3600 or not share_observations):
         raise ValueError('invalid_scheduled_review_consent')
     grant=service.issue_browser_lease(human_token,task_id,case_id,context,share_observations=share_observations,
-        ttl_seconds=monitor_seconds if monitor_seconds is not None else 300,monitoring_approved=monitor_seconds is not None)
+        ttl_seconds=monitor_seconds if monitor_seconds is not None else 300,monitoring_approved=monitor_seconds is not None,discovery_approved=auto_discover)
     try:
         write_document(directory/'human.json',{'token':human_token})
         write_document(directory/'peer.json',{'token':grant.token,'lease_id':str(grant.id),'expires_at':str(grant.expires_at)})
@@ -129,6 +129,11 @@ class BrowserGateway:
                 self._bound(pending=True)
                 paired=self.service.connect_browser(self._peer,self.context)
                 lease=self._bound()
+                if lease['discovery_enabled']:
+                    from uuid import uuid5
+                    from gabriel.identity.browser_navigation import DISCOVERED_PAGES
+                    if not isinstance(self.service,BrowserNavigationService): raise AccessDenied('navigation_service_required')
+                    self.service.grant_navigation(self._human,self._peer,uuid5(lease['id'],DISCOVERED_PAGES),DISCOVERED_PAGES,[self.context['page_url']],max_moves=1000)
                 self._claimed=True
                 return dict(paired,token=self._peer,context=self.context,organization_id=str(lease['organization_id']),
                     case_id=str(lease['case_id']),task_id=str(lease['task_id']))
@@ -157,10 +162,10 @@ class BrowserGateway:
             if operation=='observe':
                 if body.get('context')!=self.context: raise AccessDenied('gateway_scope_changed')
                 return self.service.observe_browser(self._human,self._peer,body)
-            if operation in {'events-review','specialists-review'}:
+            if operation in {'events-review','specialists-review','text-review'}:
                 if (not isinstance(self.service,BrowserNavigationService) or set(body)!={'context','observation_id'}
                         or approved_context(body['context'])!=self.context): raise AccessDenied('gateway_scope_changed')
-                method=self.service.review_browser_events if operation=='events-review' else self.service.review_browser_specialists
+                method={'events-review':self.service.review_browser_events,'specialists-review':self.service.review_browser_specialists,'text-review':self.service.review_browser_text}[operation]
                 return method(self._human,self._peer,body['context'],body['observation_id'])
             if set(body)!={'context'} or approved_context(body['context'])!=self.context:
                 raise AccessDenied('gateway_scope_changed')
@@ -179,7 +184,7 @@ class BrowserGateway:
                 ('Access-Control-Allow-Methods','POST, OPTIONS')])
         status='403 Forbidden'
         operation=environ.get('PATH_INFO','').removeprefix('/v1/browser/')
-        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','events-review','specialists-review'} else 'denied'}
+        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','events-review','specialists-review','text-review'} else 'denied'}
         try:
             if (environ.get('wsgi.url_scheme')!='https' or environ.get('HTTP_HOST')!=urlsplit(self.target).netloc
                     or origin!=self.origin or environ.get('QUERY_STRING') or environ.get('HTTP_FORWARDED')

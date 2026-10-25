@@ -73,7 +73,7 @@ def run_specialist(service,token,case_id,request_id,role,*,input_evidence_id=Non
     refs=[dict(ref='case/'+str(case['id']),kind='case_record',record_id=str(case['id']))]
     refs.extend(dict(ref='evidence/'+row['id'],kind='evidence_metadata',record_id=row['id'],digest=row['digest'],
         source_verified=False,content_integrity='not_checked') for row in report['evidence'])
-    refs.extend(dict(ref='browser_lease/'+row['id'],kind='browser_lease_sample',record_id=row['id'],sample=row) for row in health['sources'])
+    refs.extend(dict(ref='browser_lease/'+row['id'],kind='browser_lease_sample',record_id=row['id'],sample={key:row[key] for key in ('id','case_id','browser','health','state','expires_at','last_seen','authorization_current','heartbeat_fresh','page_visibility','sampled_at')}) for row in health['sources'])
     packet=dict(schema_version=1,purpose='specialist-input-v1',contract_version=CONTRACT_VERSION,role=role,
         organization_id=report['organization_id'],case_id=str(case['id']),generated_at=report['generated_at'],
         references=refs,source_limit=health['limit'],sources_truncated=health['truncated'],coverage='partial',

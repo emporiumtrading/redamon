@@ -36,8 +36,8 @@ async function run(operation, extra = {}) {
     if (operation === "state" || operation === "channel-select") {
       const state = result.monitoring;
       byId("monitor-state").textContent = state ? "Scheduled review: "+(state.scheduling_gap ? "coverage gap" : state.state)+
-        "; changed captures "+(state.captures || 0)+" of 8"+(state.last_checked ? "; last checked "+new Date(state.last_checked).toLocaleTimeString() : "")+
-        (state.error ? "; "+state.error : "") : "Scheduled review is off.";
+        "; changed captures "+(state.captures || 0)+" of "+(state.max_captures || 8)+(state.last_checked ? "; last checked "+new Date(state.last_checked).toLocaleTimeString() : "")+
+        (state.interface_title ? "; interface: "+state.interface_title+" (page-reported)" : "")+(state.error ? "; "+state.error : "") : "Scheduled review is off.";
     }
     if (result.organization_id) byId("scope").textContent = "Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id;
     if (["pair","resume"].includes(operation)) paired = true;

@@ -114,7 +114,14 @@ def console_app(environ,start_response):
     if CONSOLE_MODES.get(path)=='slow': time.sleep(2)
     if CONSOLE_MODES.get(path)=='redirect':
         start_response('302 Found',[('Location','/outside'),('Content-Length','0')]);return [b'']
-    account='Other generated account' if CONSOLE_MODES.get(path)=='wrong_account' else 'Generated lab account'
+    if CONSOLE_MODES.get(path)=='agnostic':
+        body=('<!doctype html><html><head><title>Harbor Security Workspace</title></head><body><p>Generated lab account</p>'
+            '<h1>Investigation overview</h1><p>Failed login for generated-user</p>'
+            '<a href="/unfamiliar-audit?view=recent">Recent activity</a> '
+            '<a href="/configuration">Settings</a> <a href="/logout">Sign out</a> '
+            '<a href="https://outside.invalid/read">External</a></body></html>').encode()
+        start_response('200 OK',[('Content-Type','text/html'),('Content-Length',str(len(body))),('Cache-Control','no-store')]);return [body]
+    account='Other generated account'  if CONSOLE_MODES.get(path)=='wrong_account' else 'Generated lab account'
     section={'/security':'Generated event: unusual sign-in from a lab identity.',
              '/traffic':'Generated traffic: repeated connection failures.',
              '/threats':'Generated threat: suspicious file activity.'}.get(path,'Generated unsupported section.')
@@ -307,6 +314,61 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                 except subprocess.TimeoutExpired: process.kill();process.wait(timeout=5)
                 CONSOLE_MODES.clear()
     return checks
+
+
+def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,extension_origin,port):
+    mark(family+':console-agnostic-discovery')
+    CONSOLE_MODES.clear()
+    CONSOLE_MODES['/unfamiliar-dashboard']='agnostic'
+    CONSOLE_MODES['/unfamiliar-audit']='agnostic'
+    tab=cdp.send('Target.createTarget',{'url':console_origin+'/unfamiliar-dashboard'})['targetId']
+    session=cdp.attach(tab);wait_for(lambda:cdp.evaluate(session,'document.readyState')=='complete')
+    cdp.send('Target.activateTarget',{'targetId':tab})
+    popup=native_popup(cdp,tab,extension_origin)
+    cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
+    click(cdp,popup,'select')
+    scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
+    navigation=BrowserNavigationService(service._dsn,service.store)
+    case=navigation.create_case(human,'Generated unknown console investigation')
+    task=navigation.create_browser_task(human,'Generated console agnostic task',900,100)
+    directory=root/'discovery'
+    endpoint='https://localhost:'+str(port)
+    enrolled=prepare(navigation,human,task['id'],case['id'],scope,endpoint,extension_origin,directory,
+        share_observations=True,monitor_seconds=300,auto_discover=True)
+    with open(root/'discovery.log','w+') as logfile:
+        process=subprocess.Popen([sys.executable,'-m','gabriel.identity.gateway_cli','serve','--configuration',str(directory/'gateway.json'),
+            '--certificate',str(tls['server.pem']),'--key',str(tls['server.key']),'--bind','127.0.0.1:'+str(port)],env=env,stdout=logfile,stderr=logfile)
+        try:
+            def ready():
+                if process.poll() is not None:raise AssertionError('discovery_gateway_exited')
+                try:
+                    with socket.create_connection(('127.0.0.1',port),timeout=.2):return True
+                except OSError:return False
+            wait_for(ready,12)
+            ticket=read_document(directory/'claim.json',private=True)['ticket']
+            cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint)+';document.getElementById("ticket").value='+json.dumps(ticket))
+            click(cdp,popup,'pair');wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
+            before=len(CONSOLE_REQUESTS)
+            result=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"monitor-start",mode:"discover",approved:true})')
+            assert result['ok'],result
+            captured=navigation.list_browser_observations(human,enrolled['lease_id'])['observations']
+            assert len(captured)==2 and all(row['state']=='captured' for row in captured)
+            assert cdp.evaluate(session,'location.href')==console_origin+'/unfamiliar-audit?view=recent'
+            state=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
+            assert state['monitoring']['interface_title']=='Harbor Security Workspace'
+            assert state['tour']['sections'][-1]['text_review']['candidate_count']==1
+            assert not state['tour']['sections'][-1]['text_review']['incident_confirmed']
+            requests=CONSOLE_REQUESTS[before:]
+            assert all(method=='GET' and path not in {'/configuration','/logout','/outside'} for method,path in requests)
+            assert len(navigation.list_attack_reviews(human,case['id'])['runs'])==0
+            stopped=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"stop"})')
+            assert stopped['ok'] and navigation.get_browser_lease(human,enrolled['lease_id'])['state']=='disconnected'
+            return ['unrecognized_console_without_vendor_selection','unmarked_DOM_interface_identification','automatic_same_origin_link_discovery',
+                'nonsecret_query_route_binding','automatic_evidence_linked_text_review','action_and_external_links_excluded','candidate_is_not_incident_verdict']
+        finally:
+            process.terminate();process.wait(timeout=5)
+            if any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
+            CONSOLE_MODES.clear()
 
 
 def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,extension_origin,port):
@@ -699,10 +761,11 @@ def run_browser(family,executable,output):
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
                 'https://localhost:'+str(server.server_port),origin,gateway_port)
             monitoring_checks=monitoring_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
+            discovery_checks=discovery_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
-                'extension_version':'0.4.0','extension_origin':origin,'monitoring_checks':monitoring_checks,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
+                'extension_version':'0.4.0','extension_origin':origin,'discovery_checks':discovery_checks,'monitoring_checks':monitoring_checks,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','covered_text_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],

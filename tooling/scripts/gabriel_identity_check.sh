@@ -84,7 +84,8 @@ cp -a "$work_dir/object-backup" "$work_dir/restored-objects"
     testing/gabriel_identity/restart_probe.py restored
 "${compose[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" \
     -v "$report_dir:/evidence" --entrypoint python identity-tests \
-    tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_browser_navigation_integration.py \
+    tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_browser_monitoring_integration.py \
+    testing/gabriel_identity/test_browser_navigation_integration.py \
     testing/gabriel_identity/test_attack_pattern_runs_integration.py \
     testing/gabriel_identity/test_browser_events_integration.py \
     testing/gabriel_identity/test_specialist_coordinator_integration.py \

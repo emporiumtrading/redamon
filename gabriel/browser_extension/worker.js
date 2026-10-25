@@ -94,7 +94,9 @@ async function dispatch(message) {
     const results = await Promise.all(current.map(row=>channel(row.id).handle(message)));
     return {message: results[0]?.message || "Paused all selected tabs."};
   }
-  return channel(selectedChannel).handle(message);
+  const result=await channel(selectedChannel).handle(message);
+  if (message.operation==="monitor-start") await channel(selectedChannel).tick();
+  return result;
 }
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if (sender.id!==chrome.runtime.id || sender.url!==trusted || sender.tab && sender.tab.url!==trusted) return false;

@@ -84,3 +84,46 @@ def test_exact_operator_routes_remain_origin_bound_and_stop_is_terminal(tenant,c
     with pytest.raises(AccessDenied):browser.prepare_navigation(tenant.token,lease.token,uuid4(),'https://outside.invalid/alerts')
     browser.disconnect_browser(lease.token)
     with pytest.raises(AccessDenied):browser.navigation_plan(tenant.token,lease.token,scope)
+
+
+def test_text_review_is_receipt_bound_idempotent_and_preserves_source_quotes(tenant,cases,case,context):
+    from gabriel.identity.model_protocol import decode
+    browser,lease,scope,gateway,ticket=enrollment(tenant,cases,case,context,monitoring_approved=True)
+    browser.connect_browser(lease.token,scope)
+    payload=dict(schema_version=1,operation='browser.observe',request_id=str(uuid4()),sequence=1,context=scope,
+        observed_at=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
+        visibility='partial',client_minimized=True,content='Generated lab account\nFailed login for generated-user\n')
+    captured=browser.observe_browser(tenant.token,lease.token,payload)
+    one=browser.review_browser_text(tenant.token,lease.token,scope,captured['observation_id'])
+    two=browser.review_browser_text(tenant.token,lease.token,scope,captured['observation_id'])
+    assert one==two and one['candidate_count']==1 and not one['incident_confirmed']
+    value=decode(browser.read_evidence(tenant.token,one['review_evidence_id']).reveal().decode())
+    assert value['evidence_id']==str(captured['evidence_id'])
+    assert all(payload['content'][r['start']:r['end']]==r['quote'] for r in value['findings'])
+    browser.disconnect_browser(lease.token)
+    with pytest.raises(AccessDenied):browser.review_browser_text(tenant.token,lease.token,scope,captured['observation_id'])
+
+
+def test_source_health_display_fields_do_not_expand_specialist_contract(tenant,cases,case,context):
+    browser,lease,scope,gateway,ticket=enrollment(tenant,cases,case,context)
+    result=cases.run_specialist(tenant.token,case['id'],uuid4(),'telemetry_health')
+    sample=next(r['sample'] for r in result['packet']['references'] if r['kind']=='browser_lease_sample')
+    assert 'scheduled_permission' not in sample and 'captured_observations' not in sample
+
+
+def test_discovery_is_explicit_and_binds_discovered_query_routes_to_original_origin(tenant,cases,case,context):
+    from gabriel.identity.browser_navigation import DISCOVERED_PAGES
+    from gabriel.identity.browser_sessions import approved_context
+    browser,lease,scope,gateway,ticket=enrollment(tenant,cases,case,context,monitoring_approved=True,discovery_approved=True)
+    status,result=call(gateway,'claim',{'ticket':ticket,'context':scope})
+    assert status=='200 OK'
+    plan=browser.navigation_plan(tenant.token,lease.token,scope)
+    assert plan['contract_version']==DISCOVERED_PAGES and plan['destinations']==[scope['page_url']]
+    from urllib.parse import urlsplit
+    original=urlsplit(scope['page_url']);url=original.scheme+'://'+original.netloc+'/unknown-alerts?view=recent'
+    assert approved_context(dict(scope,page_url=url))['page_url']==url
+    intent=browser.prepare_navigation(tenant.token,lease.token,uuid4(),url)
+    assert intent['destination_url']==url
+    for denied in [url+'&token=generated',url+'&action=delete','https://outside.invalid/alerts']:
+        with pytest.raises((AccessDenied,InvalidIdentityInput)):
+            browser.prepare_navigation(tenant.token,lease.token,uuid4(),denied)

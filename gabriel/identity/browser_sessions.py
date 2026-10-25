@@ -3,7 +3,7 @@ from dataclasses import dataclass,field
 from hashlib import sha256
 import re
 import secrets
-from urllib.parse import urlsplit,urlunsplit,unquote
+from urllib.parse import urlsplit,urlunsplit,unquote,parse_qsl
 from uuid import uuid4
 
 from gabriel.identity.evidence_keys import EvidenceKeyService
@@ -49,14 +49,20 @@ def approved_context(value):
             decoded = following
         if unquote(decoded,errors='strict')!=decoded:
             raise ValueError
+        sensitive=re.compile(r'(?:token|password|passwd|secret|auth|session|cookie|signature|api.?key|otp|^code$|^key$|^action$|^method$|^operation$)',re.I)
+        if value['extension_version']=='0.4.0':
+            parameters=parse_qsl(url.query,keep_blank_values=True,max_num_fields=16)+parse_qsl(url.fragment.split('?',1)[-1] if '?' in url.fragment else '',keep_blank_values=True,max_num_fields=16)
+            if any(sensitive.search(unquote(k)) or len(v)>256 for k,v in parameters): raise ValueError
+            if re.search(r'(?:^|[?&#])(?:token|password|access_token|refresh_token|session|api_key|code|key|auth|secret|otp)[^=&]*=',decoded,re.I): raise ValueError
+        modern=value['extension_version']=='0.4.0'
         if (url.scheme!='https' or not url.hostname or url.username is not None or url.password is not None
-                or url.query or '?' in decoded or '\\' in decoded
-                or any(c in unquote(url.fragment,errors='strict') for c in ('=','&'))
-                or ('#' in decoded and any(c in decoded.split('#',1)[1] for c in ('=','&')))
+                or (not modern and (url.query or '?' in decoded)) or '\\' in decoded
+                or (not modern and any(c in unquote(url.fragment,errors='strict') for c in ('=','&')))
+                or (not modern and '#' in decoded and any(c in decoded.split('#',1)[1] for c in ('=','&')))
                 or any(ord(c)<33 or ord(c)==127 for c in decoded)):
             raise ValueError
         url.port
-        expected = urlunsplit(('https',url.netloc.lower(),url.path or '/','',url.fragment))
+        expected = urlunsplit(('https',url.netloc.lower(),url.path or '/',url.query,url.fragment))
         if expected!=value['page_url'] or any(x in decoded.lower() for x in ('/login','/signin','/sign-in','/oauth','/sso','/mfa','/password','/authorize')):
             raise ValueError
         return result
@@ -87,11 +93,12 @@ class BrowserSessionService(EvidenceKeyService):
             _audit(conn,'browser.task_created',p,row['id'])
             return row
 
-    def issue_browser_lease(self,token,task_id,case_id,context,ttl_seconds=300,*,share_observations=False,monitoring_approved=False):
+    def issue_browser_lease(self,token,task_id,case_id,context,ttl_seconds=300,*,share_observations=False,monitoring_approved=False,discovery_approved=False):
         context = approved_context(context)
         if (type(ttl_seconds) is not int or type(monitoring_approved) is not bool
                 or not 60<=ttl_seconds<=(3600 if monitoring_approved else 300) or type(share_observations) is not bool
-                or monitoring_approved and not share_observations):
+                or monitoring_approved and not share_observations or type(discovery_approved) is not bool
+                or discovery_approved and not monitoring_approved):
             raise InvalidIdentityInput('invalid_browser_lifetime')
         secret = 'gbp1_'+secrets.token_urlsafe(32)
         with connection(self._dsn) as conn:
@@ -108,12 +115,12 @@ class BrowserSessionService(EvidenceKeyService):
             session = conn.execute('SELECT expires_at FROM gabriel_identity.sessions WHERE token_digest=%s',(_digest(token),)).fetchone()
             row = conn.execute('''INSERT INTO gabriel_identity.browser_leases
                 (organization_id,id,token_digest,issued_by,human_session_digest,task_id,case_id,browser,extension_version,
-                 installation_id,tab_id,document_id,page_url,account_label,intake_enabled,scheduled_review_enabled,created_at,expires_at)
-                SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,t,LEAST(t+%s*interval '1 second',%s,%s)
+                 installation_id,tab_id,document_id,page_url,account_label,intake_enabled,scheduled_review_enabled,discovery_enabled,created_at,expires_at)
+                SELECT %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,t,LEAST(t+%s*interval '1 second',%s,%s)
                 FROM (SELECT clock_timestamp() AS t) admitted RETURNING *''',
                 (p.organization_id,uuid4(),browser_digest(secret),p.user_id,_digest(token),task['id'],case['id'],context['browser'],
                  context['extension_version'],context['installation_id'],context['tab_id'],context['document_id'],context['page_url'],
-                 context['account_label'],share_observations,monitoring_approved,ttl_seconds,task['expires_at'],session['expires_at'])).fetchone()
+                 context['account_label'],share_observations,monitoring_approved,discovery_approved,ttl_seconds,task['expires_at'],session['expires_at'])).fetchone()
             conn.execute('INSERT INTO gabriel_identity.case_tasks VALUES (%s,%s,%s) ON CONFLICT DO NOTHING',(p.organization_id,case['id'],task['id']))
             _audit(conn,'browser.lease_issued',p,row['id'])
             return BrowserCredential(row['id'],secret,row['expires_at'])
@@ -158,7 +165,7 @@ class BrowserSessionService(EvidenceKeyService):
                 conn.execute("UPDATE gabriel_identity.browser_leases SET state='active',last_seen=clock_timestamp() WHERE organization_id=%s AND id=%s",(p.organization_id,row['id']))
             _audit(conn,'browser.paired',p,row['id'])
             return {'lease_id':str(row['id']),'paired':True,'expires_at':row['expires_at'],
-                'scheduled_review_enabled':row['scheduled_review_enabled'],'capabilities':['session.heartbeat','session.disconnect'],'page_content_received':False}
+                'scheduled_review_enabled':row['scheduled_review_enabled'],'discovery_enabled':row['discovery_enabled'],'capabilities':['session.heartbeat','session.disconnect'],'page_content_received':False}
 
     def heartbeat_browser(self,token,context):
         with connection(self._dsn) as conn:

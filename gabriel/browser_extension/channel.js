@@ -1,5 +1,5 @@
 import {inspectPage} from "./collector.js";
-import {inspectNavigationIdentity, validatePlan} from "./navigator.js";
+import {inspectNavigationIdentity, validatePlan, approvedURL, readOnlyURL, inspectConsole} from "./navigator.js";
 import {inspectEventSection} from "./events.js";
 
 export function createChannel(storage, tabId) {
@@ -18,15 +18,7 @@ async function persist(values, revision) {
   if (revision !== generation) { await storage.clear(); stillCurrent(revision); }
 }
 
-function safeURL(value) {
-  const url = new URL(value);
-  let decoded = value;
-  for (let i = 0; i < 4; i++) decoded = decodeURIComponent(decoded);
-  if (decodeURIComponent(decoded) !== decoded || url.protocol !== "https:" || url.username || url.password ||
-      url.search || /[?\\\x00-\x20\x7f]/.test(decoded) || /[=&]/.test(decoded.split("#").slice(1).join("#")) ||
-      /\/(login|signin|sign-in|oauth|sso|mfa|password|authorize)/i.test(decoded) || url.href !== value) throw new Error("Unsupported or sensitive page. Restore access manually and select an approved page.");
-  return value;
-}
+function safeURL(value) { return approvedURL(value); }
 
 function gatewayURL(value) {
   const url = new URL(value);
@@ -65,7 +57,7 @@ async function request(session, operation, body) {
     if (raw.length > 1500000) throw new Error("Gateway response exceeded its limit.");
     const value = JSON.parse(raw);
     if (!response.ok || value.status !== "ok") throw new Error(operation === "observe" ? "Capture outcome is unconfirmed. Inspect receipts before retrying." :
-      ["events-review", "specialists-review"].includes(operation) ? "Local review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
+      ["events-review", "specialists-review", "text-review"].includes(operation) ? "Local review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
     return value.result;
   } finally { clearTimeout(timer); inflight.delete(controller); }
 }
@@ -138,7 +130,7 @@ async function handle(message) {
       await current(selected);
       await persist({session: {endpoint: target, token: result.token, context: selected, expires_at: result.expires_at,
         lease_id: result.lease_id, organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id,
-        sharing_approved: result.sharing_approved, scheduled_review_enabled: result.scheduled_review_enabled, sequence: 0}}, revision);
+        sharing_approved: result.sharing_approved, scheduled_review_enabled: result.scheduled_review_enabled, discovery_enabled: result.discovery_enabled, sequence: 0}}, revision);
       return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at,
         organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id};
     }
@@ -148,15 +140,18 @@ async function handle(message) {
     if (message.operation === "monitor-start") {
       if (message.approved !== true || !session.sharing_approved || !session.scheduled_review_enabled || pending || paused || navigation)
         throw new Error("Approve scheduled sharing with a current, unpaused pairing and resolved receipts first.");
-      if (!["page","tour"].includes(message.mode)) throw new Error("Choose selected-page or approved-tour review.");
+      if (!["page","tour","discover"].includes(message.mode)) throw new Error("Choose selected-page or approved-tour review.");
       await current(selected);
       await request(session, "heartbeat", {context: wireContext(selected)});
-      if (message.mode === "tour") {
+      if (["tour","discover"].includes(message.mode)) {
         const plan = await request(session, "navigation-plan", {context: wireContext(selected)});
-        if (reviewed_plan !== validatePlan(plan, selected)) throw new Error("Review the current navigation plan before scheduling it.");
+        const signature=validatePlan(plan,selected);
+        if (message.mode === "discover") {
+          if (!session.discovery_enabled || plan.contract_version!=="operator-discovered-readonly-v1") throw new Error("Automatic page discovery requires operator approval for this tab.");
+        } else if (reviewed_plan!==signature) throw new Error("Review the current navigation plan before scheduling it.");
       }
       await persist({monitoring: {enabled: true, state: "scheduled", mode: message.mode,
-        last_tick: Date.now(), last_checked: null, last_capture: null, captures: 0, unchanged: 0, digests: {}}}, revision);
+        last_tick: Date.now(), last_checked: null, last_capture: null, captures: 0, max_captures: message.mode === "discover" ? 32 : 8, unchanged: 0, digests: {}, queue:[selected.page_url], cursor:0}}, revision);
       return {message: "Scheduled review enabled for this tab until pairing expiry. Visibility remains partial; browser sleep can interrupt review."};
     }
     if (message.operation === "navigation-plan" || message.operation === "navigation-run") {
@@ -178,7 +173,14 @@ async function handle(message) {
       await storage.remove("reviewed_plan");
       const tour = {plan_id: plan.id, sections: [], state: "running"};
       await persist({tour}, revision);
-      for (const destination of plan.destinations) {
+      const {monitoring: schedule}=await storage.get("monitoring");
+      const discovery=message.monitorTick && schedule?.mode==="discover";
+      const queue=discovery ? [...schedule.queue] : plan.destinations;
+      const start=discovery ? schedule.cursor % queue.length : 0;
+      let processed=0;
+      for (let index=start;index<queue.length;index++) {
+        if (discovery && processed>=2) break;
+        const destination=queue[index];
         stillCurrent(revision);
         if (Date.parse(plan.expires_at) <= Date.now()) throw new Error("Navigation grant expired. Stop and pair again.");
         await current(selected);
@@ -213,6 +215,21 @@ async function handle(message) {
         await request(session, "heartbeat", {context: wireContext(selected)});
         await current(selected);
         await capture(selected, session, revision, tour, intent, message.monitorTick === true);
+        if (discovery) {
+          const values=await chrome.scripting.executeScript({target:{tabId:selected.tab_id,documentIds:[selected.document_id]},func:inspectConsole});
+          if (values.length!==1 || values[0].documentId!==selected.document_id) throw new Error("Console changed during discovery.");
+          const survey=values[0].result;
+          for (const link of survey.links) {
+            try {
+              readOnlyURL(link);
+              if (new URL(link).origin===new URL(selected.page_url).origin && !queue.includes(link) && queue.length<20) queue.push(link);
+            } catch { /* Unsupported links confer no navigation authority. */ }
+          }
+          processed++;
+          const {monitoring: latest}=await storage.get("monitoring");
+          await persist({monitoring:{...latest,queue,cursor:(index+1)%queue.length,interface_title:survey.title,
+            discovery_coverage:survey.coverage,identified_by:survey.identification}},revision);
+        }
       }
       tour.state = "complete";
       await persist({tour}, revision);
@@ -301,8 +318,8 @@ async function waitForDestination(selected, destination, deadline, revision, ver
 
 function publicMonitoring(value) {
   if (!value) return null;
-  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,unchanged,error} = value;
-  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,unchanged,error,
+  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage} = value;
+  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,
     coverage: "partial", scheduling_gap: Boolean(enabled && Date.now()-last_tick>45000)};
 }
 
@@ -316,7 +333,7 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
         let hash = null;
         const {monitoring} = await storage.get("monitoring");
         if (deduplicate) {
-          if (!monitoring?.enabled || monitoring.captures >= 8) throw new Error("Scheduled capture budget reached; review the case before renewing.");
+          if (!monitoring?.enabled || monitoring.captures >= monitoring.max_captures) throw new Error("Scheduled capture budget reached; review the case before renewing.");
           hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(view.content)))).map(x=>x.toString(16).padStart(2,"0")).join("");
           if (monitoring.digests[selected.page_url] === hash) {
             await persist({monitoring: {...monitoring, unchanged: monitoring.unchanged + 1, last_checked: Date.now(), state: "reviewed_unchanged"}}, revision);
@@ -347,6 +364,12 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
           tour.abstained_count = specialists.abstained_count;
           await persist({tour}, revision);
         }
+        if (deduplicate && view.normalization_kind !== "generated-browser-events-v1") {
+          const reviewed=await request(session,"text-review",{context:wireContext(selected),observation_id:receipt.observation_id});
+          stillCurrent(revision);
+          tour.sections.at(-1).text_review=reviewed;
+          await persist({tour},revision);
+        }
         await storage.remove("pending");
         if (deduplicate) {
           const {monitoring: latest} = await storage.get("monitoring");
@@ -366,7 +389,7 @@ async function tick() {
     if (Date.now()-monitoring.last_tick>45000) throw new Error("Browser scheduling gap. Fresh pairing is required.");
     if (pending || navigation) throw new Error("Unconfirmed capture or navigation. Inspect receipts before renewing.");
     await persist({monitoring: {...monitoring, last_tick: Date.now()}}, revision);
-    if (monitoring.mode === "tour") {
+    if (["tour","discover"].includes(monitoring.mode)) {
       await handle({operation: "navigation-run", approved: true, monitorTick: true});
     } else {
       busy = true;
