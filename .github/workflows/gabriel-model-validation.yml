@@ -1,4 +1,4 @@
-name: Gabriel offline authored validation checks
+name: Gabriel approved authored validation batch
 on:
   pull_request:
     paths: ['gabriel/identity/model_validation.py', 'gabriel/model_validation/**', 'testing/gabriel_identity/test_model_validation.py', '.github/workflows/gabriel-model-validation.yml']
@@ -14,3 +14,39 @@ jobs:
           persist-credentials: false
       - run: docker build --target test -f gabriel/model_validation/Dockerfile -t gabriel-validation-tests .
       - run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,size=64m,mode=1777 gabriel-validation-tests
+  live-validation:
+    needs: software
+    if: github.event.action == 'opened' && github.run_attempt == '1' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/gabriel-approved-validation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    concurrency:
+      group: gabriel-live-openrouter-key
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build approved generated-data runner without credentials
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-validation"
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-validation/source-sha.txt"
+          docker build --target runtime -f gabriel/model_validation/Dockerfile -t gabriel-approved-validation .
+          docker image inspect gabriel-approved-validation --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-validation/image-id.txt"
+      - name: Match all ten request bodies to the reviewed payload digest offline
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --entrypoint python gabriel-approved-validation -c 'from hashlib import sha256; from gabriel.identity.model_evaluation import canonical,load_json,packets; from gabriel.identity.model_lab import body_for,CALL_RESERVATION; from gabriel.identity.model_validation import MODEL; requests=[dict(case_id=p["case_id"],body=body_for(MODEL,p,protocol_v2=True)) for p in packets(load_json("/app/corpus.json"),"validation")]; actual=sha256(canonical(requests)).hexdigest(); assert len(requests)==10 and str(10*CALL_RESERVATION)=="0.063040" and actual=="7f85505680802add12540134470df6db4e3305a1b421c5f0fcef5ea5e180047a"; print(actual)' > "$RUNNER_TEMP/gabriel-validation/request-bodies.sha256"
+      - name: One approved batch with serialized budget/privacy preflight and no retry
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          status=0
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 -e OPENROUTER_API_KEY gabriel-approved-validation > "$RUNNER_TEMP/gabriel-validation/journal.jsonl" || status=$?
+          cat "$RUNNER_TEMP/gabriel-validation/journal.jsonl"
+          exit "$status"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-approved-validation
+          path: ${{ runner.temp }}/gabriel-validation
+          if-no-files-found: error
+          retention-days: 14
