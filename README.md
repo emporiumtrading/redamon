@@ -19,6 +19,7 @@ The interface uses Gabriel's own halo and winged-shield emblem, midnight-blue su
 - [Pair the browser companion](docs/readmes/README.GABRIEL_BROWSER_CLIENT.md)
 - [Review cases and evidence](docs/readmes/README.GABRIEL_CASE_WORKFLOW.md)
 - [Understand specialist assessments](docs/readmes/README.GABRIEL_SPECIALISTS.md)
+- [Review browser investigation, learning and AI status](docs/readmes/GABRIEL_BROWSER_CAPABILITY_STATUS.md)
 - [Review implementation and acceptance status](docs/readmes/GABRIEL_REQUIREMENT_STATUS.md)
 
 ## What is available
