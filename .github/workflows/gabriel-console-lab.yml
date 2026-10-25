@@ -32,9 +32,8 @@ jobs:
         run: python3 tooling/scripts/gabriel_console_lab.py up '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
       - name: Build isolated browser discovery harness
         run: docker build --build-arg "LAB_UID=$(id -u)" -f testing/gabriel_console/Dockerfile -t gabriel-console-browser .
-      - name: Create and verify a case-scoped IRIS viewer
-        if: matrix.tool == 'iris'
-        run: python3 tooling/scripts/gabriel_console_lab.py analyst iris "$RUNNER_TEMP/gabriel-console-iris"
+      - name: Create a separate viewer and verify backend read/write permissions
+        run: python3 tooling/scripts/gabriel_console_lab.py analyst '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
       - name: Verify generated syslog replay through the Wazuh collector
         if: matrix.tool == 'wazuh'
         run: python3 tooling/scripts/gabriel_console_lab.py replay wazuh "$RUNNER_TEMP/gabriel-console-wazuh"
@@ -42,8 +41,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/gabriel-console-output"
           chmod 700 "$RUNNER_TEMP/gabriel-console-output"
-          LAB_BROWSER_CREDENTIALS=credentials.json
-          if test '${{ matrix.tool }}' = iris; then LAB_BROWSER_CREDENTIALS=analyst-credentials.json; fi
+          LAB_BROWSER_CREDENTIALS=analyst-credentials.json
           LAB_REPLAY_MOUNT=()
           if test '${{ matrix.tool }}' = wazuh; then
             LAB_REPLAY_MOUNT=(--mount "type=bind,src=$RUNNER_TEMP/gabriel-console-wazuh/replay.json,dst=/run/lab/replay.json,readonly")
