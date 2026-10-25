@@ -24,7 +24,9 @@ def main():
             conn.request(method,path,body=json.dumps(payload) if payload is not None else None,
                 headers={'Authorization':auth,'Content-Type':'application/json'})
             response=conn.getresponse();body=response.read(1048576)
-            if response.status!=expected: raise ValueError('permission_or_setup_check_failed')
+            if response.status!=expected:
+                print('Expected HTTP '+str(expected)+' observed '+str(response.status),file=sys.stderr)
+                raise ValueError('permission_or_setup_check_failed')
             return None if method=='HEAD' else body.decode() if raw else json.loads(body)
         finally: conn.close()
     owner=basic(config['indexer_username'],config['indexer_password'])
@@ -57,12 +59,16 @@ def main():
     api('POST','/security/roles/'+str(matches[0]['id'])+'/rules?rule_ids='+str(rule[0]['id']))
     viewer_token=request('localhost',55000,api_context,'POST','/security/user/authenticate/run_as?raw=true',
         basic(config['api_username'],config['api_password']),dict(name=user,auth=dict(user_name=user)),raw=True)
-    phase='server_denials'
+    phase='server_agents_read'
     api('GET','/agents?limit=1',token=viewer_token)
+    phase='server_groups_before'
     before=api('GET','/groups')['data']['affected_items']
     denied_group='gabriel-denied-'+user.rsplit('-',1)[-1]
+    phase='server_group_write_denial'
     api('POST','/groups?group_id='+denied_group,token=viewer_token,expected=403)
+    phase='server_security_read_denial'
     api('GET','/security/users',token=viewer_token,expected=403)
+    phase='server_groups_after'
     after=api('GET','/groups')['data']['affected_items']
     if before!=after or any(row['name']==denied_group for row in after): raise ValueError('denied_group_write_changed_state')
     print(json.dumps(dict(status='PASS',username=user,index_search_http=200,index_write_http=403,
