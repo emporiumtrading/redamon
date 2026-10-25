@@ -2,7 +2,7 @@
 
 Status: IN_PROGRESS. No production model admission, merge or deployment occurred.
 
-## Approved inference result
+The full provider journal is not published by this documentation change. Automatic approval review denied that disclosure; only the result summary and evidence digests are recorded here.\n\n## Approved inference result
 
 The owner explicitly approved the previously prepared ten synthetic payloads sent to OpenRouter/Cerebras with a maximum new-call reservation of $0.063040. The approved batch ran once in [run 40194998344](https://github.com/emporiumtrading/redamon/actions/runs/40194998344), after all six offline software tests passed.
 
