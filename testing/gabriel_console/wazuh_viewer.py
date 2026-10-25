@@ -43,7 +43,7 @@ def main():
     index('PUT','/_plugins/_security/api/roles/'+role,payload=dict(cluster_permissions=['cluster_composite_ops_ro'],
         index_permissions=[dict(index_patterns=['*'],allowed_actions=['read'])],
         tenant_permissions=[dict(tenant_patterns=['global_tenant'],allowed_actions=['kibana_all_read'])]),expected=201)
-    index('PUT','/_plugins/_security/api/internalusers/'+user,payload=dict(password=password,backend_roles=[],opendistro_security_roles=['kibana_read_only']),expected=201)
+    index('PUT','/_plugins/_security/api/internalusers/'+user,payload=dict(password=password,backend_roles=[]),expected=201)
     index('PUT','/_plugins/_security/api/rolesmapping/'+role,payload=dict(users=[user],backend_roles=[],hosts=[]),expected=201)
     viewer=basic(user,password)
     phase='indexer_denials'
