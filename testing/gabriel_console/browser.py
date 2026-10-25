@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 import subprocess
+import sys
 import time
 from urllib.parse import urlsplit
 
@@ -39,7 +40,8 @@ class CDP:
                 self.network[key]=self.network.get(key,0)+1
                 if response['status']>=400:
                     path=urlsplit(response['url']).path
-                    route=path if re.fullmatch(r'/(?:api|internal|auth)/[a-z_/-]{1,100}',path) else '[other-route]'
+                    route=path if re.fullmatch(r'/(?:api|internal|auth|_plugins|_opendistro)/[a-zA-Z0-9_./-]{1,120}',path) else '[other-route]'
+                    route='/'.join(part if len(part)<=32 else '[id]' for part in route.split('/'))
                     error=key+' '+route;self.errors[error]=self.errors.get(error,0)+1
             if value.get('id')==ident:
                 if 'error' in value: raise AssertionError('console_cdp_command_failed')
@@ -54,7 +56,7 @@ def snapshot(cdp,session):
     return cdp.evaluate(session,"""(()=>{
 const visible=e=>Boolean(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
 const clean=e=>e.innerText.trim().replace(/\\s+/g,' ').slice(0,160);
-return {title:document.title,path:location.pathname,has_search:Boolean(location.search),has_fragment:Boolean(location.hash),headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
+return {missing_permission_actions:[...document.body.innerText.matchAll(/no permissions for \[([a-z_:, /-]{1,200})\]/g)].map(m=>m[1]).slice(0,12),error_terms:['Unauthorized','Forbidden','security_exception','run_as','No API available','Error','not allowed','permissions','Wazuh API','3003','5013','account','403','401'].filter(t=>document.body.innerText.includes(t)),title:document.title,path:location.pathname,has_search:Boolean(location.search),has_fragment:Boolean(location.hash),headings:[...document.querySelectorAll('h1,h2,h3')].filter(visible).map(clean).slice(0,30),
 table_headers:[...document.querySelectorAll('th,[role=columnheader]')].filter(visible).map(clean).slice(0,80),
 links:[...document.querySelectorAll('a[href]')].filter(visible).map(e=>{let u=new URL(e.href);return u.origin===location.origin?{text:clean(e),path:u.pathname,fragment:u.hash.slice(0,180)}:null}).filter(Boolean).slice(0,100),
 buttons:[...document.querySelectorAll('button')].filter(visible).map(e=>({text:clean(e),label:e.getAttribute('aria-label')||'',test_subject:e.getAttribute('data-test-subj')||''})).slice(0,80),
@@ -87,14 +89,20 @@ set(u,USER);set(p,PASSWORD);return true;})()""".replace('USER',json.dumps(creds[
         wait(lambda:cdp.evaluate(session,"document.readyState==='complete'"))
         phase='application_content'
         if tool=='wazuh':
-            wait(lambda:cdp.evaluate(session,"(()=>{const t=document.body.innerText.toLowerCase();return ['endpoint security','threat intelligence','security operations'].some(x=>t.includes(x));})()"),180)
+            ready=wait(lambda:cdp.evaluate(session,"(()=>{const t=document.body.innerText.toLowerCase();if(t.includes('security_exception')&&t.includes('go to settings'))return 'permission_error';return ['endpoint security','threat intelligence','security operations'].some(x=>t.includes(x))?'ready':null;})()"),180)
+            assert ready=='ready'
             phase='readonly_viewer_identity'
-            assert cdp.evaluate(session,"(()=>{const es=[...document.querySelectorAll('button')].filter(e=>e.getClientRects().length&&(e.getAttribute('data-test-subj')==='userMenuButton'||e.querySelector('[class*=euiAvatar]')));if(es.length!==1)return false;es[0].click();return true;})()")
-            identity="[...document.querySelectorAll('span,div,p,h1,h2,h3,h4')].some(e=>!e.childElementCount&&e.getClientRects().length&&e.innerText.trim()===USER)".replace('USER',json.dumps(creds['username']))
+            assert cdp.evaluate(session,"(()=>{const es=[...document.querySelectorAll('button')].filter(e=>e.getClientRects().length&&(e.getAttribute('data-test-subj')==='userMenuButton'||e.querySelector('[class*=euiAvatar]')));if(es.length!==1)return false;const avatar=es[0].querySelector('[class*=euiAvatar]');(avatar||es[0]).click();return true;})()")
+            identity="[...document.querySelectorAll('span,div,p,h1,h2,h3,h4,h5,h6')].some(e=>!e.childElementCount&&e.getClientRects().length&&e.innerText.trim()===USER)".replace('USER',json.dumps(creds['username']))
             wait(lambda:cdp.evaluate(session,identity))
             cdp.send('Input.dispatchKeyEvent',{'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27},session)
             cdp.send('Input.dispatchKeyEvent',{'type':'keyUp','key':'Escape','code':'Escape','windowsVirtualKeyCode':27},session)
         else: time.sleep(3)
+        if sys.argv[1:]==['--initialize-only']:
+            Path('/output/bootstrap.json').write_text(json.dumps(dict(status='PASS',tool=tool,operator_initialization_only=True))+'\n')
+            print('PASS: generated operator initialized console before viewer enrollment')
+            return
+        if sys.argv[1:]: raise AssertionError('unsupported_console_browser_arguments')
         pages=[snapshot(cdp,session)]
         if tool=='iris':
             assert any(link['text'].split(' ',1)[0]==creds['username'] for link in pages[0]['links'])

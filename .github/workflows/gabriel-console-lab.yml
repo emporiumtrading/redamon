@@ -32,6 +32,15 @@ jobs:
         run: python3 tooling/scripts/gabriel_console_lab.py up '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
       - name: Build isolated browser discovery harness
         run: docker build --build-arg "LAB_UID=$(id -u)" -f testing/gabriel_console/Dockerfile -t gabriel-console-browser .
+      - name: Initialize shared Wazuh dashboard objects with the generated operator
+        if: matrix.tool == 'wazuh'
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-console-bootstrap"
+          docker run --rm --network host --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs "/home/browserlab:rw,nosuid,nodev,size=32m,uid=$(id -u),gid=$(id -g),mode=700" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-wazuh/credentials.json,dst=/run/lab/credentials.json,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-wazuh/tls/server.pem,dst=/run/lab/server.pem,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-console-bootstrap,dst=/output" gabriel-console-browser --initialize-only
       - name: Create a separate viewer and verify backend read/write permissions
         run: python3 tooling/scripts/gabriel_console_lab.py analyst '${{ matrix.tool }}' "$RUNNER_TEMP/gabriel-console-${{ matrix.tool }}"
       - name: Verify generated syslog replay through the Wazuh collector

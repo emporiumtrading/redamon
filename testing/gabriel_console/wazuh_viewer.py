@@ -52,6 +52,9 @@ def main():
     index('PUT','/'+denied_index,auth=viewer,payload={},expected=403)
     index('GET','/_plugins/_security/api/internalusers',auth=viewer,expected=403)
     index('HEAD','/'+denied_index,expected=404)
+    phase='indexer_account_context'
+    auth_context=index('GET','/_opendistro/_security/api/account',auth=viewer)
+    if auth_context.get('user_name')!=user: raise ValueError('viewer_account_context_mismatch')
     phase='server_role_mapping'
     operator=request('localhost',55000,api_context,'POST','/security/user/authenticate?raw=true',
         basic(config['api_username'],config['api_password']),raw=True)
@@ -66,7 +69,7 @@ def main():
     # Wazuh 4.14.9 invalidates run_as tokens through the role-change second (strict nbf > cutoff).
     time.sleep(1.1)
     viewer_token=request('localhost',55000,api_context,'POST','/security/user/authenticate/run_as?raw=true',
-        basic(config['api_username'],config['api_password']),dict(name=user,auth=dict(user_name=user)),raw=True)
+        basic(config['api_username'],config['api_password']),auth_context,raw=True)
     phase='server_agents_read'
     api('GET','/agents?limit=1',token=viewer_token)
     phase='server_groups_before'
@@ -75,7 +78,10 @@ def main():
     phase='server_group_write_denial'
     api('POST','/groups',dict(group_id=denied_group),token=viewer_token,expected=403)
     phase='server_security_read_denial'
-    api('GET','/security/users',token=viewer_token,expected=403)
+    protected=[row for row in api('GET','/security/users')['data']['affected_items']
+        if row['username']!=config['api_username']]
+    if not protected: raise ValueError('independent_security_user_missing')
+    api('GET','/security/users?user_ids='+str(protected[0]['id']),token=viewer_token,expected=403)
     phase='server_groups_after'
     after=api('GET','/groups')['data']['affected_items']
     if before!=after or any(row['name']==denied_group for row in after): raise ValueError('denied_group_write_changed_state')
