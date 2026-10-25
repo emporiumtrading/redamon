@@ -1,0 +1,111 @@
+x-identity: &identity
+  image: gabriel-identity:dev
+  build:
+    context: .
+    dockerfile: gabriel/identity/Dockerfile
+    target: production
+    args:
+      IDENTITY_BASE: ${GABRIEL_IDENTITY_BASE:-python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd}
+  user: '10001:10001'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 128
+  mem_limit: 512m
+  cpus: 1
+  networks: [identity]
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m
+
+services:
+  identity-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gabriel
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+      - source: role_init
+        target: /docker-entrypoint-initdb.d/01-gabriel-role.sql
+    volumes:
+      - identity_data:/var/lib/postgresql/data
+    networks: [identity]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U postgres -d gabriel']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  identity:
+    <<: *identity
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+    secrets: [app_dsn]
+    stdin_open: true
+    tty: true
+  identity-admin:
+    <<: *identity
+    profiles: [operator]
+    environment:
+      GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
+    secrets: [owner_dsn]
+    stdin_open: true
+    tty: true
+  identity-tests:
+    <<: *identity
+    profiles: [test]
+    image: gabriel-identity-tests:dev
+    build:
+      context: .
+      dockerfile: gabriel/identity/Dockerfile
+      target: test
+      args:
+        IDENTITY_BASE: ${GABRIEL_IDENTITY_BASE:-python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd}
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
+      GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring
+      GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+    secrets: [app_dsn, owner_dsn, provider_keyring, evidence_keyring]
+  case-data:
+    <<: *identity
+    profiles: [cases]
+    entrypoint: [python, -m, gabriel.identity.case_cli]
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+      GABRIEL_EVIDENCE_ROOT: /var/lib/gabriel-evidence
+      GABRIEL_CASE_INTAKE_ROOT: /intake
+    secrets: [app_dsn, evidence_keyring]
+    volumes:
+      - evidence_data:/var/lib/gabriel-evidence
+  provider-secrets:
+    <<: *identity
+    profiles: [vault]
+    entrypoint: [python, -m, gabriel.identity.vault_cli]
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_PROVIDER_KEYRING_FILE: /run/secrets/provider_keyring
+    secrets: [app_dsn, provider_keyring]
+
+networks:
+  identity:
+    internal: true
+volumes:
+  identity_data:
+  evidence_data:
+secrets:
+  db_password:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/db_password
+  app_dsn:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/app_dsn
+  owner_dsn:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/owner_dsn
+  role_init:
+    file: ${GABRIEL_IDENTITY_SECRET_DIR:?Prepare an external secret directory}/role_init.sql
+  provider_keyring:
+    file: ${GABRIEL_PROVIDER_KEY_DIR:-/nonexistent-gabriel-provider-keys}/keyring.json
+  evidence_keyring:
+    file: ${GABRIEL_EVIDENCE_KEY_DIR:-/nonexistent-gabriel-evidence-keys}/keyring.json

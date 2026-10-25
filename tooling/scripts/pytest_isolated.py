@@ -25,17 +25,21 @@ Usage:
         [--parallel N] [--cov PKG --cov-floor N]
   tier ∈ {unit, integration, live, all}   (all = unit+integration, skips live)
 
-Exit code: 0 if every selected file passed (or collected no tests, pytest
-exit 5, which is treated as a clean no-op); non-zero otherwise.
+Exit code: non-zero on test/coverage failure. --strict additionally rejects
+empty selection, missing evidence, skipped tests and expected failures.
 """
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
 _INT = ("_integration.py", "_skill.py", "_e2e")
 _LIVE = ("live_", "_live", "_smoke", "smoke_")
@@ -131,6 +135,32 @@ def run_one(path, extra):
     return path, proc.returncode, proc.stdout + proc.stderr
 
 
+def run_verified(path, extra, report_dir, index):
+    """Count test cases from fresh machine-readable evidence, not log text."""
+    junit = Path(report_dir) / f"{index}.xml"
+    path, code, output = run_one(path, [*extra, f"--junitxml={junit}"])
+    counts = dict(collected=0, passed=0, failed=0, errors=0, skipped=0)
+    evidence_error = None
+    try:
+        root = ET.parse(junit).getroot()
+        if root.tag not in {"testsuites", "testsuite"}:
+            raise ValueError("unexpected JUnit root")
+        for case in root.iter("testcase"):
+            counts["collected"] += 1
+            if case.find("failure") is not None:
+                counts["failed"] += 1
+            elif case.find("error") is not None:
+                counts["errors"] += 1
+            elif case.find("skipped") is not None:
+                counts["skipped"] += 1
+            else:
+                counts["passed"] += 1
+    except (OSError, ET.ParseError, ValueError) as exc:
+        evidence_error = str(exc)
+    return {"path": path, "exit_code": code, "counts": counts,
+            "evidence_error": evidence_error, "output": output}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("tier", choices=["unit", "integration", "live", "all"])
@@ -139,13 +169,30 @@ def main() -> int:
     ap.add_argument("--cov", default=None, help="package/path to measure coverage for")
     ap.add_argument("--cov-floor", type=float, default=None)
     ap.add_argument("--exclude", default="", help="comma-separated basenames to skip")
+    ap.add_argument("--strict", action="store_true",
+                    default=os.environ.get("REDAMON_TEST_STRICT") == "1")
+    ap.add_argument("--report", type=Path, help="write this invocation's JSON evidence")
     args = ap.parse_args()
+
+    def finish(status, results, reason=None, coverage=None):
+        counts = {k: sum(r["counts"][k] for r in results)
+                  for k in ("collected", "passed", "failed", "errors", "skipped")}
+        report = {"schema_version": 1, "tier": args.tier, "strict": args.strict,
+                  "status": status, "reason": reason, "counts": counts,
+                  "coverage": coverage,
+                  "files": [{k: v for k, v in r.items() if k != "output"}
+                            for r in results]}
+        if args.report:
+            args.report.parent.mkdir(parents=True, exist_ok=True)
+            args.report.write_text(json.dumps(report, indent=2) + "\n")
+        print(f">> gate status: {status}; counts: {counts}")
+        return 0 if status == "PASS" else 1
 
     exclude = [x for x in (args.exclude or "").split(",") if x]
     files = collect_files(args.testdirs, args.tier, exclude=exclude)
     if not files:
         print(f">> {args.tier}: no test files found under {args.testdirs}")
-        return 0
+        return finish("BLOCKED" if args.strict else "PASS", [], "no test files selected")
 
     # Coverage: run SERIALLY with --cov-append into one data file (parallel
     # appends can corrupt it), then report + enforce the floor.
@@ -156,42 +203,36 @@ def main() -> int:
                 os.remove(cov_file + suffix)
             except OSError:
                 pass
-        print(f">> {args.tier}: {len(files)} files, coverage on '{args.cov}' (serial)")
-        for f in files:
-            subprocess.run(
-                [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
-                 "--no-header", "-m", _MARKEXPR[args.tier],
-                 f"--cov={args.cov}", "--cov-append", f],
-                capture_output=True, text=True,
-            )
-        rep = subprocess.run([sys.executable, "-m", "coverage", "report", "--skip-covered"],
-                             capture_output=True, text=True)
-        print("\n".join(rep.stdout.splitlines()[-30:]))
-        if args.cov_floor is not None:
-            chk = subprocess.run(
-                [sys.executable, "-m", "coverage", "report", f"--fail-under={args.cov_floor:g}"],
-                capture_output=True, text=True)
-            if chk.returncode != 0:
-                print(f">> COVERAGE BELOW FLOOR ({args.cov_floor:g}%)")
-                return 1
-            print(f">> coverage floor OK (>= {args.cov_floor:g}%)")
-        return 0
+        # All children and the report must use the same freshly erased file.
+        os.environ["COVERAGE_FILE"] = cov_file
 
-    print(f">> {args.tier}: {len(files)} files (parallel={args.parallel}, per-file isolation)")
+    parallel = 1 if args.cov else max(1, args.parallel)
+    print(f">> {args.tier}: {len(files)} files (parallel={parallel}, per-file isolation)")
     failures = []
     empty_files = []
     passed = 0
     executed = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.parallel)) as ex:
+    with tempfile.TemporaryDirectory(prefix="redamon-test-evidence-") as evidence_dir:
         markexpr = ["-m", _MARKEXPR[args.tier]]
-        for path, code, out in ex.map(lambda p: run_one(p, markexpr), files):
+        if args.strict:
+            markexpr.extend(["-o", "xfail_strict=true"])
+        if args.cov:
+            markexpr.extend([f"--cov={args.cov}", "--cov-append"])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=parallel) as ex:
+            results = list(ex.map(
+                lambda pair: run_verified(pair[1], markexpr, evidence_dir, pair[0]),
+                enumerate(files)))
+        for result in results:
+            path, code, out = result["path"], result["exit_code"], result["output"]
+            counts = result["counts"]
             if code == 5:            # no tests collected in this file
                 empty_files.append(path)
-                continue
-            executed += tests_executed(out)
-            if code != 0:
+            executed += counts["passed"] + counts["failed"] + counts["errors"]
+            strict_failure = args.strict and (result["evidence_error"] or
+                                              counts["collected"] == 0 or counts["skipped"])
+            if code not in (0, 5) or counts["failed"] or counts["errors"] or strict_failure:
                 failures.append((path, code, out))
-            else:
+            elif code == 0:
                 passed += 1
 
     for path, code, out in failures:
@@ -210,7 +251,20 @@ def main() -> int:
     print(f"\n>> {args.tier}: {passed} files passed, {len(failures)} failed, "
           f"{len(empty_files)} empty/skipped")
     print(f">> {args.tier}: TESTS EXECUTED: {executed}")
-    return 1 if failures else 0
+    coverage = None
+    if args.cov:
+        command = [sys.executable, "-m", "coverage", "report", "--skip-covered"]
+        if args.cov_floor is not None:
+            command.append(f"--fail-under={args.cov_floor:g}")
+        try:
+            rep = subprocess.run(command, capture_output=True, text=True,
+                                 timeout=_PER_FILE_TIMEOUT)
+            print(rep.stdout + rep.stderr)
+            coverage = {"exit_code": rep.returncode, "floor": args.cov_floor}
+        except subprocess.TimeoutExpired:
+            coverage = {"exit_code": 124, "floor": args.cov_floor}
+    failed = bool(failures) or bool(coverage and coverage["exit_code"] != 0)
+    return finish("FAIL" if failed else "PASS", results, coverage=coverage)
 
 
 if __name__ == "__main__":

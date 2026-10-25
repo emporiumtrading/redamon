@@ -1,0 +1,25 @@
+services:
+  browser-lab:
+    image: gabriel-browser-lab:dev
+    build:
+      context: .
+      dockerfile: gabriel/identity/Dockerfile
+      target: browser-lab
+      args:
+        LAB_UID: ${GABRIEL_BROWSER_LAB_UID:?Set the disposable runner UID}
+    profiles: [browser-lab]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 512
+    mem_limit: 3g
+    cpus: 2
+    networks: [identity]
+    shm_size: 512m
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m
+      - /home/browserlab:rw,nosuid,nodev,size=512m,mode=0700,uid=${GABRIEL_BROWSER_LAB_UID},gid=${GABRIEL_BROWSER_LAB_UID}
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
+    secrets: [app_dsn,owner_dsn]

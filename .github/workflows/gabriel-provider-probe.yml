@@ -1,0 +1,103 @@
+name: Gabriel bounded provider probe and ARM64 build
+on:
+  pull_request:
+    paths:
+      - 'gabriel/identity/**'
+      - 'testing/gabriel_identity/**'
+      - 'tooling/scripts/gabriel_candidate_export.py'
+      - 'testing/gabriel_model_lab/**'
+      - 'gabriel/identity/provider_probe.py'
+      - 'gabriel/identity/model_input.py'
+      - 'gabriel/provider_probe/**'
+      - 'testing/gabriel_identity/test_provider_probe.py'
+      - 'testing/gabriel_identity/test_model_input.py'
+      - '.github/workflows/gabriel-provider-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  software:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build isolated probe software tests
+        run: docker build -f gabriel/provider_probe/Dockerfile --target test -t gabriel-probe-tests .
+      - name: Container-only software gate without credentials or network
+        run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m gabriel-probe-tests
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build core identity image on native Linux ARM64
+        run: docker build -f gabriel/identity/Dockerfile --target production -t gabriel-core-arm64 .
+      - name: Verify architecture and core imports without a network or credentials
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --memory 512m --cpus 1 --entrypoint python gabriel-core-arm64 -c "import platform; from gabriel.identity.model_budget import ModelBudgetService; assert platform.machine()=='aarch64'; print('PASS: Linux ARM64 core image and dependencies; macOS UAT remains pending')"
+      - name: Native ARM64 database, restart and fresh restore verification
+        run: bash tooling/scripts/gabriel_identity_check.sh "$RUNNER_TEMP/gabriel-arm64-evidence"
+      - name: ARM64 runtime and foundation regression
+        run: |
+          bash tooling/scripts/gabriel_runtime_check.sh "$RUNNER_TEMP/gabriel-arm64-runtime"
+          bash tooling/scripts/gabriel_foundation_check.sh "$RUNNER_TEMP/gabriel-arm64-foundation"
+      - name: Export the existing checked ARM64 images
+        run: >-
+          python3 tooling/scripts/gabriel_candidate_export.py
+          --output "$RUNNER_TEMP/gabriel-core-candidate-arm64"
+          --identity-evidence "$RUNNER_TEMP/gabriel-arm64-evidence"
+          --runtime-evidence "$RUNNER_TEMP/gabriel-arm64-runtime"
+          --foundation-evidence "$RUNNER_TEMP/gabriel-arm64-foundation"
+      - name: Retain the ARM64 core test candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-core-candidate-arm64
+          path: ${{ runner.temp }}/gabriel-core-candidate-arm64
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Retain sanitized native ARM64 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-arm64-evidence
+          path: |
+            ${{ runner.temp }}/gabriel-arm64-evidence
+            ${{ runner.temp }}/gabriel-arm64-runtime
+            ${{ runner.temp }}/gabriel-arm64-foundation
+          if-no-files-found: error
+          retention-days: 14
+  live-generated-probe:
+    needs: software
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/gabriel-provider-probe'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    concurrency:
+      group: gabriel-live-openrouter-key
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build probe without any credentials
+        run: docker build -f gabriel/provider_probe/Dockerfile --target runtime -t gabriel-provider-probe .
+      - name: Single-call generated Azure comparison with preflight budget and privacy constraints
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          status=0
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 -e OPENROUTER_API_KEY gabriel-provider-probe --azure-comparison > "$RUNNER_TEMP/gabriel-provider-probe.json" || status=$?
+          cat "$RUNNER_TEMP/gabriel-provider-probe.json"
+          exit "$status"
+      - name: Retain generated-only probe result, never credentials
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-generated-provider-probe
+          path: ${{ runner.temp }}/gabriel-provider-probe.json
+          if-no-files-found: error
+          retention-days: 7
