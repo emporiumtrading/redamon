@@ -12,6 +12,8 @@ The existing worker applies exact configuration admission, checked database-vaul
 
 Stop can revoke the browser lease while provider I/O is pending. An uncertain claimed call never automatically resends. Completed receipts replay as historical answers. AI waits are bounded to 40 seconds with current-document and heartbeat checks around dispatch; an unresolved result leaves the cursor for inspection.
 
+Each AI plan freezes only its original capture and normalized input. Unrelated additions to the same case do not invalidate an in-flight review. The existing two-slot concurrency limit remains enforced. A capacity deferral resumes only when the server explicitly confirms that no reservation or dispatch occurred; it does not recapture the page. Unknown dispatch outcomes are never automatically repeated.
+
 Completed calls count their full reserved ceiling as spending, rather than claiming that an operator verified a provider bill. Migration 28 requires a completed answer receipt, the original claimant and exactly that reserved amount before clearing the uncertainty slot. Unknown calls retain their reservation and slot. Existing daily/monthly/investigation limits still apply.
 
 ## Readiness and operator activation
@@ -36,13 +38,13 @@ Use the backed-up rebuild command in the [installation guide](GABRIEL_TEST_INSTA
 
 The offline Docker exporter prepares five authored synthetic requests for GPT-OSS-120B through OpenRouter's exact Cerebras route, with no fallback, and a local negative control that makes no provider request.
 
-[Download the exact request packet](https://github.com/emporiumtrading/redamon/actions/runs/40249533694/artifacts/12619813793).
+[Download the exact request packet](https://github.com/emporiumtrading/redamon/actions/runs/40253840380/artifacts/12621646581).
 
 - Prospective destination: `https://openrouter.ai/api/v1/chat/completions`.
 - Maximum new reservation: **$0.031520 total**, five calls at at most **$0.006304** each.
 - This export made **zero live calls** and used no provider credential.
 - Source exporter: `testing/gabriel_browser_ai/trial.py`; each request body and the exact configuration are hashed in the packet.
-- GitHub-reported artifact ZIP digest: `fda4b5ba6cec4fedc77089fa8e3de6410191d8dde62fc118327b93523592c57e`. Independent download/hash verification is not claimed.
+- GitHub-reported artifact ZIP digest: `32b7883bf07e4f54b1807fb46bfd9494eef9aabdcbfccac9e5a5fae9714c5151`. Independent download/hash verification is not claimed.
 
 This packet is prepared for explicit owner payload/destination/spending review. It is not a sealed held-out corpus, independent analyst adjudication or a production-admission record. A successful authored trial alone would not qualify the model. Independent exact-configuration evaluation, workload/coverage acceptance, operational/security review and native OS UAT remain necessary.
 
