@@ -1,12 +1,13 @@
 """Offline authored per-agent development requests, never qualification or dispatch."""
-from datetime import datetime,timezone
+from itertools import permutations
 from decimal import Decimal
 from hashlib import sha256
 import json
 from uuid import NAMESPACE_DNS,uuid5
 
 from gabriel.identity.evidence_store import canonical
-from gabriel.identity.specialist_agents import DEFAULT_MODEL,ROLES,configuration,project,prompt
+from gabriel.identity.specialist_agents import DEFAULT_MODEL,ROLES,TOOLS,configuration,project,prompt
+from gabriel.identity.specialist_analysis import analyze
 from gabriel.identity.model_evaluation import digest
 
 EXAMPLES={
@@ -38,20 +39,31 @@ def export():
                 dict(id=str(uuid5(case,'fact')),type=EXAMPLES[role][0],evidence_id=str(source),
                     evidence_digest=sha256(b'authored generated source').hexdigest(),entity_id=str(uuid5(case,'entity')),
                     event_time='2026-10-25T11:00:00Z',data=data)])
-            prepared=project(document,role,job,[])
-            body=dict(model=DEFAULT_MODEL,messages=[dict(role='system',content=prompt(role)),
-                dict(role='user',content=canonical(prepared['packet']).decode())],**configs[role]['parameters'])
-            wire=canonical(body)
-            assert len(wire)<=7000 and str(source).encode() not in wire and str(case).encode() not in wire
-            requests.append(dict(case_id=name,role=role,configuration_digest=digest(configs[role]),body=body,
-                body_sha256=sha256(wire).hexdigest(),source_classification='authored_synthetic_development',
-                ground_truth='independent_adjudication_pending'))
+            def result(name):
+                if name=='verify_sources':value=dict(verified_artifact_count=2,source_authenticity='unverified')
+                elif name=='review_memory':value=dict(reviewed_local_references=0,contents_exported=False)
+                elif name=='inspect_timeline':value=dict(earliest=document['facts'][0]['event_time'],latest=document['facts'][0]['event_time'],reported_as_of=document['as_of'],source_clock_verified=False)
+                else:
+                    assessment=analyze(role,document,'local-input')
+                    value=dict(urgency=assessment['urgency'],observations=[r['statement'] for r in assessment['observations']],hypotheses=[r['statement'] for r in assessment['hypotheses']],qualified=False)
+                return dict(tool=name,result=value)
+            paths=[()]+list(permutations(TOOLS[role],1))+list(permutations(TOOLS[role],2))
+            for path in paths:
+                prepared=project(document,role,job,[result(t) for t in path])
+                body=dict(model=DEFAULT_MODEL,messages=[dict(role='system',content=prompt(role)),
+                    dict(role='user',content=canonical(prepared['packet']).decode())],**configs[role]['parameters'])
+                wire=canonical(body)
+                assert len(wire)<=7000 and str(source).encode() not in wire and str(case).encode() not in wire
+                requests.append(dict(case_id=name,role=role,round=len(path)+1,tool_history=list(path),configuration_digest=digest(configs[role]),body=body,
+                    body_sha256=sha256(wire).hexdigest(),source_classification='authored_synthetic_development',
+                    ground_truth='independent_adjudication_pending'))
+    assert len(requests)==240
     return dict(version='gabriel-specialist-agent-development-packet-v1',requests=requests,
-        request_count=len(requests),configurations=configs,request_set_sha256=digest(requests),
+        approved_body_count=len(requests),initial_case_count=24,maximum_model_calls=72,configurations=configs,request_set_sha256=digest(requests),
         destination='https://openrouter.ai/api/v1/chat/completions',provider='Cerebras',model=DEFAULT_MODEL,
-        maximum_reservation_usd=str(Decimal('0.006304')*len(requests)),per_request_ceiling_usd='0.006304',
+        maximum_reservation_usd=str(Decimal('0.006304')*72),per_request_ceiling_usd='0.006304',
         live_calls_made=0,production_admission=False,quality_qualified=False,
-        scope='Initial reasoning request per authored example; autonomous follow-up dispatch is not included.',
+        scope='24 authored cases; at most three model rounds per case. Only the exact enumerated body for the actual non-repeated local-tool history may dispatch. Stop the entire batch on any unresolved provider outcome; no retries, fallback or additional cases.',
         qualification_status='development_compatibility_only_not_sealed_holdout')
 
 
