@@ -130,7 +130,8 @@ async function handle(message) {
       await current(selected);
       await persist({session: {endpoint: target, token: result.token, context: selected, expires_at: result.expires_at,
         lease_id: result.lease_id, organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id,
-        sharing_approved: result.sharing_approved, scheduled_review_enabled: result.scheduled_review_enabled, discovery_enabled: result.discovery_enabled, sequence: 0}}, revision);
+        sharing_approved: result.sharing_approved, scheduled_review_enabled: result.scheduled_review_enabled, discovery_enabled: result.discovery_enabled,
+        ai_review_enabled: result.ai_review_enabled === true, sequence: 0}}, revision);
       return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at,
         organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id};
     }
@@ -140,6 +141,7 @@ async function handle(message) {
     if (message.operation === "monitor-start") {
       if (message.approved !== true || !session.sharing_approved || !session.scheduled_review_enabled || pending || paused || navigation)
         throw new Error("Approve scheduled sharing with a current, unpaused pairing and resolved receipts first.");
+      if (session.ai_review_enabled && message.ai_approved !== true) throw new Error("Explicitly approve minimized-signal AI review before starting this AI-enabled pairing.");
       if (!["page","tour","discover"].includes(message.mode)) throw new Error("Choose selected-page or approved-tour review.");
       await current(selected);
       await request(session, "heartbeat", {context: wireContext(selected)});
@@ -151,6 +153,7 @@ async function handle(message) {
         } else if (reviewed_plan!==signature) throw new Error("Review the current navigation plan before scheduling it.");
       }
       await persist({monitoring: {enabled: true, state: "scheduled", mode: message.mode,
+        ai_approved: session.ai_review_enabled && message.ai_approved === true,
         last_tick: Date.now(), last_checked: null, last_capture: null, captures: 0, max_captures: message.mode === "discover" ? 32 : 8, unchanged: 0, digests: {}, queue:[selected.page_url], cursor:0}}, revision);
       return {message: "Scheduled review enabled for this tab until pairing expiry. Visibility remains partial; browser sleep can interrupt review."};
     }
@@ -318,8 +321,8 @@ async function waitForDestination(selected, destination, deadline, revision, ver
 
 function publicMonitoring(value) {
   if (!value) return null;
-  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning} = value;
-  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning,
+  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning,ai} = value;
+  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning,ai,
     coverage: "partial", scheduling_gap: Boolean(enabled && Date.now()-last_tick>45000)};
 }
 
@@ -370,6 +373,15 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
           tour.sections.at(-1).text_review=reviewed;
           const {monitoring: latest}=await storage.get("monitoring");
           await persist({tour,monitoring:{...latest,candidate_count:reviewed.candidate_count,review_evidence_id:reviewed.review_evidence_id,learning:reviewed.learning}},revision);
+        }
+        if (deduplicate && session.ai_review_enabled) {
+          const {monitoring: schedule}=await storage.get("monitoring");
+          if (!schedule?.ai_approved) throw new Error("AI sharing approval is unavailable.");
+          const ai=await request(session,"ai-review",{context:wireContext(selected),observation_id:receipt.observation_id});
+          stillCurrent(revision);
+          tour.sections.at(-1).ai=ai;
+          const {monitoring: latest}=await storage.get("monitoring");
+          await persist({tour,monitoring:{...latest,ai}},revision);
         }
         await storage.remove("pending");
         if (deduplicate) {

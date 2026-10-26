@@ -48,6 +48,13 @@ def main():
         root=directory/'original'
         prepare(root,18444,image)
         app=Installation(root);apps.append(app)
+        readiness=json.loads(app.compose('run','--rm','--no-deps','-T','--entrypoint','python','operator',
+            '-m','gabriel.identity.gateway_cli','ai-readiness','--ai-model','openai/gpt-oss-120b'))
+        assert readiness['projection_version']=='browser-candidate-ai-v1'
+        assert not readiness['production_admitted'] and not readiness['raw_page_text_export']
+        assert not readiness['reviewed_memory_export'] and not readiness['external_actions_enabled']
+        assert re.fullmatch('[a-f0-9]{64}',readiness['configuration_digest'])
+        (directory/'browser-ai-readiness.json').write_text(json.dumps(readiness,indent=2))
         config=json.loads(app.compose('--profile','operator','config','--format','json'))
         assert config['networks']['private']['internal']
         assert set(config['services']['workbench']['networks'])=={'private'}
@@ -111,7 +118,7 @@ print('PASS: restored encrypted evidence decrypted using the original evidence k
         restored.stop();restored.start_db()
         cookie,_=connect(target,restored,secret)
         assert request(target,18445,'/cases',cookie=cookie)[0]==200
-        print('PASS: fresh installation; least-privilege loopback HTTPS; hashed owner identity; case and encrypted evidence persistence; old-cookie denial; quiesced backup; fresh-project restore with original keys; fresh login after Stop')
+        print('PASS: browser AI module/readiness in rebuilt image; fresh installation; least-privilege loopback HTTPS; hashed owner identity; case and encrypted evidence persistence; old-cookie denial; quiesced backup; fresh-project restore with original keys; fresh login after Stop')
     except DockerOperationError as exc:
         diagnostic=((exc.stdout or b'')+b'\n'+(exc.stderr or b'')).decode(errors='replace')
         replacements=[secret]

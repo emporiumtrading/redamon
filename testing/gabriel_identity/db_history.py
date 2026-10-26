@@ -214,6 +214,7 @@ def remove_v26(conn):
 
 
 def remove_v27(conn):
+    remove_v28(conn)
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=27').fetchone():
         from pathlib import Path
         from gabriel.identity import service
@@ -235,3 +236,12 @@ def remove_v27(conn):
         conn.execute('ALTER TABLE gabriel_identity.browser_navigation_intents DROP CONSTRAINT browser_navigation_intents_sequence_check')
         conn.execute('ALTER TABLE gabriel_identity.browser_navigation_intents ADD CONSTRAINT browser_navigation_intents_sequence_check CHECK (sequence BETWEEN 1 AND 20)')
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=27')
+
+
+def remove_v28(conn):
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=28').fetchone():
+        conn.execute('ALTER TABLE gabriel_identity.model_settlements DROP CONSTRAINT model_settlements_outcome_check')
+        conn.execute('ALTER TABLE gabriel_identity.model_settlements DROP CONSTRAINT model_settlements_check')
+        conn.execute("ALTER TABLE gabriel_identity.model_settlements ADD CONSTRAINT model_settlements_outcome_check CHECK (outcome IN ('operator_reported','not_sent'))")
+        conn.execute("ALTER TABLE gabriel_identity.model_settlements ADD CONSTRAINT model_settlements_check CHECK ((outcome='not_sent' AND actual_microusd=0 AND receipt_digest IS NULL) OR (outcome='operator_reported' AND receipt_digest IS NOT NULL))")
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=28')
