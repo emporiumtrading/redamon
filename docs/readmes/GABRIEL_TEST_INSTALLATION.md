@@ -53,6 +53,11 @@ python3 tooling/scripts/gabriel_install.py open "$HOME/gabriel-private-test"
 
 The backup destination must be new. Rebuild builds and inspects the candidate image, checks its browser AI module/readiness, stops the interface and revokes the old session, takes a database/evidence backup, records the old and new image/source, atomically selects the new image, applies forward migrations, and verifies the original owner identity and evidence/provider key fingerprints. The Compose project, volumes and keyrings are retained. Opening afterward requires the existing owner password and a fresh claim.
 
-Failure leaves the interface stopped and retains the backup and rebuild intent for inspection. It does not attempt an automatic database downgrade or silently initialize a new account. Rebuild history is bounded to 32 records before operator review. Schema 27-to-28 upgrade, old-cookie rejection and retained encrypted evidence are exercised in generated x86/ARM Docker journeys; this does not establish native Mac execution.
+Failure leaves the interface stopped and retains the backup and rebuild intent for inspection. It does not attempt an automatic database downgrade or silently initialize a new account. Rebuild history is bounded to 32 records before operator review. Schema 28-to-29 upgrade, old-cookie rejection and retained encrypted evidence are exercised in generated x86/ARM Docker journeys; this does not establish native Mac execution.
 
 Rebuilding includes the AI application bridge, but does not qualify a model, enable provider egress in the private workbench or start a browser gateway. Read the [AI phase guide](GABRIEL_BROWSER_AI_DETECTION.md) before activation.
+
+
+## Member accounts and specialist AI connectivity
+
+Owners/admins create analyst accounts through **Team members**. Open a named member's workbench using `open --username ANALYST_USERNAME`; the member's password is prompted. The installation still has one active workbench, so switching accounts revokes the previous session. `open --username ANALYST_USERNAME --ai-egress` explicitly attaches the workbench to the provider-capable overlay. The database stays private, and ordinary open remains private. This is separate from model qualification: the exact role configuration must still be admitted before inference. See [specialist agents](GABRIEL_SPECIALIST_AGENTS.md) for personal key setup and activation limits.
