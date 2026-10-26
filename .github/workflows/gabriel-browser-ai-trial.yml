@@ -18,7 +18,7 @@ jobs:
       - name: Export and check synthetic request bodies without a network or provider key
         run: |
           mkdir -m 700 "$RUNNER_TEMP/browser-ai-trial"
-          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --memory 256m --cpus 1 --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_browser_ai/trial.py:/trial.py:ro" gabriel-browser-ai-trial-source /trial.py > "$RUNNER_TEMP/browser-ai-trial/request-packet.json"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --memory 256m --cpus 1 -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_browser_ai/trial.py:/trial.py:ro" gabriel-browser-ai-trial-source /trial.py > "$RUNNER_TEMP/browser-ai-trial/request-packet.json"
           git rev-parse HEAD > "$RUNNER_TEMP/browser-ai-trial/source-sha.txt"
           docker image inspect gabriel-browser-ai-trial-source --format '{{.Id}}' > "$RUNNER_TEMP/browser-ai-trial/image-id.txt"
           sha256sum "$RUNNER_TEMP/browser-ai-trial/request-packet.json" > "$RUNNER_TEMP/browser-ai-trial/request-packet.sha256"
