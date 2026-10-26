@@ -13,12 +13,13 @@ CONTRACT_VERSION='specialist-metadata-v1'
 
 
 def catalog():
-    return [dict(role=role,contract_version=CONTRACT_VERSION if role=='telemetry_health' else 'specialist-analysis-v2',
+    from gabriel.identity.specialist_agents import readiness
+    return [dict(**readiness(role),contract_version=CONTRACT_VERSION if role=='telemetry_health' else 'specialist-analysis-v2',
         typed_analysis_contract_version='specialist-analysis-v2',
         engine='telemetry-health-v1' if role=='telemetry_health' else 'specialist-rules-v1',
         status='implemented_local_read' if role=='telemetry_health' else 'implemented_local_rules',
         typed_evidence_required=role!='telemetry_health',quality_qualified=False,
-        model_enabled=False,external_actions_enabled=False) for role in ROLES]
+        external_actions_enabled=False) for role in ROLES]
 
 
 def role_name(value):

@@ -112,8 +112,9 @@ def _secret(value):
 
 
 def _aad(row, key_id):
-    return json.dumps([PURPOSE,str(row['organization_id']),str(row['id']),row['provider'],
-                       row['revision'],key_id], separators=(',',':')).encode('utf-8')
+    binding=[PURPOSE,str(row['organization_id']),str(row['id']),row['provider'],row['revision'],key_id]
+    if 'user_id' in row:binding=['personal-provider-v1',str(row['user_id'])]+binding
+    return json.dumps(binding,separators=(',',':')).encode('utf-8')
 
 
 class ProviderVault(IdentityService):
@@ -227,6 +228,14 @@ class ProviderVault(IdentityService):
                         (key_id,nonce,ciphertext,principal.user_id,principal.organization_id,row['id']))
                     _audit(conn,'provider.secret_rewrapped',principal,row['id'])
                     changed += 1
+            personal=conn.execute('SELECT * FROM gabriel_identity.personal_provider_secrets WHERE organization_id=%s AND revoked_at IS NULL ORDER BY id FOR UPDATE',(principal.organization_id,)).fetchall()
+            for row in personal:
+                value=self._decrypt(conn,row)
+                if row['key_id']!=self._ring.active:
+                    kid,nonce,cipher=self._encrypt(conn,row,value)
+                    conn.execute('UPDATE gabriel_identity.personal_provider_secrets SET key_id=%s,nonce=%s,ciphertext=%s WHERE organization_id=%s AND id=%s',(kid,nonce,cipher,principal.organization_id,row['id']))
+                    _audit(conn,'personal_provider.rewrapped',principal,row['id'])
+                    changed+=1
             conn.execute('''INSERT INTO gabriel_identity.provider_key_state VALUES (%s,%s,%s)
                 ON CONFLICT (organization_id) DO UPDATE SET active_key_id=EXCLUDED.active_key_id,generation=EXCLUDED.generation''',
                 (principal.organization_id,self._ring.active,self._ring.generation))

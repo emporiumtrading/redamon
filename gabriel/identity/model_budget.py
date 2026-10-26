@@ -135,15 +135,19 @@ class ModelBudgetService(IdentityService):
             return values
 
     def quote(self, token, provider, model, configuration_digest,
-              input_microusd_per_million, output_microusd_per_million, ttl_seconds=900):
+              input_microusd_per_million, output_microusd_per_million, ttl_seconds=900, *, _personal=False):
         if not isinstance(provider,str) or provider not in MODELS or not isinstance(model,str) or model not in MODELS[provider]:
             raise InvalidIdentityInput('unsupported_model_budget_route')
         configuration_digest=fingerprint(configuration_digest)
         input_rate=integer(input_microusd_per_million,0,100000000)
         output_rate=integer(output_microusd_per_million,0,100000000)
         ttl_seconds=integer(ttl_seconds,60,3600)
+        if type(_personal) is not bool:raise InvalidIdentityInput('invalid_personal_quote')
+        if _personal and (provider!='openrouter' or (input_rate,output_rate)!=(500000,3000000)):
+            raise AccessDenied('personal_specialist_fixed_quote_required')
         with connection(self._dsn) as conn:
-            principal=self._admin(conn,token)
+            principal=self._principal(conn,token,lock=True) if _personal else self._admin(conn,token)
+            if principal.role not in {'owner','admin','analyst'}:raise AccessDenied('operation_not_permitted')
             count=conn.execute('''SELECT count(*) AS n FROM gabriel_identity.model_price_quotes
                 WHERE organization_id=%s AND created_at>clock_timestamp()-interval '1 day' ''',
                 (principal.organization_id,)).fetchone()['n']
@@ -151,11 +155,11 @@ class ModelBudgetService(IdentityService):
                 raise AccessDenied('model_price_quote_limit')
             row=conn.execute('''INSERT INTO gabriel_identity.model_price_quotes
                 (organization_id,id,created_by,provider,model,configuration_digest,
-                 input_microusd_per_million,output_microusd_per_million,created_at,expires_at)
-                SELECT %s,%s,%s,%s,%s,%s,%s,%s,t,t+%s*interval '1 second'
+                 input_microusd_per_million,output_microusd_per_million,created_at,expires_at,purpose)
+                SELECT %s,%s,%s,%s,%s,%s,%s,%s,t,t+%s*interval '1 second',%s
                 FROM (SELECT clock_timestamp() AS t) sampled RETURNING *''',
                 (principal.organization_id,uuid4(),principal.user_id,provider,model,configuration_digest,
-                 input_rate,output_rate,ttl_seconds)).fetchone()
+                 input_rate,output_rate,ttl_seconds,'personal_specialist' if _personal else 'operator')).fetchone()
             _audit(conn,'model_budget.price_attested',principal,row['id'])
             return public(row)
 
@@ -212,11 +216,11 @@ class ModelBudgetService(IdentityService):
             if not policy['enabled']:
                 raise AccessDenied('model_budget_paused')
             at=now(conn)
-            price=conn.execute('''SELECT q.*,(u.active AND m.active AND m.role IN ('owner','admin')) AS current_authority
+            price=conn.execute('''SELECT q.*,(u.active AND m.active AND (m.role IN ('owner','admin') OR (q.purpose='personal_specialist' AND m.role='analyst' AND q.created_by=%s))) AS current_authority
                 FROM gabriel_identity.model_price_quotes q
                 JOIN gabriel_identity.memberships m ON (m.organization_id,m.user_id)=(q.organization_id,q.created_by)
                 JOIN gabriel_identity.users u ON (u.organization_id,u.id)=(m.organization_id,m.user_id)
-                WHERE q.organization_id=%s AND q.id=%s''',(principal.organization_id,quote_id)).fetchone()
+                WHERE q.organization_id=%s AND q.id=%s''',(principal.user_id,principal.organization_id,quote_id)).fetchone()
             if not price or price['expires_at']<=at or not price['current_authority']:
                 raise AccessDenied('current_model_price_required')
             amount=max(1,(inputs*price['input_microusd_per_million']+outputs*price['output_microusd_per_million']+999999)//1000000)
@@ -270,12 +274,12 @@ class ModelBudgetService(IdentityService):
             if (used['month_used']>policy['month_microusd'] or used['day_used']>policy['day_microusd']
                     or job_used>policy['investigation_microusd']):
                 raise AccessDenied('model_cost_budget_exhausted')
-            price=conn.execute('''SELECT q.expires_at,u.active AS user_active,m.active,m.role
+            price=conn.execute('''SELECT q.expires_at,q.purpose,q.created_by,u.active AS user_active,m.active,m.role
                 FROM gabriel_identity.model_price_quotes q
                 JOIN gabriel_identity.memberships m ON (m.organization_id,m.user_id)=(q.organization_id,q.created_by)
                 JOIN gabriel_identity.users u ON (u.organization_id,u.id)=(m.organization_id,m.user_id)
                 WHERE q.organization_id=%s AND q.id=%s''',(principal.organization_id,row['quote_id'])).fetchone()
-            if price['expires_at']<=now(conn) or not price['user_active'] or not price['active'] or price['role'] not in {'owner','admin'}:
+            if price['expires_at']<=now(conn) or not price['user_active'] or not price['active'] or not (price['role'] in {'owner','admin'} or price['role']=='analyst' and price['purpose']=='personal_specialist' and price['created_by']==principal.user_id):
                 raise AccessDenied('current_model_price_required')
             claim_id=uuid4()
             conn.execute('''INSERT INTO gabriel_identity.model_dispatch_claims

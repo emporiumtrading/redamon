@@ -130,9 +130,10 @@ class Workbench:
         if principal:
             items=[('/cases','Cases','▦'),('/sources','Browser health','◎'),('/spending','AI spending','$')]
             if principal.role!='viewer': items.extend([('/cases/new','New case','+'),('/audit','Audit','≡')])
-            if principal.role in {'owner','admin'}: items.append(('/providers','Your AI keys','◇'))
+            if principal.role!='viewer': items.append(('/personal-providers','My AI key','◇'))
+            if principal.role in {'owner','admin'}: items.extend([('/providers','Organization AI keys','◇'),('/members','Team members','♙')])
             active={'Browser health and coverage':'/sources','AI spending':'/spending','New investigation':'/cases/new',
-                'Audit activity':'/audit','Your AI keys':'/providers'}.get(title,'/cases')
+                'Audit activity':'/audit','Your AI keys':'/providers','My AI key':'/personal-providers','Team members':'/members'}.get(title,'/cases')
             navigation='<div><span class="nav-label">Workspace</span><nav aria-label="Main navigation">'+''.join(
                 '<a href="'+path+'"'+(' aria-current="page"' if path==active else '')+'><span class="nav-icon" aria-hidden="true">'+icon+'</span>'+label+'</a>'
                 for path,label,icon in items)+'</nav></div>'
@@ -186,6 +187,67 @@ class Workbench:
             self._claimed=True
             return '303 See Other',b'',[('Location','/cases'),('Set-Cookie',COOKIE+'='+self._cookie+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=600')]
         principal=self._authenticate(environ)
+        if path in {'/members','/members/create'}:
+            if principal.role not in {'owner','admin'}:raise AccessDenied('operation_not_permitted')
+            if method=='POST':
+                if path!='/members/create' or set(fields)!={'csrf','username','password','role'} or fields['role'] not in {'analyst','viewer'}:raise AccessDenied('invalid_member_form')
+                self.service.create_member(self._token,fields['username'],fields['password'],fields['role'])
+                return '303 See Other',b'',[('Location','/members')]
+            if path!='/members' or method!='GET':raise AccessDenied('workbench_route_denied')
+            rows=self.service.list_members(self._token)
+            body='<p>Each member signs in with their own account. Analysts manage only their own personal provider key; organization keys remain restricted to administrators.</p>'
+            body+=table(['Username','Role','Active'],[(e(row['username']),e(row['role']),e(row['active'])) for row in rows])
+            body+=self._form('/members/create','Add team member','<label>Username<input name="username" required maxlength="64"></label><label>Initial password (at least 16 characters)<input name="password" type="password" autocomplete="new-password" required minlength="16" maxlength="1024"></label><label>Role<select name="role"><option value="analyst">Analyst</option><option value="viewer">Viewer</option></select></label>')
+            return '200 OK',self._page('Team members',body,principal),[]
+        if path in {'/personal-providers','/personal-providers/save','/personal-providers/revoke'}:
+            if principal.role not in {'owner','admin','analyst'}:raise AccessDenied('personal_provider_writer_required')
+            if self._provider_vault is None:raise AccessDenied('provider_vault_not_configured')
+            from gabriel.identity.personal_providers import PersonalProviders
+            providers=PersonalProviders(self._provider_vault)
+            if method=='POST':
+                expected={'csrf','api_key'} if path.endswith('/save') else {'csrf'}
+                if path=='/personal-providers' or set(fields)!=expected:raise AccessDenied('invalid_personal_provider_form')
+                if path.endswith('/save'):providers.configure(self._token,'openrouter',fields['api_key'])
+                else:providers.revoke(self._token)
+                return '303 See Other',b'',[('Location','/personal-providers')]
+            if method!='GET' or path!='/personal-providers':raise AccessDenied('workbench_route_denied')
+            rows=providers.status(self._token)
+            body='<p>Your personal OpenRouter key is encrypted in the database and can only be used by your own signed-in agent runs. Organization keys remain separate. No automatic fallback or shared development key is used.</p>'
+            body+='<p>Use a dedicated inference key capped at $18/month with $18 initially available. Validation needs provider connectivity. Organization spending limits still apply. Adding a key does not admit an unqualified model.</p>'
+            body+=table(['Provider','Status','Revision'],[(e(row['provider']),e(row['status']),e(row['revision'])) for row in rows])
+            body+=self._form('/personal-providers/save','Save and verify my key','<label>Personal OpenRouter API key<input type="password" name="api_key" autocomplete="off" maxlength="512" required></label>')
+            body+=self._form('/personal-providers/revoke','Revoke my key','<p>Future dispatches using this key will be denied.</p>')
+            return '200 OK',self._page('My AI key',body,principal),[]
+        agent_path=re.fullmatch('/cases/('+ID+')/agents(?:/('+ID+')/(resume|stop))?',path)
+        if agent_path:
+            from gabriel.identity import specialist_agents as agents
+            from gabriel.identity.specialist_contracts import ROLES
+            case_id,job_id,operation=agent_path.groups()
+            if principal.role not in {'owner','admin','analyst'}:raise AccessDenied('operation_not_permitted')
+            if self._provider_vault is None:raise AccessDenied('provider_vault_not_configured')
+            base='/cases/'+case_id+'/agents'
+            snapshot=self.service.get_case(self._token,case_id)
+            body='<p>Each specialist is a designated AI agent with a role-specific prompt, source-linked results and an allowlist of local read tools. Agents may investigate within three reasoning rounds; response actions remain separate.</p>'
+            if method=='POST':
+                if job_id:
+                    if set(fields)!={'csrf'}:raise AccessDenied('invalid_agent_form')
+                    result=agents.stop(self.service,self._token,job_id) if operation=='stop' else agents.resume(self.service,self._provider_vault,self._token,job_id)
+                else:
+                    if set(fields)!={'csrf','request_id','role','input_evidence_id','model','key_scope','approved'} or fields['approved']!='yes':raise AccessDenied('specialist_ai_export_consent_required')
+                    result=agents.orchestrate(self.service,self._provider_vault,self._token,case_id,fields['request_id'],fields['input_evidence_id'],model=fields['model'],key_scope=fields['key_scope'],approved=True) if fields['role']=='all' else agents.start(self.service,self._provider_vault,self._token,case_id,fields['request_id'],fields['role'],fields['input_evidence_id'],model=fields['model'],key_scope=fields['key_scope'],approved=True)
+                body+='<p id="agent-result">'+e(result.get('state','stopped'))+'</p>'
+                for step in result.get('steps',[]):
+                    body+='<p>Round '+e(step['round'])+' · '+e(step['disposition'])+' · <a href="/cases/'+case_id+'/evidence/'+e(step['answer_evidence_id'])+'">Review unreviewed AI answer</a></p>'
+            elif method!='GET':raise AccessDenied('workbench_route_denied')
+            statuses=[agents.readiness(role) for role in ROLES]
+            body+=table(['Agent','AI configuration','Local read tools'],[(e(x['role'].replace('_',' ')),e(x['qualification'].replace('_',' ')),e(', '.join(x['tools']))) for x in statuses])
+            if snapshot['case']['state']=='open':
+                options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in snapshot['evidence'] if row['state']=='ready' and row['storage_state']=='active')
+                if options:
+                    body+=self._form(base,'Start specialist agent','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Specialist<select name="role"><option value="all">Coordinator: relevant agents</option>'+''.join('<option value="'+role+'">'+e(role.replace('_',' '))+'</option>' for role in ROLES)+'</select></label><label>Typed evidence<select name="input_evidence_id">'+options+'</select></label><label>Model<select name="model">'+''.join('<option value="'+e(m)+'"'+(' selected' if m==agents.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in agents.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label><label><input type="checkbox" name="approved" value="yes" required>I approve sending minimized typed facts and local tool summaries to this model for this investigation.</label>')
+            for record in agents.history(self.service,self._token,case_id):
+                body+='<section><h2>'+e(record['role'].replace('_',' '))+'</h2><p>'+e(record['created_at'])+'</p>'+self._form(base+'/'+record['id']+'/resume','Inspect or resume agent','')+self._form(base+'/'+record['id']+'/stop','Stop agent','')+'</section>'
+            return '200 OK',self._page('Specialist AI agents',body,principal),[]
         if path in {'/providers','/providers/save','/providers/revoke'}:
             if principal.role not in {'owner','admin'}: raise AccessDenied('provider_admin_required')
             if self._provider_vault is None:
@@ -539,7 +601,7 @@ class Workbench:
         if report:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
-        body='<p class="case-state">State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p class="case-links"><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Specialist assessments</a> · <a href="'+path+'/memory">Memory review</a></p>'
+        body='<p class="case-state">State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p class="case-links"><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Specialist assessments</a> · <a href="'+path+'/agents">Specialist AI agents</a> · <a href="'+path+'/memory">Memory review</a></p>'
         body+='<p class="case-links"><a href="'+path+'/attack-reviews">Attack pattern review</a> · <a href="'+path+'/environment">Environment and control profile</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
@@ -579,17 +641,20 @@ class Workbench:
         status='403 Forbidden'
         body=self._page('Access unavailable','<p>Check your access, scope and ticket expiry with your Gabriel operator.</p>')
         try:
+            slow=environ.get('REQUEST_METHOD')=='POST' and (re.fullmatch('/cases/'+ID+'/agents(?:/'+ID+'/(?:resume|stop))?',environ.get('PATH_INFO','')) or environ.get('PATH_INFO') in {'/personal-providers/save','/providers/save'})
             with self._lock:
                 now=time.monotonic()
                 if now-self._window>=60: self._window,self._calls=now,0
                 self._calls+=1
                 if self._calls>120: raise AccessDenied('workbench_request_budget')
-                candidate_status,candidate_body,extra=self._route(environ)
-                if len(candidate_body)>2*1024*1024: raise AccessDenied('workbench_response_limit')
-                status,body=candidate_status,candidate_body
-                for key,value in extra:
-                    headers=[(k,v) for k,v in headers if k.lower()!=key.lower()]
-                    headers.append((key,value))
+                if not slow:candidate_status,candidate_body,extra=self._route(environ)
+            # AI and provider I/O must leave Stop/logout and other tabs responsive.
+            if slow:candidate_status,candidate_body,extra=self._route(environ)
+            if len(candidate_body)>2*1024*1024: raise AccessDenied('workbench_response_limit')
+            status,body=candidate_status,candidate_body
+            for key,value in extra:
+                headers=[(k,v) for k,v in headers if k.lower()!=key.lower()]
+                headers.append((key,value))
         except IdentityUnavailable:
             status='503 Service Unavailable'
             body=self._page('Temporarily unavailable','<p>The request could not be confirmed. Review the case queue before retrying a change.</p>')

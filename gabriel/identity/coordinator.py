@@ -11,10 +11,11 @@ PLAN='local-coordinator-v1'
 OPERATIONS=('evidence_inventory','telemetry_health')
 SPECIALIST_PLAN='local-specialist-coordinator-v2'
 BROWSER_PLAN='browser-ai-coordinator-v1'
+SPECIALIST_AI_PLAN='specialist-ai-coordinator-v1'
 
 
 def operations(row):
-    if row['plan_version']==BROWSER_PLAN and row['input_evidence_id'] is not None:
+    if row['plan_version'] in {BROWSER_PLAN,SPECIALIST_AI_PLAN} and row['input_evidence_id'] is not None:
         return ('evidence_inventory',)
     if row['plan_version']==PLAN and row['input_evidence_id'] is None:
         return OPERATIONS
@@ -66,6 +67,26 @@ def browser_sources(service,conn,p,case_id,input_evidence_id):
     return sorted(values,key=lambda value:value['evidence_id'])
 
 
+def specialist_sources(service,conn,p,case_id,input_evidence_id):
+    from gabriel.identity.specialist_analysis_runs import verified_input
+    holder=service._evidence(conn,p,input_evidence_id)
+    if holder['source_label']!='Specialist minimized AI input' or not holder['parent_id']:
+        raise AccessDenied('specialist_model_input_required')
+    case=service._case(conn,p,case_id,open_only=True)
+    _,_,refs=verified_input(service,conn,p,case,holder['parent_id'])
+    ids={holder['id']}|{identifier(ref['record_id']) for ref in refs if ref['kind']=='evidence_metadata'}
+    values=[]
+    for eid in sorted(ids,key=str):
+        source=service._evidence(conn,p,eid)
+        if source['case_id']!=case_id or source['state']!='ready' or service._disposition(conn,source):
+            raise AccessDenied('specialist_model_source_unavailable')
+        service._verify(conn,source)
+        service._custody(conn,p,source,'accessed')
+        _audit(conn,'evidence.accessed',p,eid)
+        values.append(dict(evidence_id=str(eid),digest=source['digest']))
+    return values
+
+
 def load(conn,p,run_id):
     row=conn.execute('''SELECT r.*,clock_timestamp()>=r.expires_at AS expired,
         (u.active AND m.active AND m.role IN ('owner','admin','analyst')) AS creator_current,
@@ -91,7 +112,7 @@ def active(service,conn,p,row,*,_exclude_ingestion=None):
     at=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
     if row['stopped'] or not row['creator_current'] or row['expires_at']<=at:
         raise AccessDenied('coordinator_not_active')
-    current=(browser_sources(service,conn,p,row['case_id'],row['input_evidence_id']) if row['plan_version']==BROWSER_PLAN
+    current=(specialist_sources(service,conn,p,row['case_id'],row['input_evidence_id']) if row['plan_version']==SPECIALIST_AI_PLAN else browser_sources(service,conn,p,row['case_id'],row['input_evidence_id']) if row['plan_version']==BROWSER_PLAN
         else sources(service,conn,p,row['case_id'],_exclude_ingestion=_exclude_ingestion))
     recorded=conn.execute('''SELECT evidence_id,digest FROM gabriel_identity.coordinator_sources
         WHERE organization_id=%s AND run_id=%s ORDER BY evidence_id''',
@@ -128,13 +149,14 @@ def snapshot(conn,row):
         coverage='partial',current_source_authority_checked=False)
 
 
-def begin(service,token,case_id,request_id,*,max_steps=None,ttl_seconds=900,input_evidence_id=None,_browser_model=False):
+def begin(service,token,case_id,request_id,*,max_steps=None,ttl_seconds=900,input_evidence_id=None,_browser_model=False,_specialist_ai=False):
     case_id,request_id=identifier(case_id),identifier(request_id)
     input_evidence_id=identifier(input_evidence_id) if input_evidence_id is not None else None
     if type(_browser_model) is not bool or _browser_model and not input_evidence_id:raise InvalidIdentityInput('invalid_browser_model_plan')
-    maximum=1 if _browser_model else len(ROLES) if input_evidence_id else 2
+    if type(_specialist_ai) is not bool or _specialist_ai and (not input_evidence_id or _browser_model):raise InvalidIdentityInput('invalid_specialist_ai_plan')
+    maximum=1 if _browser_model or _specialist_ai else len(ROLES) if input_evidence_id else 2
     if max_steps is None: max_steps=maximum
-    if (type(max_steps) is not int or not 1<=max_steps<=maximum or input_evidence_id and not _browser_model and max_steps!=len(ROLES)
+    if (type(max_steps) is not int or not 1<=max_steps<=maximum or input_evidence_id and not (_browser_model or _specialist_ai) and max_steps!=len(ROLES)
             or type(ttl_seconds) is not int or not 60<=ttl_seconds<=900):
         raise InvalidIdentityInput('invalid_coordinator_limits')
     with connection(service._dsn) as conn:
@@ -153,8 +175,8 @@ def begin(service,token,case_id,request_id,*,max_steps=None,ttl_seconds=900,inpu
         if count>=128:
             raise AccessDenied('coordinator_case_plan_limit')
         if _browser_model and p.role not in {'owner','admin'}:raise AccessDenied('browser_model_admin_required')
-        selected=browser_sources(service,conn,p,case['id'],input_evidence_id) if _browser_model else sources(service,conn,p,case['id'])
-        if input_evidence_id and not _browser_model:
+        selected=specialist_sources(service,conn,p,case['id'],input_evidence_id) if _specialist_ai else browser_sources(service,conn,p,case['id'],input_evidence_id) if _browser_model else sources(service,conn,p,case['id'])
+        if input_evidence_id and not (_browser_model or _specialist_ai):
             from gabriel.identity.specialist_analysis_runs import verified_input
             verified_input(service,conn,p,case,input_evidence_id)
             n=conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_runs WHERE organization_id=%s AND case_id=%s',
@@ -165,12 +187,12 @@ def begin(service,token,case_id,request_id,*,max_steps=None,ttl_seconds=900,inpu
             (organization_id,id,case_id,request_id,requested_by,plan_version,source_digest,max_steps,created_at,expires_at,input_evidence_id)
             SELECT %s,%s,%s,%s,%s,%s,%s,%s,t,t+%s*interval '1 second',%s
             FROM (SELECT clock_timestamp() AS t) admitted''',
-            (p.organization_id,rid,case_id,request_id,p.user_id,BROWSER_PLAN if _browser_model else SPECIALIST_PLAN if input_evidence_id else PLAN,
+            (p.organization_id,rid,case_id,request_id,p.user_id,SPECIALIST_AI_PLAN if _specialist_ai else BROWSER_PLAN if _browser_model else SPECIALIST_PLAN if input_evidence_id else PLAN,
              digest(selected),max_steps,ttl_seconds,input_evidence_id))
         for source in selected:
             conn.execute('''INSERT INTO gabriel_identity.coordinator_sources VALUES (%s,%s,%s,%s,%s)''',
                 (p.organization_id,rid,case_id,source['evidence_id'],source['digest']))
-        for sequence,operation in enumerate((('evidence_inventory',) if _browser_model else ROLES if input_evidence_id else OPERATIONS)[:max_steps],1):
+        for sequence,operation in enumerate((('evidence_inventory',) if _browser_model or _specialist_ai else ROLES if input_evidence_id else OPERATIONS)[:max_steps],1):
             conn.execute('''INSERT INTO gabriel_identity.coordinator_steps VALUES (%s,%s,%s,%s,%s)''',
                 (p.organization_id,rid,sequence,operation,uuid4()))
         _audit(conn,'coordinator.plan_created',p,rid)
@@ -263,7 +285,7 @@ def advance(service,token,run_id,*,expected_sequence=None):
         p=service._human(conn,token,write=True)
         row=load(conn,p,run_id)
         current=active(service,conn,p,row)
-        if row['plan_version'] in {PLAN,BROWSER_PLAN} and step['operation']=='evidence_inventory':
+        if row['plan_version'] in {PLAN,BROWSER_PLAN,SPECIALIST_AI_PLAN} and step['operation']=='evidence_inventory':
             expected=dict(operation='evidence_inventory',sources=current,content_integrity='not_checked',
                 source_authenticity='unverified',independent_corroboration='not_established')
             if result!=expected:
