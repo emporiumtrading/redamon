@@ -13,6 +13,8 @@ jobs:
         with:
           persist-credentials: false
       - run: docker build --target production -f gabriel/identity/Dockerfile -t gabriel-agent-packet .
+      - name: Verify provider-connectivity opt-in resets on ordinary open
+        run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/repo/tooling/scripts:/app --entrypoint python -v "$GITHUB_WORKSPACE:/repo:ro" gabriel-agent-packet /repo/testing/gabriel_specialist_ai/test_egress_option.py
       - name: Verify exact authored requests offline with no credential
         run: |
           mkdir -m 700 "$RUNNER_TEMP/agent-packet"

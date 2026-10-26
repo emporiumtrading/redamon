@@ -126,6 +126,7 @@ class Installation:
 
     def open(self,password,*,ai_egress=False,username=None):
         if type(ai_egress) is not bool:raise ValueError('invalid_ai_egress_option')
+        self.command=['docker','compose','--project-name',self.config['project'],'--file',str(COMPOSE)]
         if ai_egress:self.command.extend(['--file',str(REPO/'compose.gabriel-specialist-ai.yml')])
         self.start_db()
         self.compose('stop','local-entry','workbench')
