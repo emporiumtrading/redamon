@@ -948,6 +948,7 @@ def main():
         frames=[dict(file=Path(frame.filename).name,line=frame.lineno,function=frame.name) for frame in traceback.extract_tb(error.__traceback__)]
         (output/'failure.json').write_text(json.dumps({'status':'FAIL','stage':stage,'error_type':type(error).__name__,'frames':frames}))
         print('FAIL: browser lab at '+stage+'; '+type(error).__name__)
+        print('Failure locations: '+json.dumps(frames),flush=True)
         return 1
     finally:
         manager.terminate(); manager.wait(timeout=5)
