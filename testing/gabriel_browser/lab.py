@@ -365,6 +365,9 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
                     return dict(state='deferred_budget_slot',model_used=False,dispatch_performed=False,
                         quality_qualified=False,incident_confirmed=False)
             return super().dispatch(operation,body,authorization)
+    class TLSHandler(QuietHandler):
+        def get_environ(self):
+            environ=super().get_environ();environ['HTTPS']='on';return environ
     server=None;tab=None
     try:
         model_routes.PRODUCTION_CONFIGURATIONS=frozenset({browser_ai.digest(browser_ai.configuration(model))})
@@ -372,6 +375,7 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
         provider_onboarding.OpenRouterTransport=Transport
         ProviderKeyRing.from_file=classmethod(lambda cls,path:ring)
         navigation=BrowserNavigationService(service._dsn,service.store)
+        ModelBudgetService(service._dsn).configure(human,enabled=True)
         provider_onboarding.CustomerProviders(ProviderVault(service._dsn,ring)).configure(human,'openrouter',secret)
         CONSOLE_MODES['/unfamiliar-dashboard']='agnostic'
         for old in cdp.targets():
@@ -392,7 +396,7 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
         config=read_document(directory/'gateway.json',private=True)
         peer=read_document(directory/'peer.json',private=True)['token']
         app=Gateway(navigation,human,peer,config)
-        server=make_server('127.0.0.1',port,app,server_class=ConsoleServer,handler_class=QuietHandler)
+        server=make_server('127.0.0.1',port,app,server_class=ConsoleServer,handler_class=TLSHandler)
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(tls['server.pem'],tls['server.key'])
         server.socket=context.wrap_socket(server.socket,server_side=True)
         Thread(target=server.serve_forever,daemon=True).start()
