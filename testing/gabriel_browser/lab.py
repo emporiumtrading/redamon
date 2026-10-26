@@ -409,13 +409,14 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
         cdp.evaluate(popup,'document.getElementById("monitor-mode").value="page";document.getElementById("monitor-approved").checked=true;document.getElementById("ai-approved").checked=true')
         click(cdp,popup,'monitor-start')
         def state():return cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
-        wait_for(lambda:state().get('monitoring',{}).get('ai',{}).get('state')=='deferred_budget_slot')
+        wait_for(lambda:((state().get('monitoring') or {}).get('ai') or {}).get('state')=='deferred_budget_slot')
         assert not posts and len(navigation.list_browser_observations(human,enrolled['lease_id'])['observations'])==1
+        mark(family+':browser-ai-alarm-resume')
         for target in cdp.targets():
             if target.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':target['targetId']})
         wait_for(lambda:len(posts)==1,50)
         popup=native_popup(cdp,tab,extension_origin)
-        snapshot=wait_for(lambda:(lambda s:s if s.get('monitoring',{}).get('ai',{}).get('model_used') else None)(state()))
+        snapshot=wait_for(lambda:(lambda s:s if ((s.get('monitoring') or {}).get('ai') or {}).get('model_used') else None)(state()))
         result=snapshot['monitoring']['ai']
         assert result['disposition']=='abstain' and not result['quality_qualified'] and not result['incident_confirmed']
         assert snapshot['monitoring']['captures']==1 and len(navigation.list_browser_observations(human,enrolled['lease_id'])['observations'])==1
