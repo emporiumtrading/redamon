@@ -1,6 +1,6 @@
 # Browser AI detection application phase
 
-The browser-to-model application bridge is implemented for bounded candidate-signal triage. Production model activation remains disabled: the exact configuration is not admitted, no live trial has run for this new projection, and independent qualification is pending. This is not a claim of general console understanding or qualified live threat detection.
+The browser-to-model application bridge is implemented for bounded candidate-signal triage. Production model activation remains disabled: the exact configuration is not admitted and independent qualification is pending. The owner-approved five-request synthetic trial completed with five contract-valid abstentions; it did not establish detection accuracy. This is not a claim of general console understanding or qualified live threat detection.
 
 ## What the bridge does
 
@@ -44,8 +44,16 @@ The offline Docker exporter prepares five authored synthetic requests for GPT-OS
 - Maximum new reservation: **$0.031520 total**, five calls at at most **$0.006304** each.
 - This export made **zero live calls** and used no provider credential.
 - Source exporter: `testing/gabriel_browser_ai/trial.py`; each request body and the exact configuration are hashed in the packet.
-- GitHub-reported artifact ZIP digest: `32b7883bf07e4f54b1807fb46bfd9494eef9aabdcbfccac9e5a5fae9714c5151`. Independent download/hash verification is not claimed.
+- GitHub-reported artifact ZIP digest: `32b7883bf07e4f54b1807fb46bfd9494eef9aabdcbfccac9e5a5fae9714c5151`. The approved packet ZIP was subsequently downloaded and independently verified against this digest before live execution.
 
-This packet is prepared for explicit owner payload/destination/spending review. It is not a sealed held-out corpus, independent analyst adjudication or a production-admission record. A successful authored trial alone would not qualify the model. Independent exact-configuration evaluation, workload/coverage acceptance, operational/security review and native OS UAT remain necessary.
+The owner approved this exact packet and spending cap, and its five requests were executed once. The original offline export remains a zero-call artifact. It is not a sealed held-out corpus, independent analyst adjudication or a production-admission record. A successful authored trial alone would not qualify the model. Independent exact-configuration evaluation, workload/coverage acceptance, operational/security review and native OS UAT remain necessary.
 
 Source and build evidence are tracked in PR82 (AI bridge), PR83 (offline trial packet) and PR84 (existing installation rebuild).
+
+## Approved live trial result
+
+On October 25, 2026 (Chicago), the approved batch completed all five requests through the pinned Cerebras route. All five responses passed the strict response contract; all five dispositions were **abstain**. The provider reported **$0.00233810** total, below the approved **$0.031520** maximum. There were no failed calls or unresolved outcomes, and no retries. Eight offline behavior tests passed before dispatch.
+
+This confirms live transport, route/payload binding and response-shape compatibility. It does not establish recall, false-positive performance or useful threat discrimination. These inputs contain candidate categories/counts rather than authenticated event context. Abstention must not be relabeled as successful threat detection or worked around by forcing escalation. A reviewed evidence representation and independent realistic/held-out evaluation remain necessary before production admission.
+
+The [sanitized trial summary](../evidence/gabriel-browser-ai-trial-20261025-summary.json) records exact configuration/request-set digests and per-case cost/contract metadata. [Workflow evidence](https://github.com/emporiumtrading/redamon/actions/runs/40258220893) includes the offline gates and one live batch. Raw provider responses and generated claim text were not exported. This evaluation used the existing CI secret; it did not configure a customer gateway or change the installation's provider egress. The production registry remains empty.
