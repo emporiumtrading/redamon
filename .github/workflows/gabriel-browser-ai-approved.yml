@@ -18,7 +18,7 @@ jobs:
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/trial:/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_browser_ai:/trial:ro" gabriel-approved-browser-ai /trial/test_approved_trial.py
   live:
     needs: software
-    if: github.event.action == 'opened' && github.run_attempt == '1' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/gabriel-approved-browser-ai-20261025'
+    if: github.event.pull_request.number == 86 && github.event.action == 'opened' && github.run_attempt == '1' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/gabriel-approved-browser-ai-20261025'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
