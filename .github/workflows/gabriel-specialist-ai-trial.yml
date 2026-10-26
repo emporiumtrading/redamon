@@ -1,0 +1,29 @@
+name: Gabriel specialist AI offline request packet
+on:
+  pull_request:
+    paths: ['testing/gabriel_specialist_ai/**', '.github/workflows/gabriel-specialist-ai-trial.yml']
+permissions:
+  contents: read
+jobs:
+  packet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: docker build --target production -f gabriel/identity/Dockerfile -t gabriel-agent-packet .
+      - name: Verify provider-connectivity opt-in resets on ordinary open
+        run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/repo/tooling/scripts:/app --entrypoint python -v "$GITHUB_WORKSPACE:/repo:ro" gabriel-agent-packet /repo/testing/gabriel_specialist_ai/test_egress_option.py
+      - name: Verify exact authored requests offline with no credential
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/agent-packet"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_specialist_ai/trial.py:/trial.py:ro" gabriel-agent-packet /trial.py > "$RUNNER_TEMP/agent-packet/request-packet.json"
+          git rev-parse HEAD > "$RUNNER_TEMP/agent-packet/source-sha.txt"
+          sha256sum "$RUNNER_TEMP/agent-packet/request-packet.json" > "$RUNNER_TEMP/agent-packet/request-packet.sha256"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-specialist-ai-request-packet
+          path: ${{ runner.temp }}/agent-packet
+          if-no-files-found: error
+          retention-days: 14

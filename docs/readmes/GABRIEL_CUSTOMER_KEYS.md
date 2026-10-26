@@ -11,8 +11,7 @@ field submits a credential over the existing authenticated same-origin HTTPS/CSR
 boundary. The credential is encrypted in the organization-scoped provider vault;
 it is not returned in HTML, status, reports, audit events or URLs. Removal revokes
 the local credential and clears its ciphertext. Remote key revocation remains an
-action in the customer's provider account. Keys belong to the organization in
-this release, rather than being shared across organizations.
+action in the customer's provider account. This organization-key flow remains restricted to owners/admins. Analysts now have a separate user-scoped **My AI key** flow, described below.
 
 OpenRouter setup performs only GET `/api/v1/key` and GET `/api/v1/credits`.
 Both account credit (`total_credits - total_usage`) and remaining key allowance
@@ -57,3 +56,10 @@ References checked for this implementation:
 - https://openrouter.ai/docs/api/api-reference/credits/get-remaining-credits
 - https://openrouter.ai/docs/api/api-reference/api-keys/get-current-api-key
 - https://docs.api.nvidia.com/nim/docs/product
+
+
+## Personal analyst keys
+
+The workbench exposes **My AI key** to owners, admins and analysts. Personal OpenRouter credentials are encrypted in separate organization/user-scoped database rows and selected explicitly for that user's agent runs. The personal API has no target-user selector: another analyst or administrator cannot resolve someone else's personal key. Replacement/revocation is revision-bound, and provider encryption rotation rewraps active personal credentials as well as organization credentials. Organization key APIs and budget administration retain their original permissions.
+
+[Specialist agent setup](GABRIEL_SPECIALIST_AGENTS.md) describes member account creation, named-member Docker sign-in, explicit provider-connectivity opt-in and model qualification. A personal key does not automatically admit a model. Direct NVIDIA inference remains unimplemented; keys are not interchangeable across provider types.

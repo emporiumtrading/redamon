@@ -17,6 +17,7 @@ The interface uses Gabriel's own halo and winged-shield emblem, midnight-blue su
 - [Install the private Docker workbench](docs/readmes/GABRIEL_TEST_INSTALLATION.md)
 - [Use the analyst workbench](docs/readmes/README.GABRIEL_WORKBENCH.md)
 - [Pair the browser companion](docs/readmes/README.GABRIEL_BROWSER_CLIENT.md)
+- [Review specialist agents and personal keys](docs/readmes/GABRIEL_SPECIALIST_AGENTS.md)
 - [Review AI detection and activation status](docs/readmes/GABRIEL_BROWSER_AI_DETECTION.md)
 - [Review cases and evidence](docs/readmes/README.GABRIEL_CASE_WORKFLOW.md)
 - [Understand specialist assessments](docs/readmes/README.GABRIEL_SPECIALISTS.md)
@@ -30,7 +31,7 @@ The interface uses Gabriel's own halo and winged-shield emblem, midnight-blue su
 | Analyst workbench | Cases, assignments, investigation questions, evidence, timeline, provenance and metadata reports |
 | Evidence | Encrypted storage, integrity checks, custody records and scoped content access |
 | Browser companion | Up to eight paired tabs, popup-closed scheduled review, same-origin read-only discovery, changed-content capture, Pause and Stop |
-| Specialists | Evidence-linked local assessments with explicit abstentions and limitations |
+| Specialists | Twelve designated AI-agent roles with bounded read-tool loops and personal analyst keys; exact model activation awaits qualification. Local-rule reviews remain available. |
 | AI triage connection | Budgeted browser-to-model application bridge, minimized candidate signals and encrypted answers; production activation awaits qualification |
 | Organizational knowledge | Automatic browser proposals, human review, approved-reference context in later reviews, expiry and forgetting controls |
 | Operations | Owner enrollment, role-scoped access, audit history, spending controls and tested backup/restore paths |
