@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 
 import pytest
+import psycopg
 
 from gabriel.identity import browser_ai,model_routes
 from gabriel.identity.browser_gateway import BrowserGateway,prepare
@@ -34,9 +35,10 @@ def ai(tenant,cases,case,context,legacy_setup,monkeypatch):
 
 
 def capture(ai,tenant,sequence=1,content='Generated lab account\nFailed login for PRIVATE_GENERATED_USER at https://generated-console.invalid'):
-    return ai['browser'].observe_browser(tenant.token,ai['lease'].token,dict(schema_version=1,operation='browser.observe',
+    row=ai['browser'].observe_browser(tenant.token,ai['lease'].token,dict(schema_version=1,operation='browser.observe',
         request_id=str(uuid4()),sequence=sequence,context=ai['scope'],observed_at=datetime.now(timezone.utc).isoformat(),
         visibility='partial',client_minimized=True,content=content))
+    return dict(row,evidence_id=str(row['evidence_id']),observation_id=str(row['observation_id']))
 
 
 def dispatch(ai,observation):
@@ -143,3 +145,44 @@ def test_preparation_rejects_unqualified_model_without_creating_an_installation(
         prepare(service,tenant.token,str(uuid4()),case['id'],context,'https://localhost:8443','chrome-extension://'+'a'*32,
             target,share_observations=True,monitor_seconds=300,ai_model=MODEL)
     assert not target.exists()
+
+
+@pytest.mark.parametrize('amount',[0,6304])
+def test_unknown_call_cannot_clear_its_slot_as_a_completed_upper_bound(tenant,ai,amount):
+    observed=capture(ai,tenant);ai['fixture']['client'].unknown=True
+    with pytest.raises(ProbeError):dispatch(ai,observed)
+    with owner_connection(tenant.db) as conn:
+        row=conn.execute('SELECT id FROM gabriel_identity.model_reservations WHERE organization_id=%s',(tenant.org,)).fetchone()
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute("""INSERT INTO gabriel_identity.model_settlements
+                (organization_id,reservation_id,attested_by,outcome,actual_microusd,receipt_digest)
+                VALUES (%s,%s,%s,'completed_upper_bound',%s,%s)""",(tenant.org,row['id'],tenant.owner,amount,'0'*64))
+    status=ai['fixture']['worker'].budget.status(tenant.token)
+    assert status['usage']['held_slots']==1 and status['usage']['day_used']==6304
+
+
+def test_two_simultaneous_reviews_survive_other_captures_and_defer_without_sending(tenant,ai):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    observations=[capture(ai,tenant,sequence=n) for n in range(1,4)]
+    active=Event();release=Event()
+    def wait_for_release():
+        if len(ai['fixture']['calls'])>=2:active.set()
+        assert release.wait(20)
+    ai['fixture']['client'].callback=wait_for_release
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first=[pool.submit(dispatch,ai,row) for row in observations[:2]]
+        try:
+            assert active.wait(15)
+            deferred=dispatch(ai,observations[2])
+            assert deferred['state']=='deferred_budget_slot' and not deferred['dispatch_performed']
+            assert len(ai['fixture']['calls'])==2
+            ai['browser'].acquire(tenant.token,ai['browser'].get_browser_lease(tenant.token,ai['lease'].id)['case_id'],
+                uuid4(),'Generated unrelated case evidence','Generated concurrent addition',approved=True)
+        finally:release.set()
+        answers=[future.result(timeout=20) for future in first]
+    assert all(answer['model_used'] for answer in answers)
+    assert dispatch(ai,observations[2])['model_used']
+    assert len(ai['fixture']['calls'])==3
+    assert ai['fixture']['worker'].budget.status(tenant.token)['usage']['held_slots']==0
