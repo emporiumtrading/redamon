@@ -15,7 +15,7 @@ CREATE TABLE gabriel_identity.personal_provider_secrets (
     UNIQUE (key_id,nonce),
     FOREIGN KEY (organization_id,user_id) REFERENCES gabriel_identity.memberships(organization_id,user_id),
     FOREIGN KEY (key_id) REFERENCES gabriel_identity.provider_key_registry(key_id),
-    CHECK ((revoked_at IS NULL AND octet_length(nonce)=12 AND octet_length(ciphertext)>16)
+    CHECK ((revoked_at IS NULL AND nonce IS NOT NULL AND ciphertext IS NOT NULL AND octet_length(nonce)=12 AND octet_length(ciphertext)>16)
         OR (revoked_at IS NOT NULL AND nonce IS NULL AND ciphertext IS NULL AND NOT checked))
 );
 REVOKE ALL ON gabriel_identity.personal_provider_secrets FROM PUBLIC;

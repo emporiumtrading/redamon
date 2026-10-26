@@ -215,3 +215,12 @@ def test_personal_ciphertext_is_cryptographically_bound_to_its_owner(tenant,case
     with owner_connection(tenant.db) as conn:
         conn.execute('UPDATE gabriel_identity.personal_provider_secrets SET user_id=%s WHERE organization_id=%s',(tenant.owner,tenant.org))
     with pytest.raises(SecretUnavailable):setup['personal'].resolve(tenant.token)
+
+
+@pytest.mark.parametrize('column',['nonce','ciphertext'])
+def test_active_personal_key_requires_complete_encrypted_material(tenant,setup,column):
+    import psycopg
+    from psycopg import sql
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute(sql.SQL('UPDATE gabriel_identity.personal_provider_secrets SET {}=NULL WHERE organization_id=%s').format(sql.Identifier(column)),(tenant.org,))

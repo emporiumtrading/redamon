@@ -107,6 +107,8 @@ def test_customer_provider_screen_stores_nvidia_privately_and_requires_csrf(tena
     cookie,token,_=connect(server)
     code,html,_=call(server,'/providers',cookie=cookie)
     assert code==200 and 'Your AI keys' in html and '$18 account credit' in html
+    member_code,member_html,_=call(server,'/members',cookie=cookie)
+    assert member_code==200 and 'minlength="16"' in member_html
     assert 'type="password" name="api_key"' in html and 'no shared API key' in html
     value='generated-workbench-key-'+secrets.token_urlsafe(32)
     fields=dict(csrf='wrong',provider='nvidia',api_key=value)
