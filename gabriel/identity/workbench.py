@@ -133,7 +133,7 @@ class Workbench:
             if principal.role!='viewer': items.append(('/personal-providers','My AI key','◇'))
             if principal.role in {'owner','admin'}: items.extend([('/providers','Organization AI keys','◇'),('/members','Team members','♙')])
             active={'Browser health and coverage':'/sources','AI spending':'/spending','New investigation':'/cases/new',
-                'Audit activity':'/audit','Your AI keys':'/providers'}.get(title,'/cases')
+                'Audit activity':'/audit','Your AI keys':'/providers','My AI key':'/personal-providers','Team members':'/members'}.get(title,'/cases')
             navigation='<div><span class="nav-label">Workspace</span><nav aria-label="Main navigation">'+''.join(
                 '<a href="'+path+'"'+(' aria-current="page"' if path==active else '')+'><span class="nav-icon" aria-hidden="true">'+icon+'</span>'+label+'</a>'
                 for path,label,icon in items)+'</nav></div>'
@@ -197,7 +197,7 @@ class Workbench:
             rows=self.service.list_members(self._token)
             body='<p>Each member signs in with their own account. Analysts manage only their own personal provider key; organization keys remain restricted to administrators.</p>'
             body+=table(['Username','Role','Active'],[(e(row['username']),e(row['role']),e(row['active'])) for row in rows])
-            body+=self._form('/members/create','Add team member','<label>Username<input name="username" required maxlength="64"></label><label>Initial password<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></label><label>Role<select name="role"><option value="analyst">Analyst</option><option value="viewer">Viewer</option></select></label>')
+            body+=self._form('/members/create','Add team member','<label>Username<input name="username" required maxlength="64"></label><label>Initial password (at least 16 characters)<input name="password" type="password" autocomplete="new-password" required minlength="16" maxlength="1024"></label><label>Role<select name="role"><option value="analyst">Analyst</option><option value="viewer">Viewer</option></select></label>')
             return '200 OK',self._page('Team members',body,principal),[]
         if path in {'/personal-providers','/personal-providers/save','/personal-providers/revoke'}:
             if principal.role not in {'owner','admin','analyst'}:raise AccessDenied('personal_provider_writer_required')
