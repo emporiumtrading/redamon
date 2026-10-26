@@ -97,12 +97,12 @@ def initialize(payload):
 
 
 def open_workbench(payload):
-    if set(payload)!={'password','port'} or type(payload['port']) is not int or not 1024<=payload['port']<=65535:
+    if set(payload) not in ({'password','port'},{'password','port','username'}) or type(payload['port']) is not int or not 1024<=payload['port']<=65535:
         raise ValueError('invalid_open_request')
     receipt=read_document(ROOT/'installation.json',private=True)
     if sum(1 for p in ROOT.iterdir() if p.is_dir())>=128: raise ValueError('session_directory_limit')
     app=service()
-    grant=app.login(receipt['organization_id'],receipt['username'],payload['password'])
+    grant=app.login(receipt['organization_id'],payload.get('username',receipt['username']),payload['password'])
     directory=ROOT/str(uuid4())
     try:
         if (ROOT/'active.json').exists():

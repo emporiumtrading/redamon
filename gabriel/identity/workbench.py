@@ -131,7 +131,7 @@ class Workbench:
             items=[('/cases','Cases','▦'),('/sources','Browser health','◎'),('/spending','AI spending','$')]
             if principal.role!='viewer': items.extend([('/cases/new','New case','+'),('/audit','Audit','≡')])
             if principal.role!='viewer': items.append(('/personal-providers','My AI key','◇'))
-            if principal.role in {'owner','admin'}: items.append(('/providers','Organization AI keys','◇'))
+            if principal.role in {'owner','admin'}: items.extend([('/providers','Organization AI keys','◇'),('/members','Team members','♙')])
             active={'Browser health and coverage':'/sources','AI spending':'/spending','New investigation':'/cases/new',
                 'Audit activity':'/audit','Your AI keys':'/providers'}.get(title,'/cases')
             navigation='<div><span class="nav-label">Workspace</span><nav aria-label="Main navigation">'+''.join(
@@ -187,6 +187,18 @@ class Workbench:
             self._claimed=True
             return '303 See Other',b'',[('Location','/cases'),('Set-Cookie',COOKIE+'='+self._cookie+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=600')]
         principal=self._authenticate(environ)
+        if path in {'/members','/members/create'}:
+            if principal.role not in {'owner','admin'}:raise AccessDenied('operation_not_permitted')
+            if method=='POST':
+                if path!='/members/create' or set(fields)!={'csrf','username','password','role'} or fields['role'] not in {'analyst','viewer'}:raise AccessDenied('invalid_member_form')
+                self.service.create_member(self._token,fields['username'],fields['password'],fields['role'])
+                return '303 See Other',b'',[('Location','/members')]
+            if path!='/members' or method!='GET':raise AccessDenied('workbench_route_denied')
+            rows=self.service.list_members(self._token)
+            body='<p>Each member signs in with their own account. Analysts manage only their own personal provider key; organization keys remain restricted to administrators.</p>'
+            body+=table(['Username','Role','Active'],[(e(row['username']),e(row['role']),e(row['active'])) for row in rows])
+            body+=self._form('/members/create','Add team member','<label>Username<input name="username" required maxlength="64"></label><label>Initial password<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="1024"></label><label>Role<select name="role"><option value="analyst">Analyst</option><option value="viewer">Viewer</option></select></label>')
+            return '200 OK',self._page('Team members',body,principal),[]
         if path in {'/personal-providers','/personal-providers/save','/personal-providers/revoke'}:
             if principal.role not in {'owner','admin','analyst'}:raise AccessDenied('personal_provider_writer_required')
             if self._provider_vault is None:raise AccessDenied('provider_vault_not_configured')

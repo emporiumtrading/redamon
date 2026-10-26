@@ -73,6 +73,22 @@ def main():
         else: raise AssertionError('duplicate initialization admitted')
         cookie,csrf=connect(root,app,secret)
         assert request(root,18444,'/providers',cookie=cookie)[0]==200
+        analyst_password=secrets.token_urlsafe(24)
+        assert request(root,18444,'/members/create',dict(csrf=csrf,username='generated-install-analyst',password=analyst_password,role='analyst'),cookie)[0]==303
+        opened=app.open(analyst_password,username='generated-install-analyst')
+        code,html,_=request(root,18444,'/claim');assert code==200
+        form_csrf=re.search(r'name="csrf" value="([A-Za-z0-9_-]+)"',html)[1]
+        code,_,headers=request(root,18444,'/claim',dict(csrf=form_csrf,ticket=opened['ticket']));assert code==303
+        analyst_cookie=headers['Set-Cookie'].split(';',1)[0]
+        assert request(root,18444,'/personal-providers',cookie=analyst_cookie)[0]==200
+        assert request(root,18444,'/providers',cookie=analyst_cookie)[0]==403
+        cookie,csrf=connect(root,app,secret)
+        optional=Installation(root)
+        optional.command.extend(['--file',str(repo/'compose.gabriel-specialist-ai.yml')])
+        ai_config=json.loads(optional.compose('--profile','operator','config','--format','json'))
+        assert set(ai_config['services']['workbench']['networks'])=={'private','ai_egress'}
+        assert set(ai_config['services']['identity-db']['networks'])=={'private'}
+
         code,html,_=request(root,18444,'/cases/new',cookie=cookie);assert code==200
         nonce=re.search(r'name="nonce" value="([A-Za-z0-9_-]+)"',html)[1]
         code,_,headers=request(root,18444,'/cases',dict(csrf=csrf,nonce=nonce,title='Generated persistent installation case'),cookie)
