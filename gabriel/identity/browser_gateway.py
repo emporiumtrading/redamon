@@ -20,7 +20,7 @@ from gabriel.identity.cli import read_secret
 from gabriel.identity.service import AccessDenied,IdentityError,IdentityUnavailable,_digest,connection
 
 MAX_BODY = 262144
-OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review','specialists-review','text-review'}
+OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review','specialists-review','text-review','ai-review'}
 
 
 def endpoint(value):
@@ -47,10 +47,15 @@ def ticket_digest(value):
     return sha256(('gabriel-browser-claim-v1|'+value).encode()).hexdigest()
 
 
-def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False,monitor_seconds=None,auto_discover=False):
+def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False,monitor_seconds=None,auto_discover=False,ai_model=None):
     """Private operator enrollment, never exposed as a network operation."""
     target,origin=endpoint(target),extension_origin(origin)
     context=approved_context(context)
+    if ai_model is not None:
+        from gabriel.identity.browser_ai import require_model
+        require_model(ai_model)
+        if monitor_seconds is None or not share_observations:raise ValueError('browser_ai_scheduled_consent_required')
+        with connection(service._dsn) as conn:service._admin(conn,human_token)
     directory=Path(directory)
     if not directory.is_absolute() or '..' in directory.parts:
         raise ValueError('private_directory_required')
@@ -64,9 +69,11 @@ def prepare(service,human_token,task_id,case_id,context,target,origin,directory,
         write_document(directory/'human.json',{'token':human_token})
         write_document(directory/'peer.json',{'token':grant.token,'lease_id':str(grant.id),'expires_at':str(grant.expires_at)})
         write_document(directory/'claim.json',{'ticket':ticket})
-        write_document(directory/'gateway.json',{'schema_version':1,'purpose':'gabriel-browser-gateway-v1',
+        configuration={'schema_version':1,'purpose':'gabriel-browser-gateway-v1',
             'endpoint':target,'extension_origin':origin,'context':context,'ticket_digest':ticket_digest(ticket),
-            'lease_id':str(grant.id),'expires_at':str(grant.expires_at)})
+            'lease_id':str(grant.id),'expires_at':str(grant.expires_at)}
+        if ai_model is not None:configuration['ai_model']=ai_model
+        write_document(directory/'gateway.json',configuration)
     except (OSError,ValueError):
         service.revoke_browser_lease(human_token,grant.id)
         raise
@@ -94,6 +101,33 @@ class BrowserGateway:
         self._lock=Lock()
         self._window=time.monotonic()
         self._calls=0
+        self.ai_model=configuration.get('ai_model')
+        if self.ai_model is not None:
+            from gabriel.identity.browser_ai import require_model
+            require_model(self.ai_model)
+
+    def _rate(self):
+        now=time.monotonic()
+        if now-self._window>=60:self._window,self._calls=now,0
+        self._calls+=1
+        if self._calls>120:raise AccessDenied('gateway_request_budget')
+
+    def _peer_authorized(self,authorization):
+        if not self._claimed or not isinstance(authorization,str) or not hmac.compare_digest(authorization,'Bearer '+self._peer):
+            raise AccessDenied('gateway_peer_required')
+
+    def _ai_dispatch(self,body,authorization):
+        # Provider latency must not hold the lock needed by Stop and heartbeat.
+        with self._lock:
+            self._rate();self._peer_authorized(authorization);self._bound()
+            if (self.ai_model is None or not isinstance(self.service,BrowserNavigationService)
+                    or set(body)!={'context','observation_id'} or approved_context(body['context'])!=self.context):
+                raise AccessDenied('browser_ai_not_approved_for_gateway')
+            context=dict(self.context)
+        from gabriel.identity.browser_ai import process
+        from gabriel.identity.vault import ProviderKeyRing,ProviderVault
+        vault=ProviderVault(self.service._dsn,ProviderKeyRing.from_file(os.environ.get('GABRIEL_PROVIDER_KEYRING_FILE')))
+        return process(self.service,vault,self._human,self._peer,context,body['observation_id'],self.ai_model)
 
     def _bound(self,*,pending=False,sync_context=True):
         with connection(self.service._dsn) as conn:
@@ -114,13 +148,10 @@ class BrowserGateway:
     def dispatch(self,operation,body,authorization):
         if operation not in OPERATIONS or not isinstance(body,dict):
             raise ValueError('unsupported_gateway_operation')
+        if operation=='ai-review':return self._ai_dispatch(body,authorization)
         with self._lock:
             now=time.monotonic()
-            if now-self._window>=60:
-                self._window,self._calls=now,0
-            self._calls+=1
-            if self._calls>120:
-                raise AccessDenied('gateway_request_budget')
+            self._rate()
             if operation=='claim':
                 if set(body)!={'ticket','context'} or self._claimed or now-self._started>60:
                     raise AccessDenied('claim_unavailable')
@@ -136,9 +167,8 @@ class BrowserGateway:
                     self.service.grant_navigation(self._human,self._peer,uuid5(lease['id'],DISCOVERED_PAGES),DISCOVERED_PAGES,[self.context['page_url']],max_moves=1000)
                 self._claimed=True
                 return dict(paired,token=self._peer,context=self.context,organization_id=str(lease['organization_id']),
-                    case_id=str(lease['case_id']),task_id=str(lease['task_id']))
-            if not self._claimed or not isinstance(authorization,str) or not hmac.compare_digest(authorization,'Bearer '+self._peer):
-                raise AccessDenied('gateway_peer_required')
+                    case_id=str(lease['case_id']),task_id=str(lease['task_id']),ai_review_enabled=self.ai_model is not None)
+            self._peer_authorized(authorization)
             self._bound(sync_context=operation!='disconnect')
             if operation=='disconnect':
                 if body!={}: raise ValueError('invalid_disconnect')
@@ -184,7 +214,7 @@ class BrowserGateway:
                 ('Access-Control-Allow-Methods','POST, OPTIONS')])
         status='403 Forbidden'
         operation=environ.get('PATH_INFO','').removeprefix('/v1/browser/')
-        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','events-review','specialists-review','text-review'} else 'denied'}
+        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','events-review','specialists-review','text-review','ai-review'} else 'denied'}
         try:
             if (environ.get('wsgi.url_scheme')!='https' or environ.get('HTTP_HOST')!=urlsplit(self.target).netloc
                     or origin!=self.origin or environ.get('QUERY_STRING') or environ.get('HTTP_FORWARDED')
@@ -222,8 +252,8 @@ def load_gateway(path):
     path=Path(path)
     if not path.is_absolute() or '..' in path.parts: raise ValueError('absolute_private_configuration_required')
     configuration=read_document(path,private=True)
-    if (not isinstance(configuration,dict) or set(configuration)!={'schema_version','purpose','endpoint','extension_origin',
-            'context','ticket_digest','lease_id','expires_at'} or type(configuration['schema_version']) is not int
+    required={'schema_version','purpose','endpoint','extension_origin','context','ticket_digest','lease_id','expires_at'}
+    if (not isinstance(configuration,dict) or set(configuration) not in (required,required|{'ai_model'}) or type(configuration['schema_version']) is not int
             or configuration['schema_version']!=1 or configuration['purpose']!='gabriel-browser-gateway-v1'):
         raise ValueError('invalid_gateway_configuration')
     human=read_document(path.parent/'human.json',private=True)['token']

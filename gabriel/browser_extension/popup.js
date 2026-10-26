@@ -12,6 +12,7 @@ async function run(operation, extra = {}) {
       byId("context").value = "";
     }
     if (["stop","pause","select"].includes(operation)) paired = false;
+    if (["stop","pause","select"].includes(operation)) byId("ai-approved").checked = false;
     if (["stop","pause","select","navigation-plan","navigation-run"].includes(operation)) {
       byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null;
       byId("navigation-approved").checked = false;
@@ -38,7 +39,7 @@ async function run(operation, extra = {}) {
       byId("monitor-state").textContent = state ? "Scheduled review: "+(state.scheduling_gap ? "coverage gap" : state.state)+
         "; changed captures "+(state.captures || 0)+" of "+(state.max_captures || 8)+(state.last_checked ? "; last checked "+new Date(state.last_checked).toLocaleTimeString() : "")+
         (state.interface_title ? "; interface: "+state.interface_title+" (page-reported)" : "")+(Number.isInteger(state.candidate_count) ? "; latest captured page: "+state.candidate_count+" candidate passages requiring assessment" : "")+
-        (state.learning ? "; learning: "+state.learning.proposal_state.replaceAll('_',' ')+"; "+state.learning.reviewed_reference_count+" reviewed references attached" : "")+(state.error ? "; "+state.error : "") : "Scheduled review is off.";
+        (state.learning ? "; learning: "+state.learning.proposal_state.replaceAll('_',' ')+"; "+state.learning.reviewed_reference_count+" reviewed references attached" : "")+(state.ai ? "; AI: "+state.ai.state.replaceAll("_"," ")+(state.ai.disposition ? " ("+state.ai.disposition+")" : "") : "")+(state.error ? "; "+state.error : "") : "Scheduled review is off.";
     }
     if (result.organization_id) byId("scope").textContent = "Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id;
     if (["pair","resume"].includes(operation)) paired = true;
@@ -64,12 +65,12 @@ byId("share").onclick = () => run("share", {content: field("preview-text"), obse
 for (const operation of ["status", "receipts", "pause", "resume", "stop"]) byId(operation).onclick = () => run(operation);
 byId("channels").onchange = () => {
   byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false;
-  byId("navigation-approved").checked = false; byId("monitor-approved").checked = false;
+  byId("navigation-approved").checked = false; byId("monitor-approved").checked = false; byId("ai-approved").checked = false;
   run("channel-select", {channel_id: field("channels")});
 };
 byId("refresh-tabs").onclick = () => run("state");
 byId("stop-tab").onclick = () => run("stop-tab").then(()=>run("state"));
-byId("monitor-start").onclick = () => run("monitor-start", {mode: field("monitor-mode"), approved: byId("monitor-approved").checked});
+byId("monitor-start").onclick = () => run("monitor-start", {mode: field("monitor-mode"), approved: byId("monitor-approved").checked, ai_approved: byId("ai-approved").checked});
 byId("monitor-stop").onclick = () => run("monitor-stop");
 byId("navigation-plan").onclick = () => run("navigation-plan");
 byId("navigation-run").onclick = () => run("navigation-run", {approved: byId("navigation-approved").checked});

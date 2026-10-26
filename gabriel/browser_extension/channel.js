@@ -48,7 +48,7 @@ async function request(session, operation, body) {
   const controller = new AbortController();
   // Revocation must survive concurrent Stop/Pause events that cancel ordinary work.
   if (operation !== "disconnect") inflight.add(controller);
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), operation === "ai-review" ? 40000 : 15000);
   try {
     const response = await fetch(session.endpoint + "/v1/browser/" + operation, {method: "POST", redirect: "error", credentials: "omit",
       cache: "no-store", referrerPolicy: "no-referrer", signal: controller.signal,
@@ -57,7 +57,7 @@ async function request(session, operation, body) {
     if (raw.length > 1500000) throw new Error("Gateway response exceeded its limit.");
     const value = JSON.parse(raw);
     if (!response.ok || value.status !== "ok") throw new Error(operation === "observe" ? "Capture outcome is unconfirmed. Inspect receipts before retrying." :
-      ["events-review", "specialists-review", "text-review"].includes(operation) ? "Local review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
+      ["events-review", "specialists-review", "text-review", "ai-review"].includes(operation) ? "Review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
     return value.result;
   } finally { clearTimeout(timer); inflight.delete(controller); }
 }
@@ -130,7 +130,8 @@ async function handle(message) {
       await current(selected);
       await persist({session: {endpoint: target, token: result.token, context: selected, expires_at: result.expires_at,
         lease_id: result.lease_id, organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id,
-        sharing_approved: result.sharing_approved, scheduled_review_enabled: result.scheduled_review_enabled, discovery_enabled: result.discovery_enabled, sequence: 0}}, revision);
+        sharing_approved: result.sharing_approved, scheduled_review_enabled: result.scheduled_review_enabled, discovery_enabled: result.discovery_enabled,
+        ai_review_enabled: result.ai_review_enabled === true, sequence: 0}}, revision);
       return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at,
         organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id};
     }
@@ -140,6 +141,7 @@ async function handle(message) {
     if (message.operation === "monitor-start") {
       if (message.approved !== true || !session.sharing_approved || !session.scheduled_review_enabled || pending || paused || navigation)
         throw new Error("Approve scheduled sharing with a current, unpaused pairing and resolved receipts first.");
+      if (session.ai_review_enabled && message.ai_approved !== true) throw new Error("Explicitly approve minimized-signal AI review before starting this AI-enabled pairing.");
       if (!["page","tour","discover"].includes(message.mode)) throw new Error("Choose selected-page or approved-tour review.");
       await current(selected);
       await request(session, "heartbeat", {context: wireContext(selected)});
@@ -151,6 +153,7 @@ async function handle(message) {
         } else if (reviewed_plan!==signature) throw new Error("Review the current navigation plan before scheduling it.");
       }
       await persist({monitoring: {enabled: true, state: "scheduled", mode: message.mode,
+        ai_approved: session.ai_review_enabled && message.ai_approved === true,
         last_tick: Date.now(), last_checked: null, last_capture: null, captures: 0, max_captures: message.mode === "discover" ? 32 : 8, unchanged: 0, digests: {}, queue:[selected.page_url], cursor:0}}, revision);
       return {message: "Scheduled review enabled for this tab until pairing expiry. Visibility remains partial; browser sleep can interrupt review."};
     }
@@ -215,6 +218,7 @@ async function handle(message) {
         await request(session, "heartbeat", {context: wireContext(selected)});
         await current(selected);
         await capture(selected, session, revision, tour, intent, message.monitorTick === true);
+        if ((await storage.get("pending")).pending?.ai_waiting) break;
         if (discovery) {
           const values=await chrome.scripting.executeScript({target:{tabId:selected.tab_id,documentIds:[selected.document_id]},func:inspectConsole});
           if (values.length!==1 || values[0].documentId!==selected.document_id) throw new Error("Console changed during discovery.");
@@ -230,6 +234,12 @@ async function handle(message) {
           await persist({monitoring:{...latest,queue,cursor:(index+1)%queue.length,interface_title:survey.title,
             discovery_coverage:survey.coverage,identified_by:survey.identification}},revision);
         }
+      }
+      if ((await storage.get("pending")).pending?.ai_waiting) {
+        tour.state="waiting_for_ai_budget";
+        await persist({tour},revision);
+        return {tour,context:selected,extension_origin:"chrome-extension://"+chrome.runtime.id,
+          message:"AI review is queued. Section navigation is paused until capacity or reconciliation is available."};
       }
       tour.state = "complete";
       await persist({tour}, revision);
@@ -318,9 +328,36 @@ async function waitForDestination(selected, destination, deadline, revision, ver
 
 function publicMonitoring(value) {
   if (!value) return null;
-  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning} = value;
-  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning,
+  const {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning,ai} = value;
+  return {enabled,state,mode,last_tick,last_checked,last_capture,captures,max_captures,unchanged,error,interface_title,discovery_coverage,candidate_count,review_evidence_id,learning,ai,
     coverage: "partial", scheduling_gap: Boolean(enabled && Date.now()-last_tick>45000)};
+}
+
+
+async function aiReview(selected,session,revision,observationId) {
+  const {monitoring: schedule}=await storage.get("monitoring");
+  if (!schedule?.enabled || !schedule.ai_approved) throw new Error("AI sharing approval is unavailable.");
+  await current(selected);
+  await request(session,"heartbeat",{context:wireContext(selected)});
+  await persist({pending:{ai_in_flight:observationId},monitoring:{...schedule,last_tick:Date.now()}},revision);
+  const started=Date.now();
+  const ai=await request(session,"ai-review",{context:wireContext(selected),observation_id:observationId});
+  stillCurrent(revision);
+  if (ai.state==="deferred_budget_slot" && (ai.dispatch_performed!==false || ai.model_used!==false)) throw new Error("AI dispatch state is unconfirmed. Inspect receipts before retrying.");
+  if (Date.now()-started>40000) throw new Error("AI review exceeded its waiting interval. Inspect receipts; automatic resend is not permitted.");
+  await current(selected);
+  await request(session,"heartbeat",{context:wireContext(selected)});
+  const {monitoring: latest,tour}=await storage.get(["monitoring","tour"]);
+  if (tour?.sections) {
+    const section=tour.sections.find(row=>row.observation_id===observationId);
+    if (section) section.ai=ai;
+    tour.state=ai.state==="deferred_budget_slot" ? "waiting_for_ai_budget" : "complete";
+  }
+  await persist({monitoring:{...latest,ai,last_tick:Date.now(),
+    state:ai.state==="deferred_budget_slot" ? "waiting_for_ai_budget" : "reviewed"},...(tour ? {tour} : {})},revision);
+  if (ai.state==="deferred_budget_slot") await persist({pending:{ai_waiting:observationId}},revision);
+  else await storage.remove("pending");
+  return ai;
 }
 
 async function capture(selected, session, revision, tour, intent = null, deduplicate = false) {
@@ -371,11 +408,13 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
           const {monitoring: latest}=await storage.get("monitoring");
           await persist({tour,monitoring:{...latest,candidate_count:reviewed.candidate_count,review_evidence_id:reviewed.review_evidence_id,learning:reviewed.learning}},revision);
         }
-        await storage.remove("pending");
+        if (deduplicate && session.ai_review_enabled) {
+          tour.sections.at(-1).ai=await aiReview(selected,session,revision,receipt.observation_id);
+        } else await storage.remove("pending");
         if (deduplicate) {
           const {monitoring: latest} = await storage.get("monitoring");
           await persist({monitoring: {...latest, captures: latest.captures + 1, last_checked: Date.now(), last_capture: Date.now(),
-            state: "reviewed", digests: {...latest.digests, [selected.page_url]: hash}}}, revision);
+            state: latest.ai?.state === "deferred_budget_slot" ? "waiting_for_ai_budget" : "reviewed", digests: {...latest.digests, [selected.page_url]: hash}}}, revision);
         }
 
 }
@@ -388,6 +427,12 @@ async function tick() {
   try {
     if (!session || Date.parse(session.expires_at)<=Date.now()) throw new Error("Pairing expired. Fresh approval is required.");
     if (Date.now()-monitoring.last_tick>45000) throw new Error("Browser scheduling gap. Fresh pairing is required.");
+    if (pending?.ai_waiting && !navigation) {
+      busy=true;
+      try { await aiReview(selected,session,revision,pending.ai_waiting); }
+      finally { busy=false; }
+      return;
+    }
     if (pending || navigation) throw new Error("Unconfirmed capture or navigation. Inspect receipts before renewing.");
     await persist({monitoring: {...monitoring, last_tick: Date.now()}}, revision);
     if (["tour","discover"].includes(monitoring.mode)) {
@@ -400,7 +445,7 @@ async function tick() {
         await current(selected);
         const tour = {state: "running", sections: []};
         await capture(selected,session,revision,tour,null,true);
-        tour.state = "complete";
+        tour.state = (await storage.get("pending")).pending?.ai_waiting ? "waiting_for_ai_budget" : "complete";
         await persist({tour}, revision);
       } finally { busy = false; }
     }

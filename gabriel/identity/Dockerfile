@@ -16,7 +16,7 @@ COPY gabriel/identity/schema_v22.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_gateway.py gabriel/identity/gateway_cli.py /app/gabriel/identity/
 COPY gabriel/identity/reports.py gabriel/identity/environment.py /app/gabriel/identity/
 COPY gabriel/identity/browser_text_review.py gabriel/identity/browser_memory.py /app/gabriel/identity/
-COPY gabriel/identity/schema_v27.sql /app/gabriel/identity/
+COPY gabriel/identity/schema_v27.sql gabriel/identity/schema_v28.sql gabriel/identity/browser_ai.py /app/gabriel/identity/
 COPY gabriel/identity/installation.py /app/gabriel/identity/
 RUN mkdir -p /var/lib/gabriel-workbench && chown 10001:10001 /var/lib/gabriel-workbench && chmod 700 /var/lib/gabriel-workbench
 COPY gabriel/identity/workbench.py gabriel/identity/workbench_cli.py /app/gabriel/identity/
@@ -94,7 +94,7 @@ COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
 ENV PYTHONPATH=/app:/repo
 WORKDIR /repo
 USER browserlab
-ENTRYPOINT ["timeout", "--kill-after=10", "300", "bash", "testing/gabriel_browser/start.sh"]
+ENTRYPOINT ["timeout", "--kill-after=10", "420", "bash", "testing/gabriel_browser/start.sh"]
 
 FROM runtime AS production
 USER 0:0

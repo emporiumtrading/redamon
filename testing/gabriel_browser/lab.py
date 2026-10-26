@@ -319,6 +319,124 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
     return checks
 
 
+
+def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin,port):
+    mark(family+':browser-ai-hermetic-journey')
+    from gabriel.identity import browser_ai,model_routes,model_worker,provider_onboarding
+    from gabriel.identity.browser_gateway import BrowserGateway
+    from gabriel.identity.vault import ProviderVault,ProviderKeyRing
+    old_routes=model_routes.PRODUCTION_CONFIGURATIONS
+    old_transport=model_worker.OpenRouterTransport
+    old_onboarding=provider_onboarding.OpenRouterTransport
+    old_ring=ProviderKeyRing.__dict__['from_file']
+    model='openai/gpt-oss-120b';posts=[]
+    secret='generated-native-ai-'+secrets.token_urlsafe(32)
+    key_id='native_'+uuid4().hex
+    ring=ProviderKeyRing(key_id,{key_id:secrets.token_bytes(32)},1)
+    class Transport:
+        def __init__(self,credential):assert credential.reveal()==secret
+        def request(self,method,path,payload=None):
+            if path=='/api/v1/key':
+                return dict(data=dict(is_management_key=False,is_provisioning_key=False,limit=18,
+                    limit_reset='monthly',usage_daily=0,usage_monthly=0,limit_remaining=18))
+            if path=='/api/v1/credits':return dict(data=dict(total_credits=20,total_usage=0))
+            if path=='/api/v1/endpoints/zdr':
+                return dict(data=[dict(model_id=model,provider_name='Cerebras',tag='cerebras/fp16',status=0,
+                    supported_parameters=['temperature','response_format','max_tokens','reasoning'],
+                    pricing=dict(prompt='0.0000003',completion='0.000003',request='0'))])
+            assert method=='POST' and path=='/api/v1/chat/completions'
+            assert all(value not in json.dumps(payload) for value in [secret,'Generated lab account','generated-user'])
+            packet=json.loads(payload['messages'][1]['content'])
+            assert packet['signals'] and not packet['actions_authorized']
+            posts.append(payload)
+            answer=dict(disposition='abstain',claims=[dict(id='claim-1',statement='Generated candidate signals require further evidence.',references=['o1'])],
+                alternatives=['A routine or documentation report remains possible.'],contradictions=['No independent evidence is supplied.'],
+                uncertainty=['The underlying events and source authenticity are unknown.'],reported_gaps=['source-unverified'],requested_actions=[])
+            return dict(id='fixture-browser-ai',model=model,provider='Cerebras',
+                choices=[dict(finish_reason='stop',message=dict(content=json.dumps(answer)))],
+                usage=dict(prompt_tokens=500,completion_tokens=150,cost=0.0002))
+    class Gateway(BrowserGateway):
+        deferred=False
+        def dispatch(self,operation,body,authorization):
+            if operation=='ai-review' and not self.deferred:
+                with self._lock:
+                    self._rate();self._peer_authorized(authorization);self._bound()
+                    self.deferred=True
+                    return dict(state='deferred_budget_slot',model_used=False,dispatch_performed=False,
+                        quality_qualified=False,incident_confirmed=False)
+            return super().dispatch(operation,body,authorization)
+    class TLSHandler(QuietHandler):
+        def get_environ(self):
+            environ=super().get_environ();environ['HTTPS']='on';return environ
+    server=None;tab=None
+    try:
+        model_routes.PRODUCTION_CONFIGURATIONS=frozenset({browser_ai.digest(browser_ai.configuration(model))})
+        model_worker.OpenRouterTransport=Transport
+        provider_onboarding.OpenRouterTransport=Transport
+        ProviderKeyRing.from_file=classmethod(lambda cls,path:ring)
+        navigation=BrowserNavigationService(service._dsn,service.store)
+        ModelBudgetService(service._dsn).configure(human,enabled=True)
+        provider_onboarding.CustomerProviders(ProviderVault(service._dsn,ring)).configure(human,'openrouter',secret)
+        CONSOLE_MODES['/unfamiliar-dashboard']='agnostic'
+        for old in cdp.targets():
+            if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
+        tab=cdp.send('Target.createTarget',{'url':console_origin+'/unfamiliar-dashboard'})['targetId']
+        page=cdp.attach(tab)
+        wait_for(lambda:cdp.evaluate(page,'document.readyState')=='complete')
+        cdp.send('Target.activateTarget',{'targetId':tab})
+        popup=native_popup(cdp,tab,extension_origin)
+        cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
+        click(cdp,popup,'select')
+        scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
+        case=navigation.create_case(human,'Generated hermetic browser AI journey')
+        task=navigation.create_browser_task(human,'Generated consented browser AI task',900,100)
+        directory=root/'ai-journey';endpoint='https://localhost:'+str(port)
+        enrolled=prepare(navigation,human,task['id'],case['id'],scope,endpoint,extension_origin,directory,
+            share_observations=True,monitor_seconds=300,ai_model=model)
+        config=read_document(directory/'gateway.json',private=True)
+        peer=read_document(directory/'peer.json',private=True)['token']
+        app=Gateway(navigation,human,peer,config)
+        server=make_server('127.0.0.1',port,app,server_class=ConsoleServer,handler_class=TLSHandler)
+        context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(tls['server.pem'],tls['server.key'])
+        server.socket=context.wrap_socket(server.socket,server_side=True)
+        Thread(target=server.serve_forever,daemon=True).start()
+        ticket=read_document(directory/'claim.json',private=True)['ticket']
+        cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint)+';document.getElementById("ticket").value='+json.dumps(ticket))
+        click(cdp,popup,'pair');wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
+        denied=cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"monitor-start",mode:"page",approved:true,ai_approved:false})')
+        assert not denied['ok'] and not posts
+        assert not navigation.list_browser_observations(human,enrolled['lease_id'])['observations']
+        cdp.evaluate(popup,'document.getElementById("monitor-mode").value="page";document.getElementById("monitor-approved").checked=true;document.getElementById("ai-approved").checked=true')
+        click(cdp,popup,'monitor-start')
+        def state():return cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
+        wait_for(lambda:((state().get('monitoring') or {}).get('ai') or {}).get('state')=='deferred_budget_slot')
+        assert not posts and len(navigation.list_browser_observations(human,enrolled['lease_id'])['observations'])==1
+        mark(family+':browser-ai-alarm-resume')
+        for target in cdp.targets():
+            if target.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':target['targetId']})
+        wait_for(lambda:len(posts)==1,50)
+        popup=native_popup(cdp,tab,extension_origin)
+        snapshot=wait_for(lambda:(lambda s:s if ((s.get('monitoring') or {}).get('ai') or {}).get('model_used') else None)(state()))
+        result=snapshot['monitoring']['ai']
+        assert result['disposition']=='abstain' and not result['quality_qualified'] and not result['incident_confirmed']
+        assert snapshot['monitoring']['captures']==1 and len(navigation.list_browser_observations(human,enrolled['lease_id'])['observations'])==1
+        raw=navigation.read_evidence(human,result['answer_evidence_id']).reveal()
+        payload=json.loads(raw);assert payload['result']['generation_id']=='fixture-browser-ai'
+        assert payload['local_manifest']['lineage']['o1']['evidence_id']==str(navigation.list_browser_observations(human,enrolled['lease_id'])['observations'][0]['evidence_id'])
+        assert cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"stop"})')['ok']
+        assert navigation.get_browser_lease(human,enrolled['lease_id'])['state']=='disconnected'
+        return ['independent_ai_consent_denial','known_unsent_capacity_deferral','popup_closed_ai_resume',
+            'no_recapture_while_ai_deferred','encrypted_source_linked_ai_answer','hermetic_transport_not_live_model_quality']
+    finally:
+        if server:server.shutdown();server.server_close()
+        if tab and any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
+        model_routes.PRODUCTION_CONFIGURATIONS=old_routes
+        model_worker.OpenRouterTransport=old_transport
+        provider_onboarding.OpenRouterTransport=old_onboarding
+        ProviderKeyRing.from_file=old_ring
+        CONSOLE_MODES.clear()
+
+
 def discovery_journey(cdp,family,service,human,tls,root,env,console_origin,extension_origin,port):
     mark(family+':console-agnostic-discovery')
     CONSOLE_MODES.clear()
@@ -783,11 +901,12 @@ def run_browser(family,executable,output):
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
                 'https://localhost:'+str(server.server_port),origin,gateway_port)
             discovery_checks=discovery_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
+            ai_protocol_checks=ai_journey(cdp,family,service,human,tls,root,'https://localhost:'+str(server.server_port),origin,gateway_port)
             monitoring_checks=monitoring_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port,output)
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
-                'extension_version':'0.4.0','extension_origin':origin,'discovery_checks':discovery_checks,'monitoring_checks':monitoring_checks,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
+                'extension_version':'0.4.0','extension_origin':origin,'ai_protocol_checks':ai_protocol_checks,'discovery_checks':discovery_checks,'monitoring_checks':monitoring_checks,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','covered_text_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
@@ -830,6 +949,7 @@ def main():
         frames=[dict(file=Path(frame.filename).name,line=frame.lineno,function=frame.name) for frame in traceback.extract_tb(error.__traceback__)]
         (output/'failure.json').write_text(json.dumps({'status':'FAIL','stage':stage,'error_type':type(error).__name__,'frames':frames}))
         print('FAIL: browser lab at '+stage+'; '+type(error).__name__)
+        print('Failure locations: '+json.dumps(frames),flush=True)
         return 1
     finally:
         manager.terminate(); manager.wait(timeout=5)

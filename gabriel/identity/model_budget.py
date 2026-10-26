@@ -110,7 +110,7 @@ class ModelBudgetService(IdentityService):
                         usage=usage(conn,principal.organization_id,at),
                         sampled_at=at, timezone='UTC', unit='microUSD',
                         transport_enabled=False, model_admitted=False,
-                        settlement_provenance='operator_attested_not_provider_verified')
+                        settlement_provenance='operator_reports_or_reserved_upper_bounds_not_verified_billing')
 
     def configure(self, token, *, enabled=True, month_microusd=18000000,
                   day_microusd=500000, investigation_microusd=50000):

@@ -39,8 +39,11 @@ class ModelWorker:
 
     def __repr__(self): return '<ModelWorker private_backend>'
 
+    def _configuration(self,model):
+        return configuration(model)
+
     def _admission(self,model):
-        config=configuration(model)
+        config=self._configuration(model)
         if digest(config) not in model_routes.PRODUCTION_CONFIGURATIONS:
             raise AccessDenied('model_configuration_not_production_admitted')
         return config
