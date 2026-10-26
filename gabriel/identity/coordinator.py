@@ -263,7 +263,7 @@ def advance(service,token,run_id,*,expected_sequence=None):
         p=service._human(conn,token,write=True)
         row=load(conn,p,run_id)
         current=active(service,conn,p,row)
-        if row['plan_version']==PLAN and step['operation']=='evidence_inventory':
+        if row['plan_version'] in {PLAN,BROWSER_PLAN} and step['operation']=='evidence_inventory':
             expected=dict(operation='evidence_inventory',sources=current,content_integrity='not_checked',
                 source_authenticity='unverified',independent_corroboration='not_established')
             if result!=expected:
