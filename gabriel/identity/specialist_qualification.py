@@ -14,7 +14,7 @@ def evaluation_configuration(role,model):
 def evaluate_agents(submissions):
     if type(submissions) is not dict or set(submissions)!=set(ROLES):
         raise InvalidIdentityInput('all_twelve_agent_qualifications_required')
-    reports={}
+    reports={};generations=set()
     for role in ROLES:
         packet=submissions[role]
         if type(packet) is not dict or set(packet)!={'model','runtime_configuration_digest','corpus','runs','reviews'}:
@@ -22,6 +22,9 @@ def evaluate_agents(submissions):
         expected=digest(configuration(role,packet['model']))
         if packet['runtime_configuration_digest']!=expected:
             raise InvalidIdentityInput('stale_agent_qualification_configuration')
+        current_generations={run.get('generation_id') for run in packet['runs']}
+        if generations & current_generations:raise InvalidIdentityInput('agent_qualification_generation_reused')
+        generations.update(current_generations)
         report=evaluate(packet['corpus'],evaluation_configuration(role,packet['model']),packet['runs'],packet['reviews'])
         reports[role]=dict(report,runtime_configuration_digest=expected)
     return dict(version=VERSION,roles=reports,automated_gate='pass' if all(r['automated_gate']=='pass' for r in reports.values()) else 'fail',

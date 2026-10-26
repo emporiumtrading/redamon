@@ -39,3 +39,19 @@ def test_oversized_context_is_not_silently_truncated():
     source=document('activity',dict(category='network',outcome='observed',count=1000000))
     source['facts']=[dict(source['facts'][0],id=str(uuid4())) for _ in range(128)]
     with pytest.raises(AccessDenied,match='narrower_scope'):agents.project(source,'threat_hunting',uuid4(),[])
+
+
+def test_per_role_qualification_rejects_full_size_simulated_model_evidence():
+    from testing.gabriel_identity.test_model_evaluation import corpus,artifacts
+    submitted={}
+    for role in agents.ROLES:
+        data=corpus();config=evaluation_configuration(role,agents.DEFAULT_MODEL)
+        runs,reviews=artifacts(data,config)
+        for run,review in zip(runs,reviews):
+            run['generation_id']=role+'/'+run['generation_id']
+            review['run_sha256']=agents.digest(run)
+        submitted[role]=dict(model=agents.DEFAULT_MODEL,runtime_configuration_digest=agents.digest(agents.configuration(role)),corpus=data,runs=runs,reviews=reviews)
+    report=evaluate_agents(submitted)
+    assert report['automated_gate']=='fail' and not report['production_admission']
+    assert len(report['roles'])==12 and all(row['completed']==20 for row in report['roles'].values())
+    assert all(any(f['reason']=='fixture_is_not_model_evidence' for f in row['failures']) for row in report['roles'].values())

@@ -12,6 +12,7 @@ CREATE TABLE gabriel_identity.personal_provider_secrets (
     updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     PRIMARY KEY (organization_id,user_id,provider),
     UNIQUE (organization_id,id),
+    UNIQUE (key_id,nonce),
     FOREIGN KEY (organization_id,user_id) REFERENCES gabriel_identity.memberships(organization_id,user_id),
     FOREIGN KEY (key_id) REFERENCES gabriel_identity.provider_key_registry(key_id),
     CHECK ((revoked_at IS NULL AND octet_length(nonce)=12 AND octet_length(ciphertext)>16)

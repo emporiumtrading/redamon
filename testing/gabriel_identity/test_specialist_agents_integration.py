@@ -208,3 +208,10 @@ def test_memory_read_tool_keeps_contents_local(tenant,cases,case,evidence,setup)
     assert result['state']=='completed_requires_review'
     context=json.loads(setup['posts'][1]['messages'][1]['content'])['tool_results'][0]
     assert context['tool']=='review_memory' and context['result']==dict(reviewed_local_references=0,contents_exported=False)
+
+
+def test_personal_ciphertext_is_cryptographically_bound_to_its_owner(tenant,cases,setup):
+    from gabriel.identity.vault import SecretUnavailable
+    with owner_connection(tenant.db) as conn:
+        conn.execute('UPDATE gabriel_identity.personal_provider_secrets SET user_id=%s WHERE organization_id=%s',(tenant.owner,tenant.org))
+    with pytest.raises(SecretUnavailable):setup['personal'].resolve(tenant.token)
