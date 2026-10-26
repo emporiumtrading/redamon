@@ -76,11 +76,7 @@ def prepare(root,port,image):
     if root.exists() or type(port) is not int or not 1024<=port<=65535: raise ValueError('new_directory_and_local_port_required')
     run(['docker','info'])
     run(['docker','compose','version'])
-    if image is None:
-        image=run(['docker','build','--quiet','-f','gabriel/identity/Dockerfile','--target','production','.']).decode().strip().splitlines()[-1]
-    if re.fullmatch(r'sha256:[a-f0-9]{64}',image) is None: raise ValueError('exact_local_image_id_required')
-    inspected=json.loads(run(['docker','image','inspect',image]))[0]
-    if inspected['Config']['User']!='10001:10001': raise ValueError('non_root_image_required')
+    image=build_image(image)
     root.mkdir(mode=0o700)
     database_secrets(root/'database')
     keyring(root/'provider')
@@ -152,6 +148,43 @@ class Installation:
         write(destination/'backup.json',manifest)
         return {'backup_complete':True,'workbench_stopped':True,'keys_included':False}
 
+
+    def rebuild(self,backup,image=None):
+        if len(list(self.root.glob('rebuild-*.json')))>=32:
+            raise ValueError('rebuild_history_limit_requires_operator_review')
+        candidate=build_image(image)
+        readiness=json.loads(run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL',
+            '--security-opt','no-new-privileges','--entrypoint','python',candidate,
+            '-m','gabriel.identity.gateway_cli','ai-readiness','--ai-model','openai/gpt-oss-120b']))
+        if readiness.get('projection_version')!='browser-candidate-ai-v1':
+            raise ValueError('browser_ai_installation_image_required')
+        new=dict(self.config,image=candidate,source=run(['git','rev-parse','HEAD']).decode().strip())
+        self.backup(backup)
+        previous=read(backup/'backup.json')
+        record=self.root/('rebuild-'+uuid4().hex+'.json')
+        write(record,dict(previous=self.config,candidate=new,backup=str(backup),automatic_rollback=False))
+        temporary=self.root/('pending-'+uuid4().hex+'.json')
+        write(temporary,new)
+        os.replace(temporary,self.root/'installation.json')
+        parent=os.open(self.root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try: os.fsync(parent)
+        finally: os.close(parent)
+        rebuilt=Installation(self.root)
+        program="""import os,json
+from gabriel.identity.cli import read_secret
+from gabriel.identity.service import migrate
+migrate(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']))
+print(json.dumps({'migrated':True}))
+"""
+        migrated=json.loads(rebuilt.compose('run','--rm','--no-deps','-T','--entrypoint','python','operator','-c',program))
+        if migrated!={'migrated':True} or rebuilt.operator('receipt')!=previous['identity']:
+            raise ValueError('rebuild_identity_verification_failed')
+        if any(digest(self.root/name/'keyring.json')!=value for name,value in previous['key_fingerprints'].items()):
+            raise ValueError('rebuild_key_identity_changed')
+        return dict(rebuilt=True,image=candidate,source=new['source'],backup=str(backup),
+            original_identity_retained=True,original_keys_retained=True,requires_fresh_login=True,
+            production_admitted=False,browser_ai=readiness)
+
     def restore(self,backup,keys):
         private(backup);private(keys)
         manifest=read(backup/'backup.json')
@@ -181,6 +214,15 @@ class Installation:
         return {'restored':True,'requires_fresh_login':True,'production_admitted':False}
 
 
+def build_image(image):
+    if image is None:
+        image=run(['docker','build','--quiet','-f','gabriel/identity/Dockerfile','--target','production','.']).decode().strip().splitlines()[-1]
+    if re.fullmatch(r'sha256:[a-f0-9]{64}',image) is None: raise ValueError('exact_local_image_id_required')
+    inspected=json.loads(run(['docker','image','inspect',image]))[0]
+    if inspected['Config']['User']!='10001:10001': raise ValueError('non_root_image_required')
+    return image
+
+
 def digest(path):
     info=path.lstat()
     if not stat.S_ISREG(info.st_mode): raise ValueError('regular_file_required')
@@ -205,7 +247,7 @@ def password(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore'))
+    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild'))
     parser.add_argument('directory')
     parser.add_argument('--port',type=int,default=8444)
     parser.add_argument('--image')
@@ -235,6 +277,7 @@ def main():
                     result=dict(services=rows,production_admitted=False)
                 elif args.command=='stop': installation.stop();result={'stopped':True,'volumes_retained':True}
                 elif args.command=='backup': result=installation.backup(external(args.backup))
+                elif args.command=='rebuild': result=installation.rebuild(external(args.backup),args.image)
                 else: result=installation.restore(external(args.backup),external(args.keys_from))
         print(json.dumps({'status':'ok','result':result}))
         return 0

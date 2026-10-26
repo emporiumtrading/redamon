@@ -1,0 +1,36 @@
+name: Gabriel existing installation rebuild
+on:
+  pull_request:
+    paths: ['tooling/scripts/gabriel_install.py', 'testing/gabriel_browser_ai/rebuild_journey.py', '.github/workflows/gabriel-rebuild.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rebuild:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Rebuild the production candidate
+        run: docker build --target production -f gabriel/identity/Dockerfile -t gabriel-rebuild-check .
+      - name: Upgrade generated existing database and retain owner, keys and evidence
+        run: |
+          image_id="$(docker image inspect gabriel-rebuild-check --format '{{.Id}}')"
+          python3 testing/gabriel_browser_ai/rebuild_journey.py "$RUNNER_TEMP/gabriel-rebuild" "$image_id"
+      - name: Retain only non-secret rebuild evidence
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-rebuild-evidence"
+          cp "$RUNNER_TEMP/gabriel-rebuild/rebuild-result.json" "$RUNNER_TEMP/gabriel-rebuild-evidence/"
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-rebuild-evidence/source-sha.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-rebuild-${{ matrix.runner }}
+          path: ${{ runner.temp }}/gabriel-rebuild-evidence
+          if-no-files-found: error
+          retention-days: 14
