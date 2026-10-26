@@ -34,9 +34,10 @@ def ai(tenant,cases,case,context,legacy_setup,monkeypatch):
 
 
 def capture(ai,tenant,sequence=1,content='Generated lab account\nFailed login for PRIVATE_GENERATED_USER at https://generated-console.invalid'):
-    return ai['browser'].observe_browser(tenant.token,ai['lease'].token,dict(schema_version=1,operation='browser.observe',
+    row=ai['browser'].observe_browser(tenant.token,ai['lease'].token,dict(schema_version=1,operation='browser.observe',
         request_id=str(uuid4()),sequence=sequence,context=ai['scope'],observed_at=datetime.now(timezone.utc).isoformat(),
         visibility='partial',client_minimized=True,content=content))
+    return dict(row,evidence_id=str(row['evidence_id']),observation_id=str(row['observation_id']))
 
 
 def dispatch(ai,observation):
