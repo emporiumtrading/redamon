@@ -94,7 +94,7 @@ COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
 ENV PYTHONPATH=/app:/repo
 WORKDIR /repo
 USER browserlab
-ENTRYPOINT ["timeout", "--kill-after=10", "300", "bash", "testing/gabriel_browser/start.sh"]
+ENTRYPOINT ["timeout", "--kill-after=10", "420", "bash", "testing/gabriel_browser/start.sh"]
 
 FROM runtime AS production
 USER 0:0

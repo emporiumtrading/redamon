@@ -42,6 +42,8 @@ with connection(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']),runtime=Fa
  c.execute('ALTER TABLE gabriel_identity.model_settlements DROP CONSTRAINT model_settlements_check')
  c.execute("ALTER TABLE gabriel_identity.model_settlements ADD CONSTRAINT model_settlements_outcome_check CHECK (outcome IN ('operator_reported','not_sent'))")
  c.execute("ALTER TABLE gabriel_identity.model_settlements ADD CONSTRAINT model_settlements_check CHECK ((outcome='not_sent' AND actual_microusd=0 AND receipt_digest IS NULL) OR (outcome='operator_reported' AND receipt_digest IS NOT NULL))")
+ c.execute('ALTER TABLE gabriel_identity.coordinator_runs DROP CONSTRAINT coordinator_plan_bounds')
+ c.execute("ALTER TABLE gabriel_identity.coordinator_runs ADD CONSTRAINT coordinator_plan_bounds CHECK ((plan_version='local-coordinator-v1' AND input_evidence_id IS NULL AND max_steps BETWEEN 1 AND 2) OR (plan_version='local-specialist-coordinator-v2' AND input_evidence_id IS NOT NULL AND max_steps=12))")
  c.execute('DELETE FROM gabriel_identity.migrations WHERE version=28')
  assert c.execute('SELECT max(version) AS n FROM gabriel_identity.migrations').fetchone()['n']==27
 """
