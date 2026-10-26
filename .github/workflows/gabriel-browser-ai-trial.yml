@@ -1,0 +1,30 @@
+name: Gabriel browser AI offline trial packet
+on:
+  pull_request:
+    paths: ['testing/gabriel_browser_ai/**', '.github/workflows/gabriel-browser-ai-trial.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Rebuild the same production source without credentials
+        run: docker build --target production -f gabriel/identity/Dockerfile -t gabriel-browser-ai-trial-source .
+      - name: Export and check synthetic request bodies without a network or provider key
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/browser-ai-trial"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --memory 256m --cpus 1 -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_browser_ai/trial.py:/trial.py:ro" gabriel-browser-ai-trial-source /trial.py > "$RUNNER_TEMP/browser-ai-trial/request-packet.json"
+          git rev-parse HEAD > "$RUNNER_TEMP/browser-ai-trial/source-sha.txt"
+          docker image inspect gabriel-browser-ai-trial-source --format '{{.Id}}' > "$RUNNER_TEMP/browser-ai-trial/image-id.txt"
+          sha256sum "$RUNNER_TEMP/browser-ai-trial/request-packet.json" > "$RUNNER_TEMP/browser-ai-trial/request-packet.sha256"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-browser-ai-trial-packet
+          path: ${{ runner.temp }}/browser-ai-trial
+          if-no-files-found: error
+          retention-days: 14
