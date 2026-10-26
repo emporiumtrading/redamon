@@ -30,7 +30,7 @@ def setup(tenant,cases,monkeypatch):
     secret='generated-personal-'+secrets.token_urlsafe(30)
     posts=[]
     class Client:
-        unknown=False;callback=None;bad_tool=False;always_tool=False
+        unknown=False;callback=None;bad_tool=False;always_tool=False;chosen_tool='review_rules'
         credentials=[]
         def __init__(self,credential):type(self).credentials.append(credential.reveal())
         def request(self,method,path,payload=None):
@@ -46,7 +46,7 @@ def setup(tenant,cases,monkeypatch):
             if type(self).callback:type(self).callback()
             if type(self).unknown:raise ProbeError('provider_transport_unresolved')
             packet=json.loads(payload['messages'][1]['content'])
-            action=['external-execute'] if type(self).bad_tool else ['review_rules'] if not packet['tool_results'] or type(self).always_tool else []
+            action=['external-execute'] if type(self).bad_tool else [type(self).chosen_tool] if not packet['tool_results'] or type(self).always_tool else []
             decision=dict(disposition='abstain',claims=[dict(id='claim-1',statement='Generated role-scoped evidence requires review.',references=[packet['observations'][0]['id']])],
                 alternatives=['An approved administrative explanation remains possible.'],contradictions=['No independent source corroboration supplied.'],
                 uncertainty=['Source semantics remain unverified.'],reported_gaps=['source-unverified'],requested_actions=action)
@@ -159,3 +159,52 @@ def test_provider_rotation_rewraps_personal_secrets(tenant,cases,setup):
     vault=ProviderVault(cases._dsn,ring)
     assert vault.rotate(tenant.token)['rewrapped']==1
     assert personal_providers.PersonalProviders(vault).resolve(setup['token'])[0].reveal()==setup['secret']
+
+
+def test_another_member_cannot_resume_or_stop_a_personal_agent(tenant,cases,case,evidence,setup):
+    _,holder=intake(tenant,cases,case,evidence)
+    result=start(setup,cases,case,holder)
+    with pytest.raises(AccessDenied,match='not_owned'):agents.resume(cases,setup['vault'],tenant.token,result['job_id'])
+    with pytest.raises(AccessDenied,match='not_owned'):agents.stop(cases,tenant.token,result['job_id'])
+    assert len(setup['posts'])==2
+
+
+def test_workbench_stop_is_not_blocked_by_agent_provider_io(tenant,cases,case,evidence,setup,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from io import BytesIO
+    from threading import Event
+    from urllib.parse import urlencode
+    from gabriel.identity.workbench import Workbench,COOKIE,ticket_hash
+    app=Workbench(cases,setup['token'],dict(endpoint='https://localhost:8444',ticket_digest=ticket_hash('gwt1_'+'a'*43)),provider_vault=setup['vault'])
+    app._cookie='generated-agent-ui-cookie';app._claimed=True
+    active=Event();release=Event()
+    def slow(*args,**kwargs):
+        active.set();assert release.wait(5)
+        return dict(state='generated_completed',steps=[])
+    def stop(*args,**kwargs):release.set();return dict(stopped=True)
+    monkeypatch.setattr(agents,'start',slow);monkeypatch.setattr(agents,'stop',stop)
+    _,holder=intake(tenant,cases,case,evidence)
+    def post(path,fields):
+        raw=urlencode(dict(csrf=app._csrf,**fields)).encode();observed=[]
+        env=dict(REQUEST_METHOD='POST',PATH_INFO=path,CONTENT_TYPE='application/x-www-form-urlencoded',
+            CONTENT_LENGTH=str(len(raw)),HTTP_HOST='localhost:8444',HTTP_ORIGIN='https://localhost:8444',
+            HTTP_COOKIE=COOKIE+'='+app._cookie,**{'wsgi.url_scheme':'https','wsgi.input':BytesIO(raw)})
+        app(env,lambda status,headers:observed.append(status))
+        return observed[0]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        running=pool.submit(post,'/cases/'+str(case['id'])+'/agents',dict(request_id=str(uuid4()),role='alert_triage',input_evidence_id=str(holder['id']),model=agents.DEFAULT_MODEL,key_scope='personal',approved='yes'))
+        try:
+            assert active.wait(3)
+            stopped=pool.submit(post,'/cases/'+str(case['id'])+'/agents/'+str(uuid4())+'/stop',{})
+            assert stopped.result(timeout=2)=='200 OK'
+        finally:release.set()
+        assert running.result(timeout=3)=='200 OK'
+
+
+def test_memory_read_tool_keeps_contents_local(tenant,cases,case,evidence,setup):
+    _,holder=intake(tenant,cases,case,evidence,kind='recovery',data=dict(check='restore',result='fail',baseline='current'))
+    setup['client'].chosen_tool='review_memory'
+    result=start(setup,cases,case,holder,role='recovery_learning')
+    assert result['state']=='completed_requires_review'
+    context=json.loads(setup['posts'][1]['messages'][1]['content'])['tool_results'][0]
+    assert context['tool']=='review_memory' and context['result']==dict(reviewed_local_references=0,contents_exported=False)

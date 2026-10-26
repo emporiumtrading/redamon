@@ -222,7 +222,7 @@ class Workbench:
                     result=agents.stop(self.service,self._token,job_id) if operation=='stop' else agents.resume(self.service,self._provider_vault,self._token,job_id)
                 else:
                     if set(fields)!={'csrf','request_id','role','input_evidence_id','model','key_scope','approved'} or fields['approved']!='yes':raise AccessDenied('specialist_ai_export_consent_required')
-                    result=agents.start(self.service,self._provider_vault,self._token,case_id,fields['request_id'],fields['role'],fields['input_evidence_id'],model=fields['model'],key_scope=fields['key_scope'],approved=True)
+                    result=agents.orchestrate(self.service,self._provider_vault,self._token,case_id,fields['request_id'],fields['input_evidence_id'],model=fields['model'],key_scope=fields['key_scope'],approved=True) if fields['role']=='all' else agents.start(self.service,self._provider_vault,self._token,case_id,fields['request_id'],fields['role'],fields['input_evidence_id'],model=fields['model'],key_scope=fields['key_scope'],approved=True)
                 body+='<p id="agent-result">'+e(result.get('state','stopped'))+'</p>'
                 for step in result.get('steps',[]):
                     body+='<p>Round '+e(step['round'])+' · '+e(step['disposition'])+' · <a href="/cases/'+case_id+'/evidence/'+e(step['answer_evidence_id'])+'">Review unreviewed AI answer</a></p>'
@@ -232,7 +232,7 @@ class Workbench:
             if snapshot['case']['state']=='open':
                 options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in snapshot['evidence'] if row['state']=='ready' and row['storage_state']=='active')
                 if options:
-                    body+=self._form(base,'Start specialist agent','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Specialist<select name="role">'+''.join('<option value="'+role+'">'+e(role.replace('_',' '))+'</option>' for role in ROLES)+'</select></label><label>Typed evidence<select name="input_evidence_id">'+options+'</select></label><label>Model<select name="model">'+''.join('<option value="'+e(m)+'"'+(' selected' if m==agents.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in agents.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label><label><input type="checkbox" name="approved" value="yes" required>I approve sending minimized typed facts and local tool summaries to this model for this investigation.</label>')
+                    body+=self._form(base,'Start specialist agent','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Specialist<select name="role"><option value="all">Coordinator: relevant agents</option>'+''.join('<option value="'+role+'">'+e(role.replace('_',' '))+'</option>' for role in ROLES)+'</select></label><label>Typed evidence<select name="input_evidence_id">'+options+'</select></label><label>Model<select name="model">'+''.join('<option value="'+e(m)+'"'+(' selected' if m==agents.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in agents.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label><label><input type="checkbox" name="approved" value="yes" required>I approve sending minimized typed facts and local tool summaries to this model for this investigation.</label>')
             for record in agents.history(self.service,self._token,case_id):
                 body+='<section><h2>'+e(record['role'].replace('_',' '))+'</h2><p>'+e(record['created_at'])+'</p>'+self._form(base+'/'+record['id']+'/resume','Inspect or resume agent','')+self._form(base+'/'+record['id']+'/stop','Stop agent','')+'</section>'
             return '200 OK',self._page('Specialist AI agents',body,principal),[]
@@ -629,17 +629,20 @@ class Workbench:
         status='403 Forbidden'
         body=self._page('Access unavailable','<p>Check your access, scope and ticket expiry with your Gabriel operator.</p>')
         try:
+            slow=environ.get('REQUEST_METHOD')=='POST' and (re.fullmatch('/cases/'+ID+'/agents(?:/'+ID+'/(?:resume|stop))?',environ.get('PATH_INFO','')) or environ.get('PATH_INFO') in {'/personal-providers/save','/providers/save'})
             with self._lock:
                 now=time.monotonic()
                 if now-self._window>=60: self._window,self._calls=now,0
                 self._calls+=1
                 if self._calls>120: raise AccessDenied('workbench_request_budget')
-                candidate_status,candidate_body,extra=self._route(environ)
-                if len(candidate_body)>2*1024*1024: raise AccessDenied('workbench_response_limit')
-                status,body=candidate_status,candidate_body
-                for key,value in extra:
-                    headers=[(k,v) for k,v in headers if k.lower()!=key.lower()]
-                    headers.append((key,value))
+                if not slow:candidate_status,candidate_body,extra=self._route(environ)
+            # AI and provider I/O must leave Stop/logout and other tabs responsive.
+            if slow:candidate_status,candidate_body,extra=self._route(environ)
+            if len(candidate_body)>2*1024*1024: raise AccessDenied('workbench_response_limit')
+            status,body=candidate_status,candidate_body
+            for key,value in extra:
+                headers=[(k,v) for k,v in headers if k.lower()!=key.lower()]
+                headers.append((key,value))
         except IdentityUnavailable:
             status='503 Service Unavailable'
             body=self._page('Temporarily unavailable','<p>The request could not be confirmed. Review the case queue before retrying a change.</p>')

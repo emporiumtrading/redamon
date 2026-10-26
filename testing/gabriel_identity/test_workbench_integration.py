@@ -570,7 +570,7 @@ def test_operator_cli_prepares_exclusive_private_files(tenant,boot,tmp_path):
 
 
 @pytest.mark.parametrize('boot',['analyst'],indirect=True)
-def test_analyst_has_personal_key_screen_and_agent_status_but_no_organization_key_access(tenant,case,server):
+def test_analyst_has_personal_key_screen_and_agent_status_but_no_organization_key_access(tenant,case,evidence,server):
     cookie,token,_=connect(server)
     code,html,_=call(server,'/personal-providers',cookie=cookie)
     assert code==200 and 'Personal OpenRouter API key' in html

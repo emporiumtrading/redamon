@@ -275,4 +275,4 @@ def orchestrate(service,vault,token,case_id,request_id,input_evidence_id,*,model
         result=start(service,vault,token,case_id,uuid5(identifier(request_id),role),role,input_evidence_id,
             model=model,key_scope=key_scope,approved=True)
         results.append(dict(role=role,result=result))
-    return dict(agents=results,delegated_roles=selected,external_actions_authorized=False,quality_qualified=False)
+    return dict(state='coordinator_completed_requires_review',agents=results,delegated_roles=selected,external_actions_authorized=False,quality_qualified=False)
