@@ -343,6 +343,7 @@ async function aiReview(selected,session,revision,observationId) {
   const started=Date.now();
   const ai=await request(session,"ai-review",{context:wireContext(selected),observation_id:observationId});
   stillCurrent(revision);
+  if (ai.state==="deferred_budget_slot" && (ai.dispatch_performed!==false || ai.model_used!==false)) throw new Error("AI dispatch state is unconfirmed. Inspect receipts before retrying.");
   if (Date.now()-started>40000) throw new Error("AI review exceeded its waiting interval. Inspect receipts; automatic resend is not permitted.");
   await current(selected);
   await request(session,"heartbeat",{context:wireContext(selected)});
