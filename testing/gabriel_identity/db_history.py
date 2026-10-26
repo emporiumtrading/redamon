@@ -239,6 +239,7 @@ def remove_v27(conn):
 
 
 def remove_v28(conn):
+    remove_v29(conn)
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=28').fetchone():
         conn.execute('DROP TRIGGER require_completed_model_ceiling ON gabriel_identity.model_settlements')
         conn.execute('DROP FUNCTION gabriel_identity.require_completed_model_ceiling()')
@@ -249,3 +250,12 @@ def remove_v28(conn):
         conn.execute('ALTER TABLE gabriel_identity.coordinator_runs DROP CONSTRAINT coordinator_plan_bounds')
         conn.execute("ALTER TABLE gabriel_identity.coordinator_runs ADD CONSTRAINT coordinator_plan_bounds CHECK ((plan_version='local-coordinator-v1' AND input_evidence_id IS NULL AND max_steps BETWEEN 1 AND 2) OR (plan_version='local-specialist-coordinator-v2' AND input_evidence_id IS NOT NULL AND max_steps=12))")
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=28')
+
+
+def remove_v29(conn):
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=29').fetchone():
+        conn.execute('DROP TABLE gabriel_identity.specialist_agent_stops,gabriel_identity.specialist_agent_jobs,gabriel_identity.personal_provider_secrets')
+        conn.execute('ALTER TABLE gabriel_identity.model_price_quotes DROP COLUMN purpose')
+        conn.execute('ALTER TABLE gabriel_identity.coordinator_runs DROP CONSTRAINT coordinator_plan_bounds')
+        conn.execute("ALTER TABLE gabriel_identity.coordinator_runs ADD CONSTRAINT coordinator_plan_bounds CHECK ((plan_version='local-coordinator-v1' AND input_evidence_id IS NULL AND max_steps BETWEEN 1 AND 2) OR (plan_version='local-specialist-coordinator-v2' AND input_evidence_id IS NOT NULL AND max_steps=12) OR (plan_version='browser-ai-coordinator-v1' AND input_evidence_id IS NOT NULL AND max_steps=1))")
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=29')

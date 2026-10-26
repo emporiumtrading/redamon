@@ -39,6 +39,26 @@ class ModelWorker:
 
     def __repr__(self): return '<ModelWorker private_backend>'
 
+    def _principal(self,conn,token,*,write=False):
+        return self.cases._admin(conn,token)
+
+    def _answer_principal(self,conn,token,*,write=False):
+        p=self.cases._human(conn,token,write=write,content=True)
+        if p.role not in {'owner','admin'}:raise AccessDenied('operation_not_permitted')
+        return p
+
+    def _credential(self,token):
+        return CustomerProviders(self.vault).resolve(token,'openrouter')
+
+    def _credential_guard(self,conn,p,binding):
+        require_checked(conn,p,'openrouter',expected=binding)
+
+    def _validate_actions(self,decision):
+        if decision['requested_actions']:raise ProbeError('external_action_requested')
+
+    def _quote(self,token,model,config):
+        return self.budget.quote(token,'openrouter',model,digest(config),500000,3000000)
+
     def _configuration(self,model):
         return configuration(model)
 
@@ -74,7 +94,7 @@ class ModelWorker:
         config=self._admission(model)
         evidence_id=identifier(evidence_id)
         with connection(self.cases._dsn) as conn:
-            p=self.cases._admin(conn,token)
+            p=self._principal(conn,token)
             run,selected=self._scope(conn,p,run_id)
             expected={row['evidence_id']:row['digest'] for row in selected}
             if str(evidence_id) not in expected: raise AccessDenied('model_input_not_in_plan')
@@ -100,18 +120,18 @@ class ModelWorker:
         config,run,_,_,binding=self._input(token,run_id,evidence_id,model)
         job=self.budget.begin(token,run['case_id'],request_id)
         with connection(self.cases._dsn) as conn:
-            p=self.cases._admin(conn,token)
+            p=self._principal(conn,token)
             old=conn.execute('''SELECT quote_id FROM gabriel_identity.model_reservations
                 WHERE organization_id=%s AND investigation_id=%s AND request_id=%s''',
                 (p.organization_id,job['id'],identifier(request_id))).fetchone()
-        quote_id=old['quote_id'] if old else self.budget.quote(token,'openrouter',model,digest(config),500000,3000000)['id']
+        quote_id=old['quote_id'] if old else self._quote(token,model,config)['id']
         row=self.budget.reserve(token,job['id'],request_id,quote_id,binding,max_input_tokens=8000,max_output_tokens=768)
         return dict(reservation_id=str(row['id']),investigation_id=str(job['id']),reserved_microusd=row['reserved_microusd'],
                     production_admission=False,dispatch_performed=False)
 
     def dispatch(self,token,run_id,evidence_id,reservation_id):
         with connection(self.cases._dsn) as conn:
-            p=self.cases._admin(conn,token)
+            p=self._principal(conn,token)
             held=reservation(conn,p,reservation_id)
             if held['claim_id']: raise AccessDenied('model_worker_already_claimed_no_resend')
             quote=conn.execute('''SELECT * FROM gabriel_identity.model_price_quotes WHERE organization_id=%s AND id=%s''',
@@ -124,13 +144,13 @@ class ModelWorker:
                 or quote['input_microusd_per_million']!=500000
                 or quote['output_microusd_per_million']!=3000000):
             raise AccessDenied('model_worker_reservation_binding_mismatch')
-        credential,credential_binding=CustomerProviders(self.vault).resolve(token,'openrouter')
+        credential,credential_binding=self._credential(token)
         client=OpenRouterTransport(credential)
         model_routes.eligible(client.request('GET','/api/v1/endpoints/zdr'),quote['model'])
         budget_check(client.request('GET','/api/v1/key').get('data'))
         dispatch_credit(client.request('GET','/api/v1/credits'),held['reserved_microusd'])
         def guard(conn,p):
-            require_checked(conn,p,'openrouter',expected=credential_binding)
+            self._credential_guard(conn,p,credential_binding)
             job=investigation(conn,p,held['investigation_id'],active=True)
             self._scope(conn,p,run_id,job['case_id'])
             self._verify_sources(conn,p,identifier(evidence_id),prepared)
@@ -158,9 +178,9 @@ class ModelWorker:
                     generation_id=reply.get('id'),latency_ms=elapsed,cost_usd=float(money(usage['cost'])),
                     input_tokens=usage['prompt_tokens'],output_tokens=usage['completion_tokens'],decision=decision)
         validate_run(result,packet)
-        if decision['requested_actions']: raise ProbeError('external_action_requested')
+        self._validate_actions(decision)
         with connection(self.cases._dsn) as conn:
-            p=self.cases._admin(conn,token)
+            p=self._principal(conn,token)
             guard(conn,p)
         from gabriel.identity.model_answers import persist
         return persist(self,token,run,evidence_id,held,prepared,result,reply,guard)

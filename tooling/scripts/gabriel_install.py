@@ -124,12 +124,14 @@ class Installation:
         self.operator('revoke')
         self.compose('stop','identity-db')
 
-    def open(self,password):
+    def open(self,password,*,ai_egress=False):
+        if type(ai_egress) is not bool:raise ValueError('invalid_ai_egress_option')
+        if ai_egress:self.command.extend(['--file',str(REPO/'compose.gabriel-specialist-ai.yml')])
         self.start_db()
         self.compose('stop','local-entry','workbench')
         ticket=self.operator('open',dict(password=password,port=self.config['port']))
         self.compose('up','-d','--wait','--force-recreate','workbench','local-entry')
-        return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',**ticket)
+        return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',ai_egress=ai_egress,**ticket)
 
     def backup(self,destination):
         if destination.exists(): raise ValueError('new_backup_directory_required')
@@ -256,9 +258,11 @@ def main():
     parser.add_argument('--password-file')
     parser.add_argument('--backup')
     parser.add_argument('--keys-from')
+    parser.add_argument('--ai-egress',action='store_true',help='Allow the opened workbench to reach its fixed AI provider; requires qualified configuration and own key')
     args=parser.parse_args()
     os.umask(0o077)
     try:
+        if args.ai_egress and args.command!='open':raise ValueError('ai_egress_only_for_open')
         root=external(args.directory)
         if args.command=='prepare': result=prepare(root,args.port,args.image)
         else:
@@ -270,7 +274,7 @@ def main():
                     secret=password(args)
                     installation.start_db()
                     result=installation.operator('initialize',dict(organization=args.organization,username=args.username,password=secret))
-                elif args.command=='open': result=installation.open(password(args))
+                elif args.command=='open': result=installation.open(password(args),ai_egress=args.ai_egress)
                 elif args.command=='status':
                     raw=installation.compose('ps','--all','--format','json').decode().strip()
                     rows=json.loads(raw) if raw.startswith('[') else [json.loads(line) for line in raw.splitlines()]

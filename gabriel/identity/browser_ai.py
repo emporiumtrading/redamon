@@ -101,7 +101,7 @@ def account_completed(worker,human,reservation_id):
     """Count the full reserved ceiling as spent; this is never a billing attestation."""
     from gabriel.identity.model_budget import reservation
     with connection(worker.cases._dsn) as conn:
-        p=worker.cases._admin(conn,human)
+        p=worker._principal(conn,human)
         held=reservation(conn,p,reservation_id)
         receipt=conn.execute('''SELECT a.payload_digest FROM gabriel_identity.model_answer_receipts r
             JOIN gabriel_identity.model_answer_intents a USING(organization_id,reservation_id)

@@ -34,9 +34,9 @@ def boot(tenant,cases,tmp_path,monkeypatch,request):
     directory=tmp_path/'workbench'
     target='https://localhost:'+str(port)
     token=tenant.token
-    if getattr(request,'param','owner')=='viewer':
+    if getattr(request,'param','owner') in {'viewer','analyst'}:
         password=secrets.token_urlsafe(24)
-        cases.create_member(token,'workbench-viewer',password,'viewer')
+        cases.create_member(token,'workbench-viewer',password,getattr(request,'param'))
         token=cases.login(tenant.org,'workbench-viewer',password).token
     prepare_workbench(cases,token,target,directory)
     keys=tmp_path/'keys.json'
@@ -567,3 +567,17 @@ def test_operator_cli_prepares_exclusive_private_files(tenant,boot,tmp_path):
     assert (directory/'human.json').stat().st_mode&0o777==0o600
     assert subprocess.run(command,capture_output=True,timeout=10).returncode==1
     assert (directory/'claim.json').read_bytes()==original
+
+
+@pytest.mark.parametrize('boot',['analyst'],indirect=True)
+def test_analyst_has_personal_key_screen_and_agent_status_but_no_organization_key_access(tenant,case,server):
+    cookie,token,_=connect(server)
+    code,html,_=call(server,'/personal-providers',cookie=cookie)
+    assert code==200 and 'Personal OpenRouter API key' in html
+    assert 'type="password" name="api_key"' in html and 'No automatic fallback' in html
+    assert call(server,'/providers',cookie=cookie)[0]==403
+    code,html,_=call(server,'/cases/'+str(case['id'])+'/agents',cookie=cookie)
+    assert code==200 and 'qualification pending' in html
+    assert 'Organization key' not in html and 'My personal key' in html
+    assert call(server,'/personal-providers/revoke',dict(csrf='wrong'),cookie=cookie)[0]==403
+    assert call(server,'/personal-providers/revoke',dict(csrf=token),cookie=cookie)[0]==303

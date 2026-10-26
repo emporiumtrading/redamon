@@ -1,0 +1,29 @@
+name: Gabriel specialist agents and personal keys
+on:
+  pull_request:
+    paths: ['gabriel/identity/**', 'testing/gabriel_identity/test_specialist_agents*.py', 'testing/gabriel_identity/test_workbench_integration.py', '.github/workflows/gabriel-specialist-agents.yml']
+permissions:
+  contents: read
+jobs:
+  agents:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Container-only specialist, personal-key and HTTPS permission gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GABRIEL_IDENTITY_SECRET_DIR="$RUNNER_TEMP/agent-db"
+          export GABRIEL_PROVIDER_KEY_DIR="$RUNNER_TEMP/agent-provider"
+          export GABRIEL_EVIDENCE_KEY_DIR="$RUNNER_TEMP/agent-evidence"
+          python3 tooling/scripts/gabriel_identity_prepare.py "$GABRIEL_IDENTITY_SECRET_DIR"
+          python3 tooling/scripts/gabriel_provider_keys.py "$GABRIEL_PROVIDER_KEY_DIR"
+          python3 tooling/scripts/gabriel_evidence_keys.py "$GABRIEL_EVIDENCE_KEY_DIR"
+          compose=(docker compose -p gabriel-specialist-check -f compose.gabriel-identity.yml)
+          trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
+          "${compose[@]}" --profile test build identity-tests
+          "${compose[@]}" up -d --wait identity-db
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1

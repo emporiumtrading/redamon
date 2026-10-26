@@ -12,9 +12,7 @@ LABEL='Unreviewed generated model answer'
 
 
 def principal(worker,conn,token,*,write=False):
-    p=worker.cases._human(conn,token,write=write,content=True)
-    if p.role not in {'owner','admin'}: raise AccessDenied('operation_not_permitted')
-    return p
+    return worker._answer_principal(conn,token,write=write)
 
 
 def intent(worker,conn,p,reservation_id):
@@ -54,7 +52,7 @@ def verified(worker,conn,p,staged,row,*,ready=True):
     packet=dict(case_id='typed-assessment',input_sha256=staged['input_digest'],
                 observations=[dict(id=ref) for ref in manifest['lineage']])
     validate_run(result,packet)
-    if result['decision']['requested_actions']: raise AccessDenied('model_answer_action_denied')
+    worker._validate_actions(result['decision'])
     return raw,payload
 
 
