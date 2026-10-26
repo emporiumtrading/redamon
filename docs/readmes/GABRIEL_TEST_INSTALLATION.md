@@ -40,4 +40,19 @@ Backup stops the workbench and revokes its session before snapshotting PostgreSQ
 
 Restore requires a new prepared project with no existing containers or volumes, the identical source/image, matching original evidence/provider keyrings and verified backup files. It replaces only that new target's unused generated evidence/provider keys. It never overwrites an existing database or evidence volume. Database secrets and TLS remain new. Stored migrations are checked against the exact source; the owner is verified and a fresh login is required. Object archives reject traversal, links, unknown names, duplicate members and invalid sizes before publishing any objects. Current rehearsal limits are 128 MiB per backup input, 128 MiB expanded objects, 4,096 encrypted objects and the existing per-object bound. Larger installations need a streaming/scaled recovery implementation. A failed restore target remains isolated for inspection; do not promote it.
 
-Back up original keys separately before any host loss. Losing encryption keys makes corresponding evidence/vault contents unrecoverable. This is a same-source restore rehearsal, not automated upgrade, database downgrade, signed release rollback, measured RPO/RTO or disaster-recovery acceptance. All remain release gates, together with security scans, real-console integration, model qualification, load testing and human UAT.
+Back up original keys separately before any host loss. Losing encryption keys makes corresponding evidence/vault contents unrecoverable. This restore command remains a same-source rehearsal. The explicit rebuild workflow below supports a backed-up forward migration; database downgrade, signed release rollback, measured RPO/RTO and disaster-recovery acceptance remain separate. All remain release gates, together with security scans, real-console integration, model qualification, load testing and human UAT.
+
+## Rebuild an existing installation
+
+Use the updated source and the original installation directory. Do not run `prepare` or `initialize` over it.
+
+```bash
+python3 tooling/scripts/gabriel_install.py rebuild "$HOME/gabriel-private-test" --backup "$HOME/gabriel-before-ai-rebuild"
+python3 tooling/scripts/gabriel_install.py open "$HOME/gabriel-private-test"
+```
+
+The backup destination must be new. Rebuild builds and inspects the candidate image, checks its browser AI module/readiness, stops the interface and revokes the old session, takes a database/evidence backup, records the old and new image/source, atomically selects the new image, applies forward migrations, and verifies the original owner identity and evidence/provider key fingerprints. The Compose project, volumes and keyrings are retained. Opening afterward requires the existing owner password and a fresh claim.
+
+Failure leaves the interface stopped and retains the backup and rebuild intent for inspection. It does not attempt an automatic database downgrade or silently initialize a new account. Rebuild history is bounded to 32 records before operator review. Schema 27-to-28 upgrade, old-cookie rejection and retained encrypted evidence are exercised in generated x86/ARM Docker journeys; this does not establish native Mac execution.
+
+Rebuilding includes the AI application bridge, but does not qualify a model, enable provider egress in the private workbench or start a browser gateway. Read the [AI phase guide](GABRIEL_BROWSER_AI_DETECTION.md) before activation.
