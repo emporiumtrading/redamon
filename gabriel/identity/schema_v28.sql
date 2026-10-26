@@ -28,3 +28,10 @@ REVOKE ALL ON FUNCTION gabriel_identity.require_completed_model_ceiling() FROM P
 GRANT EXECUTE ON FUNCTION gabriel_identity.require_completed_model_ceiling() TO gabriel_identity_app;
 CREATE TRIGGER require_completed_model_ceiling BEFORE INSERT ON gabriel_identity.model_settlements
 FOR EACH ROW EXECUTE FUNCTION gabriel_identity.require_completed_model_ceiling();
+
+ALTER TABLE gabriel_identity.coordinator_runs DROP CONSTRAINT coordinator_plan_bounds;
+ALTER TABLE gabriel_identity.coordinator_runs ADD CONSTRAINT coordinator_plan_bounds CHECK (
+    (plan_version='local-coordinator-v1' AND input_evidence_id IS NULL AND max_steps BETWEEN 1 AND 2) OR
+    (plan_version='local-specialist-coordinator-v2' AND input_evidence_id IS NOT NULL AND max_steps=12) OR
+    (plan_version='browser-ai-coordinator-v1' AND input_evidence_id IS NOT NULL AND max_steps=1)
+);

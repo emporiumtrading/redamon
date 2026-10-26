@@ -160,3 +160,29 @@ def test_unknown_call_cannot_clear_its_slot_as_a_completed_upper_bound(tenant,ai
                 VALUES (%s,%s,%s,'completed_upper_bound',%s,%s)""",(tenant.org,row['id'],tenant.owner,amount,'0'*64))
     status=ai['fixture']['worker'].budget.status(tenant.token)
     assert status['usage']['held_slots']==1 and status['usage']['day_used']==6304
+
+
+def test_two_simultaneous_reviews_survive_other_captures_and_defer_without_sending(tenant,ai):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    observations=[capture(ai,tenant,sequence=n) for n in range(1,4)]
+    active=Event();release=Event()
+    def wait_for_release():
+        if len(ai['fixture']['calls'])>=2:active.set()
+        assert release.wait(20)
+    ai['fixture']['client'].callback=wait_for_release
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first=[pool.submit(dispatch,ai,row) for row in observations[:2]]
+        try:
+            assert active.wait(15)
+            deferred=dispatch(ai,observations[2])
+            assert deferred['state']=='deferred_budget_slot' and not deferred['dispatch_performed']
+            assert len(ai['fixture']['calls'])==2
+            ai['browser'].acquire(tenant.token,ai['browser'].get_browser_lease(tenant.token,ai['lease'].id)['case_id'],
+                uuid4(),'Generated unrelated case evidence','Generated concurrent addition',approved=True)
+        finally:release.set()
+        answers=[future.result(timeout=20) for future in first]
+    assert all(answer['model_used'] for answer in answers)
+    assert dispatch(ai,observations[2])['model_used']
+    assert len(ai['fixture']['calls'])==3
+    assert ai['fixture']['worker'].budget.status(tenant.token)['usage']['held_slots']==0

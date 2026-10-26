@@ -218,6 +218,7 @@ async function handle(message) {
         await request(session, "heartbeat", {context: wireContext(selected)});
         await current(selected);
         await capture(selected, session, revision, tour, intent, message.monitorTick === true);
+        if ((await storage.get("pending")).pending?.ai_waiting) break;
         if (discovery) {
           const values=await chrome.scripting.executeScript({target:{tabId:selected.tab_id,documentIds:[selected.document_id]},func:inspectConsole});
           if (values.length!==1 || values[0].documentId!==selected.document_id) throw new Error("Console changed during discovery.");
@@ -233,6 +234,12 @@ async function handle(message) {
           await persist({monitoring:{...latest,queue,cursor:(index+1)%queue.length,interface_title:survey.title,
             discovery_coverage:survey.coverage,identified_by:survey.identification}},revision);
         }
+      }
+      if ((await storage.get("pending")).pending?.ai_waiting) {
+        tour.state="waiting_for_ai_budget";
+        await persist({tour},revision);
+        return {tour,context:selected,extension_origin:"chrome-extension://"+chrome.runtime.id,
+          message:"AI review is queued. Section navigation is paused until capacity or reconciliation is available."};
       }
       tour.state = "complete";
       await persist({tour}, revision);
@@ -326,6 +333,32 @@ function publicMonitoring(value) {
     coverage: "partial", scheduling_gap: Boolean(enabled && Date.now()-last_tick>45000)};
 }
 
+
+async function aiReview(selected,session,revision,observationId) {
+  const {monitoring: schedule}=await storage.get("monitoring");
+  if (!schedule?.enabled || !schedule.ai_approved) throw new Error("AI sharing approval is unavailable.");
+  await current(selected);
+  await request(session,"heartbeat",{context:wireContext(selected)});
+  await persist({pending:{ai_in_flight:observationId},monitoring:{...schedule,last_tick:Date.now()}},revision);
+  const started=Date.now();
+  const ai=await request(session,"ai-review",{context:wireContext(selected),observation_id:observationId});
+  stillCurrent(revision);
+  if (Date.now()-started>40000) throw new Error("AI review exceeded its waiting interval. Inspect receipts; automatic resend is not permitted.");
+  await current(selected);
+  await request(session,"heartbeat",{context:wireContext(selected)});
+  const {monitoring: latest,tour}=await storage.get(["monitoring","tour"]);
+  if (tour?.sections) {
+    const section=tour.sections.find(row=>row.observation_id===observationId);
+    if (section) section.ai=ai;
+    tour.state=ai.state==="deferred_budget_slot" ? "waiting_for_ai_budget" : "complete";
+  }
+  await persist({monitoring:{...latest,ai,last_tick:Date.now(),
+    state:ai.state==="deferred_budget_slot" ? "waiting_for_ai_budget" : "reviewed"},...(tour ? {tour} : {})},revision);
+  if (ai.state==="deferred_budget_slot") await persist({pending:{ai_waiting:observationId}},revision);
+  else await storage.remove("pending");
+  return ai;
+}
+
 async function capture(selected, session, revision, tour, intent = null, deduplicate = false) {
     const structured = await chrome.scripting.executeScript({target: {tabId: selected.tab_id, documentIds: [selected.document_id]}, func: inspectEventSection, args: [selected.account_label]});
         if (structured.length !== 1 || structured[0].frameId !== 0 || structured[0].documentId !== selected.document_id || structured[0].result === undefined)
@@ -375,26 +408,12 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
           await persist({tour,monitoring:{...latest,candidate_count:reviewed.candidate_count,review_evidence_id:reviewed.review_evidence_id,learning:reviewed.learning}},revision);
         }
         if (deduplicate && session.ai_review_enabled) {
-          const {monitoring: schedule}=await storage.get("monitoring");
-          if (!schedule?.ai_approved) throw new Error("AI sharing approval is unavailable.");
-          await current(selected);
-          await request(session,"heartbeat",{context:wireContext(selected)});
-          await persist({monitoring:{...schedule,last_tick:Date.now()}},revision);
-          const started=Date.now();
-          const ai=await request(session,"ai-review",{context:wireContext(selected),observation_id:receipt.observation_id});
-          stillCurrent(revision);
-          if (Date.now()-started>40000) throw new Error("AI review exceeded the approved waiting interval. Inspect receipts; no automatic resend is permitted.");
-          await current(selected);
-          await request(session,"heartbeat",{context:wireContext(selected)});
-          tour.sections.at(-1).ai=ai;
-          const {monitoring: latest}=await storage.get("monitoring");
-          await persist({tour,monitoring:{...latest,ai,last_tick:Date.now()}},revision);
-        }
-        await storage.remove("pending");
+          tour.sections.at(-1).ai=await aiReview(selected,session,revision,receipt.observation_id);
+        } else await storage.remove("pending");
         if (deduplicate) {
           const {monitoring: latest} = await storage.get("monitoring");
           await persist({monitoring: {...latest, captures: latest.captures + 1, last_checked: Date.now(), last_capture: Date.now(),
-            state: "reviewed", digests: {...latest.digests, [selected.page_url]: hash}}}, revision);
+            state: latest.ai?.state === "deferred_budget_slot" ? "waiting_for_ai_budget" : "reviewed", digests: {...latest.digests, [selected.page_url]: hash}}}, revision);
         }
 
 }
@@ -407,6 +426,12 @@ async function tick() {
   try {
     if (!session || Date.parse(session.expires_at)<=Date.now()) throw new Error("Pairing expired. Fresh approval is required.");
     if (Date.now()-monitoring.last_tick>45000) throw new Error("Browser scheduling gap. Fresh pairing is required.");
+    if (pending?.ai_waiting && !navigation) {
+      busy=true;
+      try { await aiReview(selected,session,revision,pending.ai_waiting); }
+      finally { busy=false; }
+      return;
+    }
     if (pending || navigation) throw new Error("Unconfirmed capture or navigation. Inspect receipts before renewing.");
     await persist({monitoring: {...monitoring, last_tick: Date.now()}}, revision);
     if (["tour","discover"].includes(monitoring.mode)) {
@@ -419,7 +444,7 @@ async function tick() {
         await current(selected);
         const tour = {state: "running", sections: []};
         await capture(selected,session,revision,tour,null,true);
-        tour.state = "complete";
+        tour.state = (await storage.get("pending")).pending?.ai_waiting ? "waiting_for_ai_budget" : "complete";
         await persist({tour}, revision);
       } finally { busy = false; }
     }

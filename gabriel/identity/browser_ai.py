@@ -23,7 +23,7 @@ reports. Explain what additional evidence an analyst needs; no actions are allow
 
 def configuration(model):
     value=worker_configuration(model)
-    return dict(value,version=VERSION,prompt_digest=sha256(PROMPT.encode()).hexdigest(),projection_version=VERSION)
+    return dict(value,version=VERSION,prompt_digest=sha256(PROMPT.encode()).hexdigest(),projection_version=VERSION,orchestration_version=coordinator.BROWSER_PLAN)
 
 
 def require_model(model):
@@ -150,9 +150,14 @@ def process(service,vault,human,peer,context,observation_id,model):
         return dict(state='abstained_no_supported_signals',model_used=False,quality_qualified=False,incident_confirmed=False)
     holder=service.acquire(human,case_id,uuid5(observation_id,VERSION),canonical(dict(version=VERSION,prepared=prepared)).decode(),
         'Browser minimized AI input',approved=True,parent_id=parent_id,redaction_state='user_declared_redacted')
-    plan=service.begin_coordinator(human,case_id,request_id)
+    plan=service.begin_coordinator(human,case_id,request_id,input_evidence_id=holder['id'],_browser_model=True)
     if plan['completed_steps']<plan['max_steps']:service.complete_coordinator(human,plan['id'])
-    held=worker.reserve(human,plan['id'],holder['id'],request_id,model)
+    try:
+        held=worker.reserve(human,plan['id'],holder['id'],request_id,model)
+    except AccessDenied as error:
+        if str(error)!='model_concurrency_or_unknown_limit':raise
+        return dict(state='deferred_budget_slot',model_used=False,dispatch_performed=False,
+            quality_qualified=False,incident_confirmed=False)
     answer=worker.dispatch(human,plan['id'],holder['id'],held['reservation_id'])
     account_completed(worker,human,held['reservation_id'])
     return result(answer)
