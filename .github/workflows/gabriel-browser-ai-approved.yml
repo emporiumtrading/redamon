@@ -1,0 +1,51 @@
+name: Gabriel approved five-call browser AI trial
+on:
+  pull_request:
+    paths: ['testing/gabriel_browser_ai/approved_trial.py', 'testing/gabriel_browser_ai/test_approved_trial.py', '.github/workflows/gabriel-browser-ai-approved.yml']
+permissions:
+  contents: read
+jobs:
+  software:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: docker build --target production -f gabriel/identity/Dockerfile -t gabriel-approved-browser-ai .
+      - name: Isolated offline behavior gate and exact packet verification
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/trial:/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_browser_ai:/trial:ro" gabriel-approved-browser-ai /trial/test_approved_trial.py
+  live:
+    needs: software
+    if: github.event.action == 'opened' && github.run_attempt == '1' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/gabriel-approved-browser-ai-20261025'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: gabriel-live-openrouter-key
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Rebuild approved source without credentials
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-approved-browser-ai"
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-approved-browser-ai/source-sha.txt"
+          docker build --target production -f gabriel/identity/Dockerfile -t gabriel-approved-browser-ai .
+          docker image inspect gabriel-approved-browser-ai --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-approved-browser-ai/image-id.txt"
+      - name: One approved batch, maximum five requests and $0.031520, no retry
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          status=0
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --cpus 1 -e OPENROUTER_API_KEY -e PYTHONPATH=/trial:/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_browser_ai:/trial:ro" gabriel-approved-browser-ai /trial/approved_trial.py > "$RUNNER_TEMP/gabriel-approved-browser-ai/result.jsonl" || status=$?
+          cat "$RUNNER_TEMP/gabriel-approved-browser-ai/result.jsonl"
+          exit "$status"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-approved-browser-ai-summary
+          path: ${{ runner.temp }}/gabriel-approved-browser-ai
+          if-no-files-found: error
+          retention-days: 14
