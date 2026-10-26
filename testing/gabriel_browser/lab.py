@@ -365,6 +365,9 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
                     return dict(state='deferred_budget_slot',model_used=False,dispatch_performed=False,
                         quality_qualified=False,incident_confirmed=False)
             return super().dispatch(operation,body,authorization)
+    class TLSHandler(QuietHandler):
+        def get_environ(self):
+            environ=super().get_environ();environ['HTTPS']='on';return environ
     server=None;tab=None
     try:
         model_routes.PRODUCTION_CONFIGURATIONS=frozenset({browser_ai.digest(browser_ai.configuration(model))})
@@ -372,6 +375,7 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
         provider_onboarding.OpenRouterTransport=Transport
         ProviderKeyRing.from_file=classmethod(lambda cls,path:ring)
         navigation=BrowserNavigationService(service._dsn,service.store)
+        ModelBudgetService(service._dsn).configure(human,enabled=True)
         provider_onboarding.CustomerProviders(ProviderVault(service._dsn,ring)).configure(human,'openrouter',secret)
         CONSOLE_MODES['/unfamiliar-dashboard']='agnostic'
         for old in cdp.targets():
@@ -392,7 +396,7 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
         config=read_document(directory/'gateway.json',private=True)
         peer=read_document(directory/'peer.json',private=True)['token']
         app=Gateway(navigation,human,peer,config)
-        server=make_server('127.0.0.1',port,app,server_class=ConsoleServer,handler_class=QuietHandler)
+        server=make_server('127.0.0.1',port,app,server_class=ConsoleServer,handler_class=TLSHandler)
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(tls['server.pem'],tls['server.key'])
         server.socket=context.wrap_socket(server.socket,server_side=True)
         Thread(target=server.serve_forever,daemon=True).start()
@@ -405,13 +409,14 @@ def ai_journey(cdp,family,service,human,tls,root,console_origin,extension_origin
         cdp.evaluate(popup,'document.getElementById("monitor-mode").value="page";document.getElementById("monitor-approved").checked=true;document.getElementById("ai-approved").checked=true')
         click(cdp,popup,'monitor-start')
         def state():return cdp.evaluate(popup,'chrome.runtime.sendMessage({operation:"state"}).then(x=>x.result)')
-        wait_for(lambda:state().get('monitoring',{}).get('ai',{}).get('state')=='deferred_budget_slot')
+        wait_for(lambda:((state().get('monitoring') or {}).get('ai') or {}).get('state')=='deferred_budget_slot')
         assert not posts and len(navigation.list_browser_observations(human,enrolled['lease_id'])['observations'])==1
+        mark(family+':browser-ai-alarm-resume')
         for target in cdp.targets():
             if target.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':target['targetId']})
         wait_for(lambda:len(posts)==1,50)
         popup=native_popup(cdp,tab,extension_origin)
-        snapshot=wait_for(lambda:(lambda s:s if s.get('monitoring',{}).get('ai',{}).get('model_used') else None)(state()))
+        snapshot=wait_for(lambda:(lambda s:s if ((s.get('monitoring') or {}).get('ai') or {}).get('model_used') else None)(state()))
         result=snapshot['monitoring']['ai']
         assert result['disposition']=='abstain' and not result['quality_qualified'] and not result['incident_confirmed']
         assert snapshot['monitoring']['captures']==1 and len(navigation.list_browser_observations(human,enrolled['lease_id'])['observations'])==1
@@ -944,6 +949,7 @@ def main():
         frames=[dict(file=Path(frame.filename).name,line=frame.lineno,function=frame.name) for frame in traceback.extract_tb(error.__traceback__)]
         (output/'failure.json').write_text(json.dumps({'status':'FAIL','stage':stage,'error_type':type(error).__name__,'frames':frames}))
         print('FAIL: browser lab at '+stage+'; '+type(error).__name__)
+        print('Failure locations: '+json.dumps(frames),flush=True)
         return 1
     finally:
         manager.terminate(); manager.wait(timeout=5)
