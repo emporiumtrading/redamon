@@ -240,6 +240,8 @@ def remove_v27(conn):
 
 def remove_v28(conn):
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=28').fetchone():
+        conn.execute('DROP TRIGGER require_completed_model_ceiling ON gabriel_identity.model_settlements')
+        conn.execute('DROP FUNCTION gabriel_identity.require_completed_model_ceiling()')
         conn.execute('ALTER TABLE gabriel_identity.model_settlements DROP CONSTRAINT model_settlements_outcome_check')
         conn.execute('ALTER TABLE gabriel_identity.model_settlements DROP CONSTRAINT model_settlements_check')
         conn.execute("ALTER TABLE gabriel_identity.model_settlements ADD CONSTRAINT model_settlements_outcome_check CHECK (outcome IN ('operator_reported','not_sent'))")

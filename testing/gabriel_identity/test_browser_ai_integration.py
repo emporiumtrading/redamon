@@ -4,6 +4,7 @@ import json
 from uuid import uuid4
 
 import pytest
+import psycopg
 
 from gabriel.identity import browser_ai,model_routes
 from gabriel.identity.browser_gateway import BrowserGateway,prepare
@@ -144,3 +145,18 @@ def test_preparation_rejects_unqualified_model_without_creating_an_installation(
         prepare(service,tenant.token,str(uuid4()),case['id'],context,'https://localhost:8443','chrome-extension://'+'a'*32,
             target,share_observations=True,monitor_seconds=300,ai_model=MODEL)
     assert not target.exists()
+
+
+@pytest.mark.parametrize('amount',[0,6304])
+def test_unknown_call_cannot_clear_its_slot_as_a_completed_upper_bound(tenant,ai,amount):
+    observed=capture(ai,tenant);ai['fixture']['client'].unknown=True
+    with pytest.raises(ProbeError):dispatch(ai,observed)
+    with owner_connection(tenant.db) as conn:
+        row=conn.execute('SELECT id FROM gabriel_identity.model_reservations WHERE organization_id=%s',(tenant.org,)).fetchone()
+    with psycopg.connect(tenant.db.app) as conn:
+        with pytest.raises(psycopg.errors.CheckViolation):
+            conn.execute("""INSERT INTO gabriel_identity.model_settlements
+                (organization_id,reservation_id,attested_by,outcome,actual_microusd,receipt_digest)
+                VALUES (%s,%s,%s,'completed_upper_bound',%s,%s)""",(tenant.org,row['id'],tenant.owner,amount,'0'*64))
+    status=ai['fixture']['worker'].budget.status(tenant.token)
+    assert status['usage']['held_slots']==1 and status['usage']['day_used']==6304
