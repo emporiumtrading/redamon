@@ -112,8 +112,9 @@ def _secret(value):
 
 
 def _aad(row, key_id):
-    return json.dumps([PURPOSE,str(row['organization_id']),str(row['id']),row['provider'],
-                       row['revision'],key_id], separators=(',',':')).encode('utf-8')
+    binding=[PURPOSE,str(row['organization_id']),str(row['id']),row['provider'],row['revision'],key_id]
+    if 'user_id' in row:binding=['personal-provider-v1',str(row['user_id'])]+binding
+    return json.dumps(binding,separators=(',',':')).encode('utf-8')
 
 
 class ProviderVault(IdentityService):

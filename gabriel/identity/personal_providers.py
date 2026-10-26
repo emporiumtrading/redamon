@@ -32,6 +32,7 @@ class PersonalProviders:
                 WHERE organization_id=%s AND user_id=%s AND provider=%s FOR UPDATE''',
                 (p.organization_id,p.user_id,provider)).fetchone()
             row=dict(row) if row else dict(organization_id=p.organization_id,id=uuid4(),provider=provider,revision=0)
+            row['user_id']=p.user_id
             row['revision']+=1
             kid,nonce,cipher=self.vault._encrypt(conn,row,value)
             conn.execute('''INSERT INTO gabriel_identity.personal_provider_secrets
