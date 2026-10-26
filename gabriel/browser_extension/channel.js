@@ -48,7 +48,7 @@ async function request(session, operation, body) {
   const controller = new AbortController();
   // Revocation must survive concurrent Stop/Pause events that cancel ordinary work.
   if (operation !== "disconnect") inflight.add(controller);
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), operation === "ai-review" ? 40000 : 15000);
   try {
     const response = await fetch(session.endpoint + "/v1/browser/" + operation, {method: "POST", redirect: "error", credentials: "omit",
       cache: "no-store", referrerPolicy: "no-referrer", signal: controller.signal,
@@ -57,7 +57,7 @@ async function request(session, operation, body) {
     if (raw.length > 1500000) throw new Error("Gateway response exceeded its limit.");
     const value = JSON.parse(raw);
     if (!response.ok || value.status !== "ok") throw new Error(operation === "observe" ? "Capture outcome is unconfirmed. Inspect receipts before retrying." :
-      ["events-review", "specialists-review", "text-review"].includes(operation) ? "Local review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
+      ["events-review", "specialists-review", "text-review", "ai-review"].includes(operation) ? "Review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
     return value.result;
   } finally { clearTimeout(timer); inflight.delete(controller); }
 }
@@ -377,11 +377,18 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
         if (deduplicate && session.ai_review_enabled) {
           const {monitoring: schedule}=await storage.get("monitoring");
           if (!schedule?.ai_approved) throw new Error("AI sharing approval is unavailable.");
+          await current(selected);
+          await request(session,"heartbeat",{context:wireContext(selected)});
+          await persist({monitoring:{...schedule,last_tick:Date.now()}},revision);
+          const started=Date.now();
           const ai=await request(session,"ai-review",{context:wireContext(selected),observation_id:receipt.observation_id});
           stillCurrent(revision);
+          if (Date.now()-started>40000) throw new Error("AI review exceeded the approved waiting interval. Inspect receipts; no automatic resend is permitted.");
+          await current(selected);
+          await request(session,"heartbeat",{context:wireContext(selected)});
           tour.sections.at(-1).ai=ai;
           const {monitoring: latest}=await storage.get("monitoring");
-          await persist({tour,monitoring:{...latest,ai}},revision);
+          await persist({tour,monitoring:{...latest,ai,last_tick:Date.now()}},revision);
         }
         await storage.remove("pending");
         if (deduplicate) {
