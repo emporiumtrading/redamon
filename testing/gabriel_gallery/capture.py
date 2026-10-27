@@ -161,7 +161,7 @@ def main():
                 cdp.evaluate(session,'window.showView('+json.dumps(state)+');true')
                 capture('preview-'+state,title,kind='illustrative_design_not_implemented')
             manifest=dict(source_sha=os.environ['GABRIEL_GALLERY_SOURCE'],images=images,synthetic_data=True,
-                model_calls=0,production_admission=False,hermes_integrated=False,
+                model_calls=0,production_admission=False,hermes_integrated=False,hermes_requirement='required_integration_in_progress',
                 environment='Isolated Chromium screenshot lab, sandbox disabled inside non-root private Docker container',
                 actual_screens='Rendered current workbench against ephemeral PostgreSQL and actual local parser service',
                 design_previews='Clearly labeled static workflow concepts; external-response controls are disabled')
