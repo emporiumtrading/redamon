@@ -37,6 +37,7 @@ def _active(conn,p,user):
 
 
 def _status(service,conn,p,row,epoch,now):
+    if service._case(conn,p,row['case_id'])['purpose']=='performance_test':return 'performance_test_excluded'
     if row['epoch']!=epoch: return 'reset'
     if row['forgotten']: return 'forgotten'
     if row['has_correction']: return 'superseded'
@@ -85,6 +86,7 @@ def propose(service,token,case_id,evidence_id,request_id,kind,scope,topic,ttl_se
         p=service._human(conn,token,write=True)
         _scope(p,scope)
         case=service._case(conn,p,case_id,open_only=True)
+        if case['purpose']=='performance_test':raise AccessDenied('performance_test_memory_excluded')
         replay=conn.execute('SELECT id FROM gabriel_identity.memory_records WHERE organization_id=%s AND case_id=%s AND request_id=%s',
             (p.organization_id,case['id'],request_id)).fetchone()
         epoch=_epoch(conn,p)
@@ -148,6 +150,8 @@ def list_memory(service,token,case_id):
     with connection(service._dsn) as conn:
         p=service._human(conn,token)
         case=service._case(conn,p,case_id)
+        if case['purpose']=='performance_test':
+            return dict(records=[],truncated=False,limit=128,current_epoch=_epoch(conn,p),body_included=False,learning_disabled=True)
         ids=conn.execute('''SELECT id FROM gabriel_identity.memory_records WHERE organization_id=%s
             AND (scope='organization' OR case_id=%s) ORDER BY created_at DESC,id DESC LIMIT 129''',(p.organization_id,case['id'])).fetchall()
         epoch,now=_epoch(conn,p),conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
@@ -163,6 +167,9 @@ def retrieve(service,token,case_id):
     with connection(service._dsn) as conn:
         p=service._human(conn,token,content=True)
         case=service._case(conn,p,case_id)
+        if case['purpose']=='performance_test':
+            _audit(conn,'memory.performance_test_excluded',p,case['id'])
+            return []
         epoch=_epoch(conn,p)
         rows=conn.execute('''SELECT id FROM gabriel_identity.memory_records WHERE organization_id=%s AND epoch=%s
             AND (scope='organization' OR case_id=%s) ORDER BY created_at,id LIMIT 129''',(p.organization_id,epoch,case['id'])).fetchall()

@@ -1,0 +1,37 @@
+name: Gabriel performance-test learning isolation
+on:
+  pull_request:
+    paths: ['gabriel/identity/**', 'testing/gabriel_identity/**', '.github/workflows/gabriel-performance-cases.yml']
+permissions:
+  contents: read
+concurrency:
+  group: gabriel-performance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  isolation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Actual PostgreSQL, encrypted evidence, browser review and HTTPS learning isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GABRIEL_IDENTITY_SECRET_DIR="$RUNNER_TEMP/performance-db"
+          export GABRIEL_PROVIDER_KEY_DIR="$RUNNER_TEMP/performance-provider"
+          export GABRIEL_EVIDENCE_KEY_DIR="$RUNNER_TEMP/performance-evidence"
+          python3 tooling/scripts/gabriel_identity_prepare.py "$GABRIEL_IDENTITY_SECRET_DIR"
+          python3 tooling/scripts/gabriel_provider_keys.py "$GABRIEL_PROVIDER_KEY_DIR"
+          python3 tooling/scripts/gabriel_evidence_keys.py "$GABRIEL_EVIDENCE_KEY_DIR"
+          compose=(docker compose -p gabriel-performance-check -f compose.gabriel-identity.yml)
+          trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
+          "${compose[@]}" --profile test build identity-tests
+          "${compose[@]}" up -d --wait identity-db
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_performance_cases_integration.py
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py testing/gabriel_identity/test_memory_integration.py testing/gabriel_identity/test_browser_monitoring_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1

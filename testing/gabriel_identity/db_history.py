@@ -263,7 +263,18 @@ def remove_v29(conn):
 
 
 def remove_v30(conn):
+    remove_v31(conn)
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=30').fetchone():
         conn.execute('ALTER TABLE gabriel_identity.specialist_agent_jobs DROP COLUMN supervisor_run_id')
         conn.execute('DROP TABLE gabriel_identity.hermes_runs')
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=30')
+
+
+def remove_v31(conn):
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=31').fetchone():
+        conn.execute('DROP TRIGGER require_memory_case_purpose ON gabriel_identity.memory_records')
+        conn.execute('DROP FUNCTION gabriel_identity.require_memory_case_purpose()')
+        conn.execute('DROP TRIGGER require_case_purpose ON gabriel_identity.cases')
+        conn.execute('DROP FUNCTION gabriel_identity.require_case_purpose()')
+        conn.execute('ALTER TABLE gabriel_identity.cases DROP COLUMN purpose')
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=31')

@@ -96,6 +96,7 @@ def main():
         'evidence-key-activate','evidence-rewrap-prepare','evidence-rewrap-execute','evidence-rewrap-reconcile','evidence-rewrap-get','evidence-key-retirement-check'))
     parser.add_argument('--token-file')
     parser.add_argument('--title')
+    parser.add_argument('--case-purpose',choices=('investigation','performance_test'),default='investigation')
     parser.add_argument('--case-id')
     parser.add_argument('--task-id')
     parser.add_argument('--evidence-id')
@@ -225,7 +226,7 @@ def main():
         elif args.command=='action-execute':
             result = service.execute(token,args.approval_id,checkpoint_digest=args.checkpoint_digest)
         elif args.command=='create':
-            result = service.create_case(token,args.title)
+            result = service.create_case(token,args.title,purpose=args.case_purpose)
         elif args.command=='list':
             result = service.list_cases(token)
         elif args.command=='get':

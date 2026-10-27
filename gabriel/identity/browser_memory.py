@@ -2,7 +2,7 @@
 from uuid import uuid5
 
 from gabriel.identity.evidence_store import canonical
-from gabriel.identity.service import AccessDenied
+from gabriel.identity.service import AccessDenied,connection
 from gabriel.identity.specialist_contracts import digest
 
 VERSION='browser-reviewed-learning-v1'
@@ -10,6 +10,12 @@ VERSION='browser-reviewed-learning-v1'
 
 def integrate(service,human,observation_id,value,review_id):
     case_id=value['case_id']
+    with connection(service._dsn) as conn:
+        p=service._human(conn,human,content=True)
+        if service._case(conn,p,case_id)['purpose']=='performance_test':
+            return dict(version=VERSION,proposal_id=None,proposal_state='performance_test_excluded',
+                reviewed_reference_count=0,omitted_references=0,context_evidence_id=None,
+                automatic_approval=False,model_training_performed=False,learning_disabled=True)
     references=service.retrieve_memory(human,case_id)
     selected=[dict(memory_id=item.metadata['id'],evidence_id=item.metadata['evidence_id'],
         source_digest=item.metadata['source_digest'],topic=item.metadata['topic'],

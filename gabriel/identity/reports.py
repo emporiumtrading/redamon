@@ -69,7 +69,7 @@ def case_report(service,token,case_id):
             raise AccessDenied('case_report_limit')
         snapshot = dict(schema_version=1,purpose='case-metadata-report-v1',report_id=str(uuid4()),
             organization_id=str(principal.organization_id),generated_at=iso(conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']),
-            case=dict(id=str(case['id']),title=case['title'],state=case['state'],created_at=iso(case['created_at'])),
+            case=dict(id=str(case['id']),title=case['title'],state=case['state'],purpose=case.get('purpose','investigation'),created_at=iso(case['created_at'])),
             evidence=artifacts,browser_observations=observations,task_ids=[str(row['task_id']) for row in tasks],
             timeline=sorted(entries,key=lambda event:(event['time'],event['id'])),
             identical_artifacts=[dict(digest=digest,byte_length=length,evidence_ids=ids,
