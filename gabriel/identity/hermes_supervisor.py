@@ -29,7 +29,7 @@ def prompt(stage):
         'Preserve missing context, alternative explanations, clock uncertainty and overlapping counts. '
         'The analyst update belongs in evidence-linked claims, uncertainty and reported_gaps. '
         'No external actions, credentials, navigation or remediation are authorized. '
-        'Agent agreement is not independent corroboration. Specialist progress states and unreviewed model assessments do not establish findings. Report them as model assessments, never as independent source corroboration. '
+        'Historical-reference claim counts describe prior model work, not source facts; do not infer the contents of omitted historical references. Agent agreement is not independent corroboration. Specialist progress states and unreviewed model assessments do not establish findings. Report them as model assessments, never as independent source corroboration. '
         +('For this planning turn only, requested_actions may contain up to four distinct relevant specialist role names from eligible_roles. '
           'This is the only exception to the empty-actions rule. Select only useful roles and prioritize urgent exposure review. '
           'The whole investigation has at most six paid calls including your planning/reporting and all specialist reasoning rounds. '
@@ -293,14 +293,19 @@ def assessment(service,token,result,document):
     decision=answer['result']['decision']
     aliases={f['id']:'o'+str(i+1) for i,f in enumerate(document['facts'])}
     lineage=answer['local_manifest']['lineage']
-    refs=set()
+    refs=set();historical=0
     for claim in decision['claims']:
         for ref in claim['references']:
             original=lineage[ref]['record_id']
+            if lineage[ref].get('historical_reviewed_memory'):
+                historical+=1
+                continue
             if original not in aliases:raise AccessDenied('hermes_specialist_reference_mismatch')
             refs.add(aliases[original])
-    return dict(disposition=decision['disposition'],references=sorted(refs),
+    value=dict(disposition=decision['disposition'],references=sorted(refs),
         provenance='unreviewed_model_assessment',independent_corroboration=False)
+    if historical:value['historical_reference_claims_not_projected']=historical
+    return value
 
 
 def resume(service,vault,token,run_id):

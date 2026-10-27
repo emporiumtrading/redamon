@@ -42,7 +42,7 @@ COPY gabriel/identity/coordinator.py gabriel/identity/schema_v17.sql gabriel/ide
 COPY gabriel/identity/model_budget.py gabriel/identity/budget_cli.py gabriel/identity/schema_v16.sql /app/gabriel/identity/
 RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for p in pathlib.Path('/app/gabriel').rglob('*.py')]"
 COPY gabriel/toolbox/ /app/gabriel/toolbox/
-COPY gabriel/identity/investigation_tools.py /app/gabriel/identity/
+COPY gabriel/identity/investigation_tools.py gabriel/identity/reviewed_memory.py /app/gabriel/identity/
 COPY gabriel/identity/investigation_skills/ /app/gabriel/identity/investigation_skills/
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]

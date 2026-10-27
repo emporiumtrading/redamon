@@ -89,8 +89,16 @@ class ModelWorker:
 
     def _verify_sources(self,conn,p,evidence_id,prepared):
         ids={evidence_id}|{identifier(ref['evidence_id']) for ref in prepared['local_manifest']['lineage'].values()}
+        expected={}
+        for ref in prepared['local_manifest']['lineage'].values():
+            eid=identifier(ref['evidence_id'])
+            if eid in expected and expected[eid]!=ref['evidence_digest']:
+                raise AccessDenied('model_source_digest_mismatch')
+            expected[eid]=ref['evidence_digest']
         for source_id in sorted(ids,key=str):
             source=self.cases._evidence(conn,p,source_id)
+            if source_id in expected and source['digest']!=expected[source_id]:
+                raise AccessDenied('model_source_digest_mismatch')
             derived=conn.execute('''SELECT 1 FROM gabriel_identity.model_answer_intents
                 WHERE organization_id=%s AND ingestion_id=%s''',(p.organization_id,source['ingestion_id'])).fetchone()
             if derived or source['source_kind']=='model_generated_text':

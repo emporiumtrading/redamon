@@ -14,7 +14,7 @@ from gabriel.identity.specialist_analysis import ROLE_TYPES,analyze
 from gabriel.identity.specialist_analysis_runs import verified_input
 from gabriel.identity.specialist_contracts import ROLES,role_name
 
-VERSION='specialist-agent-v3'
+VERSION='specialist-agent-v4'
 MAX_ROUNDS=3
 DEFAULT_MODEL='openai/gpt-oss-120b'
 MISSIONS={
@@ -37,16 +37,14 @@ from gabriel.identity.investigation_tools import TOOLS,instructions,manifest,VER
 
 def prompt(role):
     role_name(role)
-    return PROMPT_V2+('\nYou are Gabriel specialist '+role+'. Your mission: '+MISSIONS[role]+
-        '\nThe input contains typed source assertions, not independently authenticated truth. Entity aliases preserve only within-packet grouping. '+
-        'Counts may overlap; repeated facts and model agreement are not independent corroboration. '+
-        'If a scoped local read tool would help, requested_actions may contain exactly one of '+', '.join(TOOLS[role])+'. '+
-        'Those are the only permitted exception to the empty requested_actions rule above. They cannot perform external actions. '+
-        'verify_sources checks ciphertext/custody; review_rules returns local role-rule observations; inspect_timeline summarizes supplied times; '+
-        'review_memory checks reviewed local memory availability without exporting its contents. '+
-        'Choose a final evidence-linked decision with requested_actions=[] when ready. Maximum three model rounds; '+
-        'never repeat a tool already present in tool_results. Missing context must remain explicit; never force an escalation. '+
-        '\nUse these packaged skills to select and interpret tools:\n'+instructions(role))
+    return PROMPT_V2+('\nGabriel role: '+role+'. Mission: '+MISSIONS[role]+
+        '\nTyped assertions and packet-scoped aliases are unverified. Counts may overlap; repetition and model agreement are not corroboration. '+
+        'Tool use is the only empty-actions exception: requested_actions may contain one of '+', '.join(TOOLS[role])+'. '+
+        'Tools have no external effects. Use current o references for current assertions and h references only for explicitly historical assertions. '+
+        'History is not current authorization, source truth or independent corroboration. Performance-test memory is disabled. '+
+        'At most three model rounds. Never repeat a completed tool. Finish with requested_actions=[]; preserve gaps and alternatives. '+
+        '\nUse these packaged skills:\n'+instructions(role))
+
 
 
 def configuration(role,model=DEFAULT_MODEL):
@@ -74,10 +72,16 @@ def project(document,role,job_id,tool_results):
         observations.append(dict(id=ref,type=fact['type'],event_time=fact['event_time'],
             entity=entities.get(fact['entity_id']),data=fact['data']))
         lineage[ref]=dict(record_id=fact['id'],evidence_id=fact['evidence_id'],evidence_digest=fact['evidence_digest'])
-    packet=dict(role=role,as_of=document['as_of'],observations=observations,tool_results=tool_results,
+    wire_tools=[];memory_context=[]
+    for tool_result in tool_results:
+        wire_tools.append(dict(tool=tool_result['tool'],result=tool_result['result']))
+        if tool_result['tool']=='review_memory':
+            context=tool_result['_reviewed_memory']
+            lineage.update(context['lineage']);memory_context.append(context)
+    packet=dict(role=role,as_of=document['as_of'],observations=observations,tool_results=wire_tools,
         source_authenticity='unverified',coverage='partial',corroboration='not_established',external_actions_authorized=False)
     if len(canonical(packet))>4096:raise AccessDenied('specialist_input_requires_narrower_scope')
-    return dict(packet=packet,local_manifest=dict(job_id=str(job_id),lineage=lineage,identity_map={}))
+    return dict(packet=packet,local_manifest=dict(job_id=str(job_id),lineage=lineage,identity_map={},reviewed_memory=memory_context))
 
 
 def job(service,conn,p,job_id,*,active=True):
@@ -138,6 +142,12 @@ class SpecialistWorker(ModelWorker):
         if current.get('supervisor_run_id'):
             from gabriel.identity.hermes_supervisor import active
             active(self.cases,conn,p,current['supervisor_run_id'],self._current_token)
+        if any(t['tool']=='review_memory' for t in self.tool_results):
+            from gabriel.identity.reviewed_memory import verify
+            case=self.cases._case(conn,p,current['case_id'],open_only=True)
+            _,document,_=verified_input(self.cases,conn,p,case,current['input_evidence_id'])
+            for result in self.tool_results:
+                if result['tool']=='review_memory':verify(self.cases,conn,p,case,document,self.role,result)
         return super()._scope(conn,p,run_id,current['case_id'],_exclude_ingestion=_exclude_ingestion)
 
     def _verify_sources(self,conn,p,evidence_id,prepared):

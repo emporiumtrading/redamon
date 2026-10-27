@@ -31,13 +31,12 @@ EXTRA={
     'response_remediation':('assess_exposure','correlate_events'),
     'recovery_learning':('correlate_events',),
 }
-TOOLS={r:('verify_sources','review_rules','review_memory' if r=='recovery_learning' else 'inspect_timeline',
-          'inspect_toolkit')+EXTRA[r] for r in ROLES}
+TOOLS={r:('verify_sources','review_rules','review_memory')+(() if r=='recovery_learning' else ('inspect_timeline',))+('inspect_toolkit',)+EXTRA[r] for r in ROLES}
 CATALOG={
     'verify_sources':('Gabriel','MIT','Check stored evidence integrity; this does not authenticate its origin.'),
     'review_rules':('Gabriel','MIT','Apply role-specific rules when supplied facts need prioritization.'),
     'inspect_timeline':('Gabriel','MIT','Inspect supplied event times; never assume clocks are verified.'),
-    'review_memory':('Gabriel','MIT','Check approved local memory availability; contents stay local.'),
+    'review_memory':('Gabriel','MIT','Compare approved typed historical assertions; free text and performance-test memory stay excluded.'),
     'inspect_toolkit':('Gabriel','MIT','Check installed tool versions and skills when a capability is missing.'),
     'correlate_events':('Gabriel','MIT','Group supplied facts by entity and outcome; overlapping counts are not unique events.'),
     'assess_exposure':('Gabriel','MIT','Prioritize reachable unmitigated high/critical exposures independently of exploitation.'),
@@ -54,7 +53,7 @@ def manifest(role):
         input='job_bound_local_sources_no_model_arguments',version=VERSION,
         purpose=CATALOG[n][2],when_to_use=CATALOG[n][2],args_format='requested_actions=[tool_name]; runtime supplies job-bound evidence; no arbitrary arguments',
         description=(SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip(),
-        implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py')])) for n in TOOLS[role]]
+        implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'))])) for n in TOOLS[role]]
 
 
 def instructions(role):
@@ -177,13 +176,24 @@ def execute(service,token,case_id,input_evidence_id,role,name,*,job_id=None):
                 outputs.append(dict(remote(name,data),references=references))
             result=dict(artifacts=outputs,coverage='selected_sources_only')
         else:result=readiness
-    elif name=='review_memory':result=dict(reviewed_local_references=len(service.retrieve_memory(token,case_id)),contents_exported=False)
+    elif name=='review_memory':
+        from gabriel.identity.reviewed_memory import build
+        with connection(service._dsn) as conn:
+            p,_,current,_=scope(conn)
+            memory_context=build(service,conn,p,service._case(conn,p,case_id),current,role)
+        result=memory_context['result']
     else:result=native(name,document,role,len(refs))
     with connection(service._dsn) as conn:
         p,original,current,_=scope(conn)
         if digest(current)!=binding:raise AccessDenied('tool_source_changed')
+        if name=='review_memory':
+            from gabriel.identity.reviewed_memory import verify
+            verify(service,conn,p,service._case(conn,p,case_id),current,role,
+                dict(result=result,_reviewed_memory=dict(records=memory_context['records'],lineage=memory_context['lineage'])))
         _audit(conn,'specialist_tool.completed',p,original['id'])
-    return dict(tool=name,result=result)
+    value=dict(tool=name,result=result)
+    if name=='review_memory':value['_reviewed_memory']=dict(records=memory_context['records'],lineage=memory_context['lineage'])
+    return value
 
 
 def inspect(service,token,case_id,input_evidence_id,role,name,request_id):
