@@ -11,7 +11,7 @@ from runtime import VERSION,UPSTREAM
 
 
 def fingerprint():
-    return sha256(b''.join((Path('/opt/gabriel-hermes')/name).read_bytes() for name in ('runtime.py','server.py','prepare_runtime.py','Dockerfile'))).hexdigest()
+    return sha256(b''.join((Path('/opt/gabriel-hermes')/name).read_bytes() for name in ('runtime.py','server.py','prepare_runtime.py','Dockerfile','requirements.lock'))).hexdigest()
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -38,6 +38,7 @@ while pending:
 if 'brotlicffi' in selected:selected['brotlicffi']='1.2.1.0'
 OUT.mkdir()
 (OUT/'requirements.lock').write_text(''.join(name+'=='+version+'\n' for name,version in sorted(selected.items())))
+assert (OUT/'requirements.lock').read_bytes()==Path('/expected-requirements.lock').read_bytes(), 'upstream_dependency_profile_changed'
 source=OUT/'hermes';source.mkdir()
 skip={'.venv','venv','.git','node_modules','__pycache__','pm-runtime','tests','docs','.hermes'}
 allowed={'.py','.json','.toml','.yaml','.yml','.txt','.md','.j2'}

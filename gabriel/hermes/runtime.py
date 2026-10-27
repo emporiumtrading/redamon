@@ -41,6 +41,10 @@ def execute(packet):
     import httpx
     from openai import OpenAI
     from run_agent import AIAgent
+    import agent.conversation_loop as native_loop
+    def fail_without_retry(agent,api_error):
+        raise BoundaryViolation('hermes_replay_api_error') from api_error
+    native_loop.handle_api_error=fail_without_retry
     calls=[]
     NATIVE_REQUESTS=calls
     def handle(request):
@@ -104,7 +108,12 @@ def main():
 if __name__=='__main__':
     try:main()
     except (Exception,BoundaryViolation) as error:
-        code=str(error) if str(error) in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source'} else 'details_withheld'
-        frames=[dict(file=Path(f.filename).name,line=f.lineno,function=f.name) for f in traceback.extract_tb(error.__traceback__)[-12:]]
-        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(error).__name__,code=code,frames=frames,native_calls=len(NATIVE_REQUESTS),stream=NATIVE_REQUESTS[0].get('stream') if NATIVE_REQUESTS else None)))
+        code=str(error) if str(error) in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source','hermes_replay_api_error'} else 'details_withheld'
+        root=error;seen=set()
+        while id(root) not in seen:
+            seen.add(id(root));cause=root.__cause__ or root.__context__
+            if cause is None or id(cause) in seen:break
+            root=cause
+        frames=[dict(file=Path(f.filename).name,line=f.lineno,function=f.name) for f in traceback.extract_tb(root.__traceback__)[-12:]]
+        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(root).__name__,code=code,frames=frames,native_calls=len(NATIVE_REQUESTS),stream=NATIVE_REQUESTS[0].get('stream') if NATIVE_REQUESTS else None)))
         raise SystemExit(2)
