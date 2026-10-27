@@ -35,7 +35,10 @@ print(json.dumps({'case':str(case['id']),'evidence':str(value['id'])}))
 from gabriel.identity.cli import read_secret
 from gabriel.identity.service import connection
 with connection(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']),runtime=False) as c:
- assert c.execute('SELECT max(version) AS n FROM gabriel_identity.migrations').fetchone()['n']==29
+ assert c.execute('SELECT max(version) AS n FROM gabriel_identity.migrations').fetchone()['n']==30
+ c.execute('ALTER TABLE gabriel_identity.specialist_agent_jobs DROP COLUMN supervisor_run_id')
+ c.execute('DROP TABLE gabriel_identity.hermes_runs')
+ c.execute('DELETE FROM gabriel_identity.migrations WHERE version=30')
  c.execute('DROP TABLE gabriel_identity.specialist_agent_stops,gabriel_identity.specialist_agent_jobs,gabriel_identity.personal_provider_secrets')
  c.execute('ALTER TABLE gabriel_identity.model_price_quotes DROP COLUMN purpose')
  c.execute('ALTER TABLE gabriel_identity.coordinator_runs DROP CONSTRAINT coordinator_plan_bounds')
@@ -60,16 +63,16 @@ from gabriel.identity.service import connection
 s=service();token=read_document(active()/'human.json',private=True)['token']
 assert s.read_evidence(token,sys.argv[1]).reveal()==b'Generated retained encrypted rebuild evidence'
 with connection(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']),runtime=False) as c:
- assert c.execute('SELECT max(version) AS n FROM gabriel_identity.migrations').fetchone()['n']==29
+ assert c.execute('SELECT max(version) AS n FROM gabriel_identity.migrations').fetchone()['n']==30
 print('PASS')
 """
         assert app.compose('run','--rm','--no-deps','-T','--entrypoint','python','operator','-c',verify,evidence['evidence']).strip()==b'PASS'
         assert app.operator('receipt')==owner
-        report=dict(status='PASS',schema_from=28,schema_to=29,image=image,owner_retained=True,
+        report=dict(status='PASS',schema_from=28,schema_to=30,image=image,owner_retained=True,
             original_keys_retained=True,encrypted_evidence_retained=True,old_cookie_denied=True,
             browser_ai=rebuilt['browser_ai'],environment='generated Docker schema-upgrade rehearsal; native Mac execution not established')
         (root/'rebuild-result.json').write_text(json.dumps(report,indent=2))
-        print('PASS: existing project rebuilt; schema 28 to 29; owner, keys and encrypted evidence retained; old cookie denied')
+        print('PASS: existing project rebuilt; schema 28 to 30; owner, keys and encrypted evidence retained; old cookie denied')
     finally:
         if app:
             try:app.compose('down','--volumes','--remove-orphans')

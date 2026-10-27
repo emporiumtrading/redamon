@@ -98,7 +98,7 @@ def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
         row=conn.execute('SELECT * FROM gabriel_identity.browser_leases WHERE organization_id=%s AND id=%s',
             (p.organization_id,lease_id)).fetchone()
         if not row or row['case_id']!=case_id or row['issued_by']!=p.user_id:raise AccessDenied('hermes_selected_tab_not_owned')
-        state=browser.get_browser_lease(token,lease_id)
+        state=browser._browser_lease_status(conn,p,row)
         if not state['authorization_current'] or not state['heartbeat_fresh'] or row['state']!='active' or not row['intake_enabled']:
             raise AccessDenied('hermes_selected_tab_not_current')
         observation=conn.execute('''SELECT o.*,clock_timestamp()-o.observed_at AS age,clock_timestamp()-r.created_at AS capture_age
