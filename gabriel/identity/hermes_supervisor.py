@@ -35,7 +35,7 @@ def prompt(stage):
           'The whole investigation has at most six paid calls including your planning/reporting and all specialist reasoning rounds. '
           'Do not claim these assignments have run. '
           if stage=='plan' else 'Report only the supported source facts and supplied specialist completion states. requested_actions must be empty. '
-          'Explain unfinished work and required analyst review; do not claim a response was performed. '))
+          'Explain unfinished work and required analyst review; do not claim a response was performed. ')).strip()
 
 
 def configuration(stage='plan',model=DEFAULT_MODEL):
