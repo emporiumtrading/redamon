@@ -45,13 +45,13 @@ class Handler(BaseHTTPRequestHandler):
             # cannot leak from one analyst's investigation into another's.
             with tempfile.TemporaryDirectory(prefix='hermes-') as home:
                 env=dict(PATH='/opt/hermes/.venv/bin:/usr/bin:/bin',HOME=home,HERMES_HOME=home,
-                    PYTHONDONTWRITEBYTECODE='1',PYTHONUNBUFFERED='1',HERMES_DISABLE_LAZY_INSTALLS='1',GABRIEL_HERMES_TEST_DIAGNOSTICS='1' if os.environ.get('GABRIEL_HERMES_TEST_DIAGNOSTICS')=='1' else '0')
+                    PYTHONDONTWRITEBYTECODE='1',PYTHONUNBUFFERED='1',HERMES_DISABLE_LAZY_INSTALLS='1')
                 result=subprocess.run(['/opt/hermes/.venv/bin/python','/opt/gabriel-hermes/runtime.py'],input=raw,
                     stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env,cwd=home,timeout=35,close_fds=True)
             if len(result.stdout)>32768:raise ValueError
             body=json.loads(result.stdout)
             if result.returncode:
-                return self.reply(503,{k:body[k] for k in ('error','stage','error_type','code','frames','native_calls','stream','request_metadata','system_diff') if k in body})
+                return self.reply(503,{k:body[k] for k in ('error','stage','error_type','code','frames','native_calls','stream','request_metadata') if k in body})
             if body.get('version')!=VERSION:raise ValueError
             self.reply(200,body)
         except Exception:self.reply(503,{'error':'hermes_turn_unavailable'})

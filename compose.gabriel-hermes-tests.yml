@@ -3,8 +3,6 @@ services:
     environment:
       GABRIEL_REQUIRE_HERMES: '1'
   hermes:
-    environment:
-      GABRIEL_HERMES_TEST_DIAGNOSTICS: '1'
     build:
       context: .
       dockerfile: gabriel/hermes/Dockerfile

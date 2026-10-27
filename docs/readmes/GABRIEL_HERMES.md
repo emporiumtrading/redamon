@@ -46,3 +46,8 @@ The native Hermes test job runs on x86 and ARM with actual PostgreSQL, local eng
 The browser companion's existing scoped capture/navigation mechanisms remain separate. This integration does not give Hermes unrestricted control over arbitrary analyst tabs, automatically authenticate dashboards, turn generic screen text into independently verified telemetry, or renew expired analyst authority. Browser-bound supervision requires validated typed facts linked to current captures. Unsupported console semantics and incomplete visibility remain explicit; universal dashboard understanding and unattended indefinite monitoring are not established by this change.
 
 Hermes drafts findings and reports for review. It cannot perform vendor containment/remediation, approve its own response actions, promote unreviewed claims into trusted memory or treat agent agreement as independent corroboration. External response connectors, live model qualification, upstream-image security acceptance and deployment/UAT remain release gates.
+
+
+## Production qualification
+
+The offline supervisor evaluator now supports independently labeled specialist assignments while preserving the standard decision-quality gates, original answer/review hashes and fixture rejection. CI exports all fourteen current configuration identities without inference. See [release gates and qualification submission format](GABRIEL_PRODUCTION_READINESS.md). No evaluator result automatically activates models.

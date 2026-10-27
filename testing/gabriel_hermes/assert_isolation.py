@@ -10,5 +10,5 @@ assert 'no-new-privileges:true' in row['HostConfig']['SecurityOpt']
 assert not row['HostConfig']['PortBindings']
 assert all(m['Type']=='tmpfs' and m['Destination']=='/tmp' for m in row['Mounts'])
 assert list(row['NetworkSettings']['Networks'])==['gabriel-hermes-check_toolbus']
-assert not any(e.split('=',1)[0].startswith(('GABRIEL_','OPENROUTER_','OPENAI_API_KEY','ANTHROPIC_API_KEY','DATABASE_')) for e in row['Config']['Env'] if e.split('=',1)[0]!='GABRIEL_HERMES_TEST_DIAGNOSTICS')
+assert not any(e.split('=',1)[0].startswith(('GABRIEL_','OPENROUTER_','OPENAI_API_KEY','ANTHROPIC_API_KEY','DATABASE_')) for e in row['Config']['Env'])
 print('Required Hermes isolation verified: no credentials, host ports, persistent mounts or database network.')

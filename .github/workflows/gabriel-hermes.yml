@@ -30,9 +30,12 @@ jobs:
           trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
           "${compose[@]}" --profile test build identity-tests investigation-tools hermes
           "${compose[@]}" up -d --wait identity-db investigation-tools hermes
+          mkdir -p "$RUNNER_TEMP/hermes-qualification"
+          git rev-parse HEAD > "$RUNNER_TEMP/hermes-qualification/source-sha.txt"
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m gabriel.identity.hermes_qualification --configurations > "$RUNNER_TEMP/hermes-qualification/configurations.json"
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_hermes_supervisor_integration.py::test_hermes_plans_delegates_two_independent_agents_reports_and_replays
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
-          if ! "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1; then
+          if ! "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_model_evaluation.py testing/gabriel_identity/test_hermes_qualification.py testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1; then
             "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_hermes_supervisor_integration.py::test_hermes_plans_delegates_two_independent_agents_reports_and_replays || true
             "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_workbench_integration.py::test_https_case_report_custody_and_explicit_content_view || true
             exit 1
@@ -40,3 +43,10 @@ jobs:
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
           docker inspect gabriel-hermes-check-hermes-1 > "$RUNNER_TEMP/hermes-inspect.json"
           python3 testing/gabriel_hermes/assert_isolation.py "$RUNNER_TEMP/hermes-inspect.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-qualification-configurations-${{ matrix.os }}
+          path: ${{ runner.temp }}/hermes-qualification
+          if-no-files-found: error
+          retention-days: 14
