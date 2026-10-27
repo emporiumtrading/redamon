@@ -10,6 +10,8 @@ services:
       context: .
       dockerfile: gabriel/identity/Dockerfile
       target: production
+      args:
+        IDENTITY_BASE: ${GABRIEL_IDENTITY_BASE:-python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd}
     user: '10001:10001'
     read_only: true
     cap_drop: [ALL]
