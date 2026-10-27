@@ -16,7 +16,7 @@ MODEL='openai/gpt-oss-120b'
 
 
 def runtime_digest():
-    return sha256(b''.join((Path(__file__).parents[1]/'hermes'/name).read_bytes() for name in ('runtime.py','server.py'))).hexdigest()
+    return sha256(b''.join((Path(__file__).parents[1]/'hermes'/name).read_bytes() for name in ('runtime.py','server.py','prepare_runtime.py','Dockerfile'))).hexdigest()
 
 
 def request(path,packet=None):

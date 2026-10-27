@@ -26,7 +26,7 @@ def execute(packet):
     if (type(messages) is not list or len(messages)!=2 or
             [m.get('role') for m in messages]!=['system','user'] or
             any(set(m)!={'role','content'} or type(m['content']) is not str for m in messages) or
-            len(json.dumps(messages).encode())>7000 or type(packet['answer']) is not str or len(packet['answer'].encode())>16384):
+            len(json.dumps(messages).encode())>7000 or type(packet['answer']) is not str or len(packet['answer'].encode())>65536):
         raise ValueError('invalid_hermes_context')
     provenance=json.loads(Path('/etc/hermes/image-provenance.json').read_text())
     if provenance.get('revision')!=UPSTREAM or json.loads(Path('/opt/hermes/install-stamp.json').read_text()).get('commit')!=UPSTREAM:
@@ -34,7 +34,7 @@ def execute(packet):
     # Pin a conservative local working window; isolated turns must never probe
     # provider metadata or silently infer a context window from the network.
     Path(os.environ['HERMES_HOME'],'config.yaml').write_text(json.dumps(dict(model=dict(
-        default=packet['model'],provider='custom',base_url='http://127.0.0.1:9/v1',context_length=16384))))
+        default=packet['model'],provider='custom',base_url='http://127.0.0.1:9/v1',context_length=65536))))
     sys.path.insert(0,'/opt/hermes')
     STAGE='imports'
     import httpx
@@ -66,8 +66,8 @@ def execute(packet):
     try:
         agent.tools=[];agent.valid_tool_names=set();agent._persist_disabled=True
         from agent.agent_init import set_config_context_length
-        set_config_context_length(agent,16384)
-        agent.context_compressor.context_length=16384
+        set_config_context_length(agent,65536)
+        agent.context_compressor.context_length=65536
         agent._build_system_prompt=lambda *args,**kwargs:messages[0]['content']
         agent._cached_system_prompt=messages[0]['content'];agent._cached_system_prompt_static=messages[0]['content']
         STAGE='conversation'

@@ -76,7 +76,8 @@ def test_hermes_plans_delegates_two_independent_agents_reports_and_replays(tenan
     packets=[json.loads(p['messages'][1]['content']) for p in supervision['posts']]
     assert packets[0]['stage']=='plan' and packets[-1]['stage']=='report'
     assert [p['role'] for p in packets if 'role' in p]==['incident_scoping','incident_scoping','identity_access','identity_access']
-    assert packets[-1]['specialist_progress']==[dict(role=r,state='completed_requires_review') for r in result['delegated_roles']]
+    assert [x['role'] for x in packets[-1]['specialist_progress']]==result['delegated_roles']
+    assert all(x['state']=='completed_requires_review' and x['assessment']==dict(disposition='abstain',references=['o1'],provenance='unreviewed_model_assessment',independent_corroboration=False) for x in packets[-1]['specialist_progress'])
     wire=json.dumps(supervision['posts'])
     for private in [supervision['secret'],str(case['id']),str(evidence['id']),doc['facts'][0]['id']]:assert private not in wire
     with connection(cases._dsn) as conn:

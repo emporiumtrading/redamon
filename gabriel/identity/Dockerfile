@@ -19,7 +19,7 @@ COPY gabriel/identity/browser_text_review.py gabriel/identity/browser_memory.py 
 COPY gabriel/identity/specialist_qualification.py /app/gabriel/identity/
 COPY gabriel/identity/personal_providers.py gabriel/identity/specialist_agents.py gabriel/identity/schema_v29.sql /app/gabriel/identity/
 COPY gabriel/identity/schema_v27.sql gabriel/identity/schema_v28.sql gabriel/identity/browser_ai.py /app/gabriel/identity/
-COPY gabriel/hermes/runtime.py gabriel/hermes/server.py /app/gabriel/hermes/
+COPY gabriel/hermes/runtime.py gabriel/hermes/server.py gabriel/hermes/prepare_runtime.py gabriel/hermes/Dockerfile /app/gabriel/hermes/
 COPY gabriel/identity/hermes_bridge.py gabriel/identity/hermes_supervisor.py gabriel/identity/schema_v30.sql /app/gabriel/identity/
 COPY gabriel/identity/installation.py /app/gabriel/identity/
 RUN mkdir -p /var/lib/gabriel-workbench && chown 10001:10001 /var/lib/gabriel-workbench && chmod 700 /var/lib/gabriel-workbench

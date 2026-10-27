@@ -29,7 +29,7 @@ def prompt(stage):
         'Preserve missing context, alternative explanations, clock uncertainty and overlapping counts. '
         'The analyst update belongs in evidence-linked claims, uncertainty and reported_gaps. '
         'No external actions, credentials, navigation or remediation are authorized. '
-        'Agent agreement is not independent corroboration. Specialist progress states do not establish findings. '
+        'Agent agreement is not independent corroboration. Specialist progress states and unreviewed model assessments do not establish findings. Report them as model assessments, never as independent source corroboration. '
         +('For this planning turn only, requested_actions may contain up to four distinct relevant specialist role names from eligible_roles. '
           'This is the only exception to the empty-actions rule. Select only useful roles and prioritize urgent exposure review. '
           'The whole investigation has at most six paid calls including your planning/reporting and all specialist reasoning rounds. '
@@ -42,10 +42,11 @@ def configuration(stage='plan',model=DEFAULT_MODEL):
     if model!=DEFAULT_MODEL:raise InvalidIdentityInput('unsupported_hermes_model')
     return dict(base_configuration(model),version=VERSION,stage=stage,required=True,
         prompt_digest=sha256(prompt(stage).encode()).hexdigest(),upstream=bridge.UPSTREAM,image=bridge.IMAGE,
-        bridge_version=bridge.VERSION,runtime_digest=bridge.runtime_digest(),
+        bridge_version=bridge.VERSION,runtime_profile='gabriel-text-supervisor-v1',runtime_digest=bridge.runtime_digest(),
+        role_catalog_digest=digest({r:sorted(ROLE_TYPES[r]) for r in ROLES}),
         bridge_digest=sha256(Path(bridge.__file__).read_bytes()).hexdigest(),
         supervisor_digest=sha256(Path(__file__).read_bytes()).hexdigest(),
-        max_selected_roles=MAX_SELECTED_ROLES,max_total_calls=6,independent_agent_context=True,local_working_context_tokens=16384)
+        max_selected_roles=MAX_SELECTED_ROLES,max_total_calls=6,independent_agent_context=True,local_working_context_tokens=65536)
 
 
 def readiness(model=DEFAULT_MODEL):
@@ -285,11 +286,28 @@ def start(service,vault,token,case_id,request_id,input_evidence_id,*,model=DEFAU
     return resume(service,vault,token,root['id'])
 
 
+def assessment(service,token,result,document):
+    if not result.get('steps'):return None
+    last=result['steps'][-1]
+    answer=decode(service.read_evidence(token,last['answer_evidence_id']).reveal())
+    decision=answer['result']['decision']
+    aliases={f['id']:'o'+str(i+1) for i,f in enumerate(document['facts'])}
+    lineage=answer['local_manifest']['lineage']
+    refs=set()
+    for claim in decision['claims']:
+        for ref in claim['references']:
+            original=lineage[ref]['record_id']
+            if original not in aliases:raise AccessDenied('hermes_specialist_reference_mismatch')
+            refs.add(aliases[original])
+    return dict(disposition=decision['disposition'],references=sorted(refs),
+        provenance='unreviewed_model_assessment',independent_corroboration=False)
+
+
 def resume(service,vault,token,run_id):
     from gabriel.identity import specialist_agents as agents
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True,content=True)
-        root,meta,_=active(service,conn,p,run_id,token)
+        root,meta,document=active(service,conn,p,run_id,token)
     decision,plan_answer=stage(service,vault,token,run_id,'plan')
     progress=[];results=[]
     for role in decision['requested_actions']:
@@ -306,7 +324,7 @@ def resume(service,vault,token,run_id):
             if str(error) in {'model_investigation_call_limit','model_cost_budget_exhausted','model_budget_paused','model_concurrency_or_unknown_limit'}:
                 result['state']='budget_or_call_limit_reached'
             else:raise
-        progress.append(dict(role=role,state=result['state']))
+        progress.append(dict(role=role,state=result['state'],assessment=assessment(service,token,result,document)))
         results.append(dict(role=role,result=result))
         if result['state']=='budget_or_call_limit_reached':break
     try:

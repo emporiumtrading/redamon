@@ -1,5 +1,6 @@
 """Role-specific AI agents with bounded read tools, private credentials and durable claims."""
 from hashlib import sha256
+from pathlib import Path
 from uuid import uuid4,uuid5
 
 from gabriel.identity import coordinator,model_routes
@@ -13,7 +14,7 @@ from gabriel.identity.specialist_analysis import ROLE_TYPES,analyze
 from gabriel.identity.specialist_analysis_runs import verified_input
 from gabriel.identity.specialist_contracts import ROLES,role_name
 
-VERSION='specialist-agent-v2'
+VERSION='specialist-agent-v3'
 MAX_ROUNDS=3
 DEFAULT_MODEL='openai/gpt-oss-120b'
 MISSIONS={
@@ -54,7 +55,7 @@ def configuration(role,model=DEFAULT_MODEL):
     return dict(base_configuration(model),version=VERSION,role=role,prompt_digest=sha256(prompt(role).encode()).hexdigest(),
         projection_version='specialist-facts-minimized-v1',orchestration_version=coordinator.SPECIALIST_AI_PLAN,
         tools=list(TOOLS[role]),max_rounds=MAX_ROUNDS,toolkit_version=TOOLKIT_VERSION,
-        tool_manifest_digest=digest(manifest(role)))
+        tool_manifest_digest=digest(manifest(role)),runtime_digest=sha256(Path(__file__).read_bytes()).hexdigest())
 
 
 def readiness(role,model=DEFAULT_MODEL):
@@ -225,7 +226,11 @@ def resume(service,vault,token,job_id):
             'Specialist minimized AI input',approved=True,parent_id=current['input_evidence_id'])
         plan=service.begin_coordinator(token,current['case_id'],request,input_evidence_id=holder['id'],_specialist_ai=True)
         if not plan['completed_steps']:service.complete_coordinator(token,plan['id'])
-        held=worker.reserve(token,plan['id'],holder['id'],request,current['model'])
+        try:
+            held=worker.reserve(token,plan['id'],holder['id'],request,current['model'])
+        except AccessDenied as error:
+            if not current.get('supervisor_run_id') or str(error) not in {'model_investigation_call_limit','model_cost_budget_exhausted','model_budget_paused','model_concurrency_or_unknown_limit'}:raise
+            return dict(job_id=str(job_id),state='budget_or_call_limit_reached',model_used=bool(reports),steps=reports,quality_qualified=False)
         with connection(service._dsn) as conn:
             p=worker._principal(conn,token)
             old=conn.execute('SELECT d.id, r.evidence_id FROM gabriel_identity.model_dispatch_claims d LEFT JOIN gabriel_identity.model_answer_receipts r USING(organization_id,reservation_id) WHERE d.organization_id=%s AND d.reservation_id=%s',
