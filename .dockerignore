@@ -72,3 +72,6 @@ logs/
 # run_amass copies the image's own baked list here on first use; shipping it
 # back into the build context would add it to the image a second time.
 recon/wordlists/jhaddix-all.txt
+
+# Required Hermes build identity is part of its runtime fingerprint.
+!gabriel/hermes/Dockerfile
