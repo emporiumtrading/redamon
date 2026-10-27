@@ -1,4 +1,5 @@
 """Generated evaluation data never enters or retrieves reviewed learning memory."""
+import os
 import re
 from uuid import uuid4
 
@@ -14,6 +15,14 @@ from testing.gabriel_identity.test_workbench_integration import boot,server,call
 from testing.gabriel_identity.db_history import remove_v31
 
 pytestmark=pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def scoped_process_dsn(database,tmp_path,monkeypatch):
+    path=tmp_path/'performance-workbench.dsn'
+    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    with os.fdopen(fd,'w') as out:out.write(database.app)
+    monkeypatch.setenv('GABRIEL_IDENTITY_DSN_FILE',str(path))
 
 
 @pytest.fixture
