@@ -1,9 +1,10 @@
 """Offline exact-config supervisor qualification; never grants production admission."""
 import argparse
 import json
+import sys
 
 from gabriel.identity.hermes_supervisor import configuration,DEFAULT_MODEL,VERSION
-from gabriel.identity.model_evaluation import digest,evaluate,load_json
+from gabriel.identity.model_evaluation import EvaluationError,digest,evaluate,load_json
 from gabriel.identity.service import InvalidIdentityInput
 
 
@@ -51,13 +52,19 @@ def configuration_snapshot():
             'Separate real-console, native OS, recovery, operational and human release acceptance'])
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     choice=parser.add_mutually_exclusive_group(required=True)
     choice.add_argument('--submissions')
     choice.add_argument('--configurations',action='store_true')
-    args=parser.parse_args()
-    print(json.dumps(configuration_snapshot() if args.configurations else evaluate_supervisor(load_json(args.submissions)),sort_keys=True,indent=2))
+    args=parser.parse_args(argv)
+    try:
+        result=configuration_snapshot() if args.configurations else evaluate_supervisor(load_json(args.submissions))
+        print(json.dumps(result,sort_keys=True,indent=2))
+        return 0 if args.configurations or result['automated_gate']=='pass' else 2
+    except (EvaluationError,InvalidIdentityInput,TypeError,KeyError,RecursionError):
+        sys.stderr.write('Supervisor qualification rejected invalid or unreadable artifacts.\n')
+        return 2
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':raise SystemExit(main())

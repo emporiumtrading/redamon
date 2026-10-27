@@ -81,3 +81,17 @@ def test_snapshot_contains_all_fourteen_bound_configurations_without_activation(
     rows=list(snapshot['supervisor'].values())+list(snapshot['specialists'].values())
     assert len({r['runtime_configuration_digest'] for r in rows})==14
     assert all(digest(r['runtime'])==r['runtime_configuration_digest'] for r in rows)
+
+
+def test_cli_rejects_fixture_qualification_and_withholds_invalid_artifacts(monkeypatch,capsys):
+    rows={stage:submission(stage) for stage in ('plan','report')}
+    monkeypatch.setattr(qualification,'load_json',lambda path:rows)
+    assert qualification.main(['--submissions','generated-private-input.json'])==2
+    assert '"automated_gate": "fail"' in capsys.readouterr().out
+    rows['plan']['runtime_configuration_digest']='private-invalid-artifact'
+    assert qualification.main(['--submissions','generated-private-input.json'])==2
+    output=capsys.readouterr()
+    assert not output.out and 'private-invalid-artifact' not in output.err
+    assert 'rejected invalid or unreadable artifacts' in output.err
+    assert qualification.main(['--configurations'])==0
+    assert '"network_calls": 0' in capsys.readouterr().out
