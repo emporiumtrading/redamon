@@ -36,6 +36,13 @@ def main():
                 reply=dict(id='fixture-hermes-sdk',object='chat.completion',created=1,model=body['model'],
                     choices=[dict(index=0,finish_reason='stop',message=dict(role='assistant',content=ANSWER))],
                     usage=dict(prompt_tokens=100,completion_tokens=50,total_tokens=150))
+                if body.get('stream'):
+                    chunk=dict(id='fixture-hermes-sdk',object='chat.completion.chunk',created=1,model=body['model'],
+                        choices=[dict(index=0,finish_reason=None,delta=dict(role='assistant',content=ANSWER))])
+                    end=dict(id='fixture-hermes-sdk',object='chat.completion.chunk',created=1,model=body['model'],
+                        choices=[dict(index=0,finish_reason='stop',delta={})],usage=reply['usage'])
+                    data='data: '+json.dumps(chunk)+'\n\ndata: '+json.dumps(end)+'\n\ndata: [DONE]\n\n'
+                    return httpx.Response(200,content=data.encode(),headers={'content-type':'text/event-stream'},request=request)
                 return httpx.Response(200,json=reply,request=request)
             client=OpenAI(api_key='gabriel-offline-fixture-no-provider-key',base_url='http://127.0.0.1:9/v1',max_retries=0,http_client=httpx.Client(transport=httpx.MockTransport(handle)))
             class ControlledHermes(AIAgent):
@@ -74,7 +81,7 @@ def main():
     except Exception as error:
         signal.alarm(0)
         report=dict(status='FAIL',error_type=type(error).__name__,fixture_calls=len(captured),paid_model_calls=0,
-            captured_request_keys=list(captured[0]) if captured else [],log_tail=log.getvalue()[-12000:])
+            captured_request=captured[0] if captured else {},log_tail=log.getvalue()[-12000:])
         Path('/output/hermes-sdk-probe.json').write_text(json.dumps(report,indent=2)+'\n')
         print('FAIL: Hermes offline SDK compatibility; sanitized generated-only diagnostic retained')
         return 2
