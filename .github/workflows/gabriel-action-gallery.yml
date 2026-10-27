@@ -1,0 +1,47 @@
+name: Gabriel actual UI and action workflow gallery
+on:
+  pull_request:
+    paths: ['testing/gabriel_gallery/**', '.github/workflows/gabriel-action-gallery.yml']
+permissions:
+  contents: read
+jobs:
+  gallery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Render actual generated-data screens and labeled design previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GABRIEL_IDENTITY_SECRET_DIR="$RUNNER_TEMP/gallery-db"
+          export GABRIEL_PROVIDER_KEY_DIR="$RUNNER_TEMP/gallery-provider"
+          export GABRIEL_EVIDENCE_KEY_DIR="$RUNNER_TEMP/gallery-evidence"
+          python3 tooling/scripts/gabriel_identity_prepare.py "$GABRIEL_IDENTITY_SECRET_DIR"
+          python3 tooling/scripts/gabriel_provider_keys.py "$GABRIEL_PROVIDER_KEY_DIR"
+          python3 tooling/scripts/gabriel_evidence_keys.py "$GABRIEL_EVIDENCE_KEY_DIR"
+          compose=(docker compose -p gabriel-gallery -f compose.gabriel-identity.yml -f compose.gabriel-tool-tests.yml)
+          trap 'docker rm -f gallery-capture >/dev/null 2>&1 || true; "${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
+          docker build --target runtime -f gabriel/identity/Dockerfile -t gabriel-gallery-core .
+          "${compose[@]}" --profile test build investigation-tools
+          "${compose[@]}" up -d --wait identity-db investigation-tools
+          docker build --build-arg "LAB_UID=$(id -u)" -f testing/gabriel_gallery/Dockerfile -t gabriel-gallery-browser .
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-action-gallery"
+          docker create --name gallery-capture --network gabriel-gallery_identity --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m \
+            -e GABRIEL_IDENTITY_DSN_FILE=/run/secrets/app_dsn -e GABRIEL_MIGRATION_DSN_FILE=/run/secrets/owner_dsn -e GABRIEL_GALLERY_SOURCE="$(git rev-parse HEAD)" \
+            --mount "type=bind,src=$GABRIEL_IDENTITY_SECRET_DIR/app_dsn,dst=/run/secrets/app_dsn,readonly" \
+            --mount "type=bind,src=$GABRIEL_IDENTITY_SECRET_DIR/owner_dsn,dst=/run/secrets/owner_dsn,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/gabriel-action-gallery,dst=/output" gabriel-gallery-browser
+          docker network connect gabriel-gallery_toolbus gallery-capture
+          docker start -a gallery-capture
+          test "$(docker inspect gallery-capture --format '{{.State.ExitCode}}')" = 0
+          docker image inspect gabriel-gallery-core --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-action-gallery/image-id.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-action-gallery
+          path: ${{ runner.temp }}/gabriel-action-gallery
+          if-no-files-found: error
+          retention-days: 14

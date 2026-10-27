@@ -1,0 +1,82 @@
+{
+  "source_sha": "6fcef09fd9cb9280116f1c6ce5b6343b0bcabaf5",
+  "images": [
+    {
+      "file": "select-investigation-tool.png",
+      "title": "Choose a specialist and run an allowed local tool",
+      "kind": "actual_generated_data",
+      "sha256": "65a5b116b2bbc09a6a3fb775d91f653cbcea87539410f099cddb16cd9d50d3db",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "verified-tool-findings.png",
+      "title": "Review the actual encrypted log-analysis result",
+      "kind": "actual_generated_data",
+      "sha256": "436343cb0326921403eb53c7139e6c1000cddc04f9e583d194314574cafdb064",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "analyst-next-actions.png",
+      "title": "Assign ownership, record findings and ask the next question",
+      "kind": "actual_generated_data",
+      "sha256": "6d40e1155437405c9950d726a73667fba8dc990afa6a73ff6584fbf82482ee69",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "mobile-analyst-review.png",
+      "title": "Review investigation questions on mobile",
+      "kind": "actual_generated_data",
+      "sha256": "06e6f34bba64c8f5a35dc0e86bae1a848f80041b338aa4e1c1b8e7c9bacf206d",
+      "width": 390,
+      "height": 1000
+    },
+    {
+      "file": "review-before-learning.png",
+      "title": "Review a proposed reference before reuse",
+      "kind": "actual_generated_data",
+      "sha256": "a1b80fb600ecbfa0109fc037d4661f521e4528d3473e3e8930697b8894d2c47d",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "preview-preflight.png",
+      "title": "Preflight before autonomous investigation",
+      "kind": "illustrative_design_not_implemented",
+      "sha256": "5ab930e8b3452b8b9f3c0d922e791f41eedf020cfa4c69dd522c0e5e577ca1e8",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "preview-specialists.png",
+      "title": "Supervisor assignments and analyst progress",
+      "kind": "illustrative_design_not_implemented",
+      "sha256": "45b00f29ad69e9a9da3da1f066257d8f4f9a95cc25a2cb6a9e992ede4dc7c608",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "preview-response.png",
+      "title": "Proposed response and analyst approval",
+      "kind": "illustrative_design_not_implemented",
+      "sha256": "e26938f6fe972ded152852e0f2c7f194cd6fcf0b85e69d2f0f8d55109b35f4fd",
+      "width": 1440,
+      "height": 1000
+    }
+  ],
+  "synthetic_data": true,
+  "model_calls": 0,
+  "production_admission": false,
+  "hermes_integrated": false,
+  "hermes_requirement": "required_integration_in_progress",
+  "environment": "Isolated Chromium screenshot lab, sandbox disabled inside non-root private Docker container",
+  "actual_screens": "Rendered current workbench against ephemeral PostgreSQL and actual local parser service",
+  "design_previews": "Clearly labeled static workflow concepts; external-response controls are disabled",
+  "workflow_run": "https://github.com/emporiumtrading/redamon/actions/runs/40543603665",
+  "artifact_id": 12752575911,
+  "artifact_zip_sha256": "c32a716e9657816fcafd20af9822e620827b504bed57fa5dc65ec83c7989e3f4",
+  "capture_branch_head": "107d015f57b7178d494ad5be62a8f0dc19843877",
+  "visual_review": "All eight images reviewed; responsive mobile capture and no horizontal overflow verified by capture lab."
+}

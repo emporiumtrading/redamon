@@ -12,6 +12,8 @@ The interface uses Gabriel's own halo and winged-shield emblem, midnight-blue su
 
 [View six actual desktop and mobile screens](docs/assets/gabriel/screenshots/README.md). Captured with generated demo data; displayed features and limitations reflect the tested source.
 
+[Explore investigation tools, analyst actions and the Hermes workflow concepts](docs/assets/gabriel/actions/README.md). Includes five actual generated-data screens and three clearly labeled design previews.
+
 ## Start here
 
 - [Install the private Docker workbench](docs/readmes/GABRIEL_TEST_INSTALLATION.md)
