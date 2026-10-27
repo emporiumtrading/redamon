@@ -30,6 +30,8 @@ jobs:
           trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
           "${compose[@]}" --profile test build identity-tests investigation-tools
           "${compose[@]}" up -d --wait identity-db investigation-tools
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_investigation_tools.py testing/gabriel_identity/test_investigation_tools_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
           docker inspect gabriel-tool-check-investigation-tools-1 > "$RUNNER_TEMP/toolbox-inspect.json"
           python3 testing/gabriel_toolbox/assert_isolation.py "$RUNNER_TEMP/toolbox-inspect.json"
