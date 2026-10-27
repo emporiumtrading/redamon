@@ -39,7 +39,7 @@ def execute(packet):
     sys.path.insert(0,'/opt/hermes')
     STAGE='imports'
     import httpx
-    from openai import OpenAI
+    from openai.types.chat import ChatCompletion,ChatCompletionChunk
     from run_agent import AIAgent
     import agent.conversation_loop as native_loop
     def fail_without_retry(agent,api_error):
@@ -47,27 +47,40 @@ def execute(packet):
     native_loop.handle_api_error=fail_without_retry
     calls=[]
     NATIVE_REQUESTS=calls
-    def handle(request):
-        body=json.loads(request.content)
+    class ReplayStream:
+        def __init__(self,chunks):
+            self.chunks=chunks
+            self.response=httpx.Response(200,request=httpx.Request('POST','http://127.0.0.1:9/internal-replay'))
+        def __iter__(self):return iter(self.chunks)
+        def __enter__(self):return self
+        def __exit__(self,*args):self.close()
+        def close(self):pass
+    def completion(**body):
         if calls:raise BoundaryViolation('hermes_single_turn_limit')
         calls.append(body)
         if body.get('messages')!=messages or body.get('tools') or body.get('model')!=packet['model']:
             raise BoundaryViolation('hermes_request_binding_failed')
+        # Replay bookkeeping is internal and synthetic; Gabriel separately
+        # verifies and records the actual provider's usage and cost receipt.
         usage=dict(prompt_tokens=100,completion_tokens=50,total_tokens=150)
         if not body.get('stream'):
-            reply=dict(id='gabriel-replay',object='chat.completion',created=1,model=packet['model'],
-                choices=[dict(index=0,finish_reason='stop',message=dict(role='assistant',content=packet['answer']))],usage=usage)
-            return httpx.Response(200,json=reply,request=request)
-        chunk=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
-            choices=[dict(index=0,finish_reason=None,delta=dict(role='assistant',content=packet['answer']))])
-        end=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
-            choices=[dict(index=0,finish_reason='stop',delta={})],usage=usage)
-        data='data: '+json.dumps(chunk)+'\n\ndata: '+json.dumps(end)+'\n\ndata: [DONE]\n\n'
-        return httpx.Response(200,content=data.encode(),headers={'content-type':'text/event-stream'},request=request)
-    client=OpenAI(api_key='gabriel-internal-replay-no-provider-credential',base_url='http://127.0.0.1:9/v1',max_retries=0,
-        http_client=httpx.Client(transport=httpx.MockTransport(handle)))
+            return ChatCompletion.model_validate(dict(id='gabriel-replay',object='chat.completion',created=1,model=packet['model'],
+                choices=[dict(index=0,finish_reason='stop',message=dict(role='assistant',content=packet['answer']))],usage=usage))
+        first=ChatCompletionChunk.model_validate(dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
+            choices=[dict(index=0,finish_reason=None,delta=dict(role='assistant',content=packet['answer']))]))
+        last=ChatCompletionChunk.model_validate(dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
+            choices=[dict(index=0,finish_reason='stop',delta={})],usage=usage))
+        return ReplayStream([first,last])
+    class ReplayClient:
+        def __init__(self):
+            from types import SimpleNamespace
+            self.chat=SimpleNamespace(completions=SimpleNamespace(create=completion))
+        def with_options(self,**kwargs):return self
+        def copy(self,**kwargs):return self
+        def close(self):pass
+        def is_closed(self):return False
     class ControlledHermes(AIAgent):
-        def _create_openai_client(self,*args,**kwargs):return client
+        def _create_openai_client(self,*args,**kwargs):return ReplayClient()
     STAGE='initialization'
     agent=ControlledHermes(base_url='http://127.0.0.1:9/v1',api_key='gabriel-internal-replay-no-provider-credential',provider='custom',
         api_mode='chat_completions',model=packet['model'],max_iterations=1,max_tokens=768,enabled_toolsets=[],
@@ -75,8 +88,8 @@ def execute(packet):
         skip_memory=True,skip_background_review=True,checkpoints_enabled=False,run_budget_seconds=20,platform='gabriel',
         request_overrides=dict(stream=False,temperature=0,response_format=dict(type='json_object')))
     try:
-        agent.client=client
-        agent._create_openai_client=lambda *args,**kwargs:client
+        agent.client=ReplayClient()
+        agent._create_openai_client=lambda *args,**kwargs:ReplayClient()
         agent.tools=[];agent.valid_tool_names=set();agent._persist_disabled=True
         from agent.agent_init import set_config_context_length
         set_config_context_length(agent,65536)
@@ -91,7 +104,6 @@ def execute(packet):
         return dict(version=VERSION,upstream=UPSTREAM,messages=calls[0]['messages'],answer=result['final_response'],native_turns=1)
     finally:
         if hasattr(agent,'close'):agent.close()
-        client.close()
 
 
 def main():
