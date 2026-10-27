@@ -9,7 +9,8 @@ import pytest
 
 from gabriel.identity import investigation_tools as tools
 from gabriel.identity.service import AccessDenied
-from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
+from testing.gabriel_identity.test_identity_integration import tenant,owner_connection
+from testing.gabriel_identity.test_browser_monitoring_integration import database
 from testing.gabriel_identity.test_cases_integration import cases,case,evidence
 from testing.gabriel_identity.test_specialist_analysis_integration import intake
 from testing.gabriel_identity.test_investigation_tools import capture,logs
@@ -25,6 +26,15 @@ def toolbox():
     if status.get('status')!='ready':
         if os.environ.get('GABRIEL_REQUIRE_TOOLBOX')=='1':pytest.fail('private_toolbox_required')
         pytest.skip('private toolbox service required')
+
+
+@pytest.fixture(autouse=True)
+def scoped_process_dsn(database,tmp_path,monkeypatch):
+    # The HTTPS subprocess must use the same disposable DB as this module's cases.
+    path=tmp_path/'tool-workbench.dsn'
+    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    with os.fdopen(fd,'w') as stream:stream.write(database.app)
+    monkeypatch.setenv('GABRIEL_IDENTITY_DSN_FILE',str(path))
 
 
 @pytest.mark.parametrize('name,content,role',[
