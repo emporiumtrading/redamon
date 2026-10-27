@@ -89,10 +89,6 @@ def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
     if type(lease_ids) not in {list,tuple} or len(lease_ids)>8 or len(set(map(str,lease_ids)))!=len(lease_ids):
         raise InvalidIdentityInput('invalid_hermes_tab_selection')
     sources={identifier(f['evidence_id']) for f in document['facts']}
-    if lease_ids:
-        from gabriel.identity.cases import timestamp
-        sampled=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
-        if not 0<=(sampled-timestamp(document['as_of'])).total_seconds()<=120:raise AccessDenied('hermes_fresh_dashboard_facts_required')
     from gabriel.identity.browser_navigation import BrowserNavigationService
     browser=BrowserNavigationService(service._dsn,service.store)
     checked=[]
@@ -118,6 +114,10 @@ def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
         if re.search(r'(?im)^\s*(?:sign in to continue|session expired|access denied|authentication required)\s*$',content):
             raise AccessDenied('hermes_dashboard_access_wall')
         checked.append(str(lease_id))
+    if lease_ids:
+        from gabriel.identity.cases import timestamp
+        sampled=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
+        if not 0<=(sampled-timestamp(document['as_of'])).total_seconds()<=120:raise AccessDenied('hermes_fresh_dashboard_facts_required')
     return checked
 
 

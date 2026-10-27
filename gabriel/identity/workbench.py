@@ -232,7 +232,6 @@ class Workbench:
         hermes_path=re.fullmatch('/cases/('+ID+')/hermes(?:/('+ID+')/(resume|stop))?',path)
         if hermes_path:
             from gabriel.identity import hermes_supervisor as hermes
-            from gabriel.identity.analyst_views import source_health
             case_id,run_id,operation=hermes_path.groups()
             if principal.role not in {'owner','admin','analyst'}:raise AccessDenied('operation_not_permitted')
             snapshot=self.service.get_case(self._token,case_id)

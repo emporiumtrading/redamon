@@ -31,7 +31,11 @@ jobs:
           "${compose[@]}" --profile test build identity-tests investigation-tools hermes
           "${compose[@]}" up -d --wait identity-db investigation-tools hermes
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
-          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1
+          if ! "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1; then
+            "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_hermes_supervisor_integration.py::test_hermes_plans_delegates_two_independent_agents_reports_and_replays || true
+            "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_workbench_integration.py::test_https_case_report_custody_and_explicit_content_view || true
+            exit 1
+          fi
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
           docker inspect gabriel-hermes-check-hermes-1 > "$RUNNER_TEMP/hermes-inspect.json"
           python3 testing/gabriel_hermes/assert_isolation.py "$RUNNER_TEMP/hermes-inspect.json"
