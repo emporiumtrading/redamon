@@ -78,16 +78,21 @@ def test_local_tool_form_works_without_a_model_call_and_requires_csrf(server,cas
 
 
 def test_logout_during_parser_call_blocks_result_publication(tenant,cases,case,evidence,monkeypatch):
-    _,holder=intake(tenant,cases,case,evidence)
-    original=tools.remote
+    doc,holder=intake(tenant,cases,case,evidence)
+    extra=cases.acquire(tenant.token,case['id'],uuid4(),'Generated second source','Generated second source',approved=True)
+    doc['facts'].append(dict(doc['facts'][0],id=str(uuid4()),evidence_id=str(extra['id']),evidence_digest=extra['digest']))
+    holder=cases.acquire(tenant.token,case['id'],uuid4(),json.dumps(doc),'Generated multi-source facts',approved=True)
+    original=tools.remote;calls=[]
     def revoke(name,data=None):
         result=original(name,data)
-        if name=='inspect_logs':cases.logout(tenant.token)
+        if name=='inspect_logs':
+            calls.append(name);cases.logout(tenant.token)
         return result
     monkeypatch.setattr(tools,'remote',revoke)
     from gabriel.identity.service import AuthenticationDenied
     with pytest.raises(AuthenticationDenied):
         tools.inspect(cases,tenant.token,case['id'],holder['id'],'alert_triage','inspect_logs',uuid4())
+    assert calls==['inspect_logs']
 
 
 def test_agent_model_tool_model_loop_executes_real_yara_without_exporting_raw_bytes(tenant,cases,case,setup):

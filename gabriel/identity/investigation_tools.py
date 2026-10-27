@@ -168,7 +168,15 @@ def execute(service,token,case_id,input_evidence_id,role,name,*,job_id=None):
     if name=='inspect_toolkit':result=remote(name)
     elif name in REMOTE:
         readiness=remote('inspect_toolkit')
-        result=dict(artifacts=[remote(name,data) for data in sources],coverage='selected_sources_only') if readiness.get('packaged_tools_ready') else readiness
+        if readiness.get('packaged_tools_ready'):
+            outputs=[]
+            for data in sources:
+                with connection(service._dsn) as conn:
+                    _,_,current,_=scope(conn)
+                    if digest(current)!=binding:raise AccessDenied('tool_source_changed')
+                outputs.append(remote(name,data))
+            result=dict(artifacts=outputs,coverage='selected_sources_only')
+        else:result=readiness
     elif name=='review_memory':result=dict(reviewed_local_references=len(service.retrieve_memory(token,case_id)),contents_exported=False)
     else:result=native(name,document,role,len(refs))
     with connection(service._dsn) as conn:
