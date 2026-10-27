@@ -82,7 +82,7 @@ def test_upgrade_preserves_existing_case_and_reviewed_memory(tenant,cases,case,e
 
 
 def test_actual_https_evaluation_form_and_learning_controls(server,tenant,cases):
-    cookie=connect(server)
+    cookie,_,_=connect(server)
     status,html,_=call(server,'/cases/new',cookie=cookie)
     assert status==200 and 'Performance test — learning disabled' in html
     nonce=re.search(r'name="nonce" value="([A-Za-z0-9_-]+)"',html)[1]
