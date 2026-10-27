@@ -82,14 +82,14 @@ def main():
         analyst=service.create_member(token,'demo-analyst',secrets.token_urlsafe(32),'analyst')
         case=service.create_case(token,'Generated lab: suspicious sign-ins')
         case_id=str(case['id']);now=datetime.now(timezone.utc)
-        logs='\n'.join(json.dumps(dict(timestamp=(now-timedelta(seconds=60-i)).isoformat(),entity='generated-identity',outcome='failure' if i<5 else 'success')) for i in range(6))
+        logs='\n'.join(json.dumps(dict(timestamp=(now-timedelta(seconds=60-i)).isoformat().replace('+00:00','Z'),entity='generated-identity',outcome='failure' if i<5 else 'success')) for i in range(6))
         log_source=service.acquire(token,case_id,uuid4(),logs,'Generated normalized sign-in log',approved=True)
         file_source=service.acquire(token,case_id,uuid4(),'Generated file text: powershell -EncodedCommand example-only','Generated file sample',approved=True)
         inventory=service.acquire(token,case_id,uuid4(),'Generated inventory: critical reachable exposure, mitigation not reported.','Generated exposure inventory',approved=True)
         facts=[]
         for kind,data,source in [('alert',dict(severity='critical',state='open'),log_source),('activity',dict(category='network',outcome='failure',count=5),log_source),('artifact',dict(integrity='match',custody='complete'),file_source),('exposure',dict(severity='critical',reachable='yes',mitigated='no'),inventory)]:
-            facts.append(dict(id=str(uuid4()),type=kind,evidence_id=str(source['id']),evidence_digest=source['digest'],entity_id=str(uuid4()),event_time=(now-timedelta(seconds=60)).isoformat(),data=data))
-        doc=dict(version='specialist-facts-v1',case_id=case_id,as_of=now.isoformat(),facts=facts)
+            facts.append(dict(id=str(uuid4()),type=kind,evidence_id=str(source['id']),evidence_digest=source['digest'],entity_id=str(uuid4()),event_time=(now-timedelta(seconds=60)).isoformat().replace('+00:00','Z'),data=data))
+        doc=dict(version='specialist-facts-v1',case_id=case_id,as_of=now.isoformat().replace('+00:00','Z'),facts=facts)
         holder=service.acquire(token,case_id,uuid4(),json.dumps(doc),'Generated typed investigation facts',approved=True)
         report=inspect(service,token,case_id,holder['id'],'incident_scoping','inspect_logs',uuid4())
         assert report['result']['result']['artifacts'][0]['failure_burst_then_success_groups']==1
