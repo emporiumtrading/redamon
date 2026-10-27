@@ -30,6 +30,7 @@ jobs:
           trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
           "${compose[@]}" --profile test build identity-tests investigation-tools hermes
           "${compose[@]}" up -d --wait identity-db investigation-tools hermes
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_hermes_supervisor_integration.py::test_hermes_plans_delegates_two_independent_agents_reports_and_replays
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
           if ! "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1; then
             "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_hermes_supervisor_integration.py::test_hermes_plans_delegates_two_independent_agents_reports_and_replays || true

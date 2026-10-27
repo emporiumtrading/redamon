@@ -15,6 +15,8 @@ jobs:
       - name: Build pinned required supervisor image
         run: docker build -f gabriel/hermes/Dockerfile -t gabriel-hermes-security .
       - name: Scan actual supervisor with unchanged high-severity threshold
+        env:
+          GABRIEL_SCAN_DISK_CACHE: '1'
         run: |
           image_id="$(docker image inspect gabriel-hermes-security --format '{{.Id}}')"
           bash tooling/scripts/gabriel_image_scan.sh "$image_id" "$RUNNER_TEMP/hermes-security"

@@ -48,8 +48,10 @@ class Handler(BaseHTTPRequestHandler):
                     PYTHONDONTWRITEBYTECODE='1',PYTHONUNBUFFERED='1')
                 result=subprocess.run(['/opt/hermes/.venv/bin/python','/opt/gabriel-hermes/runtime.py'],input=raw,
                     stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env,cwd=home,timeout=35,close_fds=True)
-            if result.returncode or len(result.stdout)>32768:raise ValueError
+            if len(result.stdout)>32768:raise ValueError
             body=json.loads(result.stdout)
+            if result.returncode:
+                return self.reply(503,{k:body[k] for k in ('error','stage','error_type','code') if k in body})
             if body.get('version')!=VERSION:raise ValueError
             self.reply(200,body)
         except Exception:self.reply(503,{'error':'hermes_turn_unavailable'})

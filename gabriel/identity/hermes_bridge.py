@@ -23,8 +23,13 @@ def request(path,packet=None):
         client.request('GET' if packet is None else 'POST',path,
             body=canonical(packet) if packet is not None else None,headers={'Content-Type':'application/json'})
         response=client.getresponse();raw=response.read(32769)
-        if response.status!=200 or len(raw)>32768:raise ValueError
+        if len(raw)>32768:raise ValueError
         result=json.loads(raw)
+        if response.status!=200:
+            code=result.get('code')
+            if code in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source'}:
+                raise AccessDenied(code)
+            raise ValueError
         if result.get('version')!=VERSION or result.get('upstream')!=UPSTREAM:raise ValueError
         return result
     except (OSError,http.client.HTTPException,ValueError,TypeError,AttributeError):

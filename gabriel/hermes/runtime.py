@@ -9,9 +9,15 @@ import sys
 
 UPSTREAM='bf0203a794a07aac3ff764972ab9087baa4e4f4e'
 VERSION='gabriel-hermes-bridge-v1'
+STAGE='start'
+
+
+class BoundaryViolation(BaseException):
+    pass
 
 
 def execute(packet):
+    global STAGE
     if type(packet) is not dict or set(packet)!={'model','messages','answer'}:
         raise ValueError('invalid_hermes_packet')
     if packet['model']!='openai/gpt-oss-120b':raise ValueError('unsupported_hermes_model')
@@ -25,16 +31,17 @@ def execute(packet):
     if provenance.get('revision')!=UPSTREAM or json.loads(Path('/opt/hermes/install-stamp.json').read_text()).get('commit')!=UPSTREAM:
         raise ValueError('unexpected_hermes_source')
     sys.path.insert(0,'/opt/hermes')
+    STAGE='imports'
     import httpx
     from openai import OpenAI
     from run_agent import AIAgent
     calls=[]
     def handle(request):
         body=json.loads(request.content)
-        if calls:raise ValueError('hermes_single_turn_limit')
+        if calls:raise BoundaryViolation('hermes_single_turn_limit')
         calls.append(body)
         if body.get('messages')!=messages or body.get('tools') or body.get('model')!=packet['model']:
-            raise ValueError('hermes_request_binding_failed')
+            raise BoundaryViolation('hermes_request_binding_failed')
         chunk=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
             choices=[dict(index=0,finish_reason=None,delta=dict(role='assistant',content=packet['answer']))])
         end=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
@@ -45,6 +52,7 @@ def execute(packet):
         http_client=httpx.Client(transport=httpx.MockTransport(handle)))
     class ControlledHermes(AIAgent):
         def _create_openai_client(self,*args,**kwargs):return client
+    STAGE='initialization'
     agent=ControlledHermes(base_url='http://127.0.0.1:9/v1',api_key='gabriel-internal-replay-no-provider-credential',provider='custom',
         api_mode='chat_completions',model=packet['model'],max_iterations=1,max_tokens=768,enabled_toolsets=[],
         save_trajectories=False,quiet_mode=True,verbose_logging=False,skip_context_files=True,load_soul_identity=False,
@@ -54,7 +62,9 @@ def execute(packet):
         agent.tools=[];agent.valid_tool_names=set();agent._persist_disabled=True
         agent._build_system_prompt=lambda *args,**kwargs:messages[0]['content']
         agent._cached_system_prompt=messages[0]['content'];agent._cached_system_prompt_static=messages[0]['content']
+        STAGE='conversation'
         result=agent.run_conversation(messages[1]['content'],system_message=messages[0]['content'])
+        STAGE='result_binding'
         if len(calls)!=1 or result.get('final_response')!=packet['answer']:
             raise ValueError('hermes_response_binding_failed')
         return dict(version=VERSION,upstream=UPSTREAM,messages=calls[0]['messages'],answer=result['final_response'],native_turns=1)
@@ -76,6 +86,7 @@ def main():
 
 if __name__=='__main__':
     try:main()
-    except Exception:
-        print('{"error":"hermes_turn_failed"}')
+    except (Exception,BoundaryViolation) as error:
+        code=str(error) if str(error) in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source'} else 'details_withheld'
+        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(error).__name__,code=code)))
         raise SystemExit(2)
