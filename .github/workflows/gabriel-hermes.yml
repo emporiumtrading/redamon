@@ -1,0 +1,37 @@
+name: Gabriel required Hermes supervision
+on:
+  pull_request:
+    paths: ['gabriel/identity/**', 'gabriel/hermes/**', 'testing/gabriel_identity/test_hermes*', 'compose.gabriel*.yml', '.github/workflows/gabriel-hermes.yml']
+permissions:
+  contents: read
+jobs:
+  supervision:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build and run required native Hermes with generated model responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GABRIEL_IDENTITY_SECRET_DIR="$RUNNER_TEMP/hermes-db"
+          export GABRIEL_PROVIDER_KEY_DIR="$RUNNER_TEMP/hermes-provider"
+          export GABRIEL_EVIDENCE_KEY_DIR="$RUNNER_TEMP/hermes-evidence"
+          python3 tooling/scripts/gabriel_identity_prepare.py "$GABRIEL_IDENTITY_SECRET_DIR"
+          python3 tooling/scripts/gabriel_provider_keys.py "$GABRIEL_PROVIDER_KEY_DIR"
+          python3 tooling/scripts/gabriel_evidence_keys.py "$GABRIEL_EVIDENCE_KEY_DIR"
+          compose=(docker compose -p gabriel-hermes-check -f compose.gabriel-identity.yml -f compose.gabriel-tool-tests.yml -f compose.gabriel-hermes-tests.yml)
+          trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
+          "${compose[@]}" --profile test build identity-tests investigation-tools hermes
+          "${compose[@]}" up -d --wait identity-db investigation-tools hermes
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
+          docker inspect gabriel-hermes-check-hermes-1 > "$RUNNER_TEMP/hermes-inspect.json"
+          python3 testing/gabriel_hermes/assert_isolation.py "$RUNNER_TEMP/hermes-inspect.json"

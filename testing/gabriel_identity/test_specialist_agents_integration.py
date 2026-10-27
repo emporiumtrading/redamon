@@ -147,12 +147,13 @@ def test_unapproved_tool_never_executes_and_repeated_read_stops_loop(tenant,case
     assert len(setup['posts'])==3
 
 
-def test_coordinator_delegates_relevant_agents_and_preserves_independent_roles(tenant,cases,case,evidence,setup):
+def test_autonomous_orchestration_cannot_bypass_required_hermes(tenant,cases,case,evidence,setup,monkeypatch):
+    from gabriel.identity import hermes_bridge
+    monkeypatch.setattr(hermes_bridge,'health',lambda:dict(status='ready'))
     _,holder=intake(tenant,cases,case,evidence,kind='identity',data=dict(event='mfa_disabled',authorized='no'))
-    result=agents.orchestrate(cases,setup['vault'],setup['token'],case['id'],uuid4(),holder['id'],approved=True)
-    assert result['delegated_roles']==['incident_scoping','threat_hunting','identity_access']
-    assert len(result['agents'])==3 and len(setup['posts'])==6
-    assert len({row['result']['job_id'] for row in result['agents']})==3
+    with pytest.raises(AccessDenied,match='hermes_preflight_blocked'):
+        agents.orchestrate(cases,setup['vault'],setup['token'],case['id'],uuid4(),holder['id'],approved=True)
+    assert not setup['posts']
 
 
 def test_provider_rotation_rewraps_personal_secrets(tenant,cases,setup):

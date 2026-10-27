@@ -122,7 +122,7 @@ class Installation:
         self.start_db()
         self.compose('stop','local-entry','workbench')
         self.operator('revoke')
-        self.compose('stop','investigation-tools','identity-db')
+        self.compose('stop','hermes','investigation-tools','identity-db')
 
     def open(self,password,*,ai_egress=False,username=None):
         if type(ai_egress) is not bool:raise ValueError('invalid_ai_egress_option')
@@ -133,6 +133,7 @@ class Installation:
         payload=dict(password=password,port=self.config['port'])
         if username is not None:payload['username']=username
         ticket=self.operator('open',payload)
+        self.compose('build','hermes')
         self.compose('up','-d','--wait','--force-recreate','workbench','local-entry')
         return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',ai_egress=ai_egress,**ticket)
 

@@ -1,0 +1,80 @@
+"""Run one genuine Hermes turn using a single supplied, credential-free reply."""
+import contextlib
+import io
+import json
+import os
+from pathlib import Path
+import signal
+import sys
+
+UPSTREAM='bf0203a794a07aac3ff764972ab9087baa4e4f4e'
+VERSION='gabriel-hermes-bridge-v1'
+
+
+def execute(packet):
+    if type(packet) is not dict or set(packet)!={'model','messages','answer'}:
+        raise ValueError('invalid_hermes_packet')
+    if packet['model']!='openai/gpt-oss-120b':raise ValueError('unsupported_hermes_model')
+    messages=packet['messages']
+    if (type(messages) is not list or len(messages)!=2 or
+            [m.get('role') for m in messages]!=['system','user'] or
+            any(set(m)!={'role','content'} or type(m['content']) is not str for m in messages) or
+            len(json.dumps(messages).encode())>7000 or type(packet['answer']) is not str or len(packet['answer'].encode())>16384):
+        raise ValueError('invalid_hermes_context')
+    provenance=json.loads(Path('/etc/hermes/image-provenance.json').read_text())
+    if provenance.get('revision')!=UPSTREAM:raise ValueError('unexpected_hermes_source')
+    sys.path.insert(0,'/opt/hermes')
+    import httpx
+    from openai import OpenAI
+    from run_agent import AIAgent
+    calls=[]
+    def handle(request):
+        body=json.loads(request.content)
+        if calls:raise ValueError('hermes_single_turn_limit')
+        calls.append(body)
+        if body.get('messages')!=messages or body.get('tools') or body.get('model')!=packet['model']:
+            raise ValueError('hermes_request_binding_failed')
+        chunk=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
+            choices=[dict(index=0,finish_reason=None,delta=dict(role='assistant',content=packet['answer']))])
+        end=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
+            choices=[dict(index=0,finish_reason='stop',delta={})],usage=dict(prompt_tokens=0,completion_tokens=0,total_tokens=0))
+        data='data: '+json.dumps(chunk)+'\n\ndata: '+json.dumps(end)+'\n\ndata: [DONE]\n\n'
+        return httpx.Response(200,content=data.encode(),headers={'content-type':'text/event-stream'},request=request)
+    client=OpenAI(api_key='gabriel-internal-replay-no-provider-credential',base_url='http://127.0.0.1:9/v1',max_retries=0,
+        http_client=httpx.Client(transport=httpx.MockTransport(handle)))
+    class ControlledHermes(AIAgent):
+        def _create_openai_client(self,*args,**kwargs):return client
+    agent=ControlledHermes(base_url='http://127.0.0.1:9/v1',api_key='gabriel-internal-replay-no-provider-credential',provider='custom',
+        api_mode='chat_completions',model=packet['model'],max_iterations=1,max_tokens=768,enabled_toolsets=[],
+        save_trajectories=False,quiet_mode=True,verbose_logging=False,skip_context_files=True,load_soul_identity=False,
+        skip_memory=True,skip_background_review=True,checkpoints_enabled=False,run_budget_seconds=20,platform='gabriel',
+        request_overrides=dict(temperature=0,response_format=dict(type='json_object')))
+    try:
+        agent.tools=[];agent.valid_tool_names=set();agent._persist_disabled=True
+        agent._build_system_prompt=lambda *args,**kwargs:messages[0]['content']
+        agent._cached_system_prompt=messages[0]['content'];agent._cached_system_prompt_static=messages[0]['content']
+        result=agent.run_conversation(messages[1]['content'],system_message=messages[0]['content'])
+        if len(calls)!=1 or result.get('final_response')!=packet['answer']:
+            raise ValueError('hermes_response_binding_failed')
+        return dict(version=VERSION,upstream=UPSTREAM,messages=calls[0]['messages'],answer=result['final_response'],native_turns=1)
+    finally:
+        if hasattr(agent,'close'):agent.close()
+        client.close()
+
+
+def main():
+    def expired(*args):raise TimeoutError('hermes_turn_deadline')
+    signal.signal(signal.SIGALRM,expired);signal.alarm(30)
+    raw=sys.stdin.buffer.read(32769)
+    if len(raw)>32768:raise ValueError('hermes_packet_limit')
+    # Framework diagnostics may include supplied content; never forward them.
+    with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+        result=execute(json.loads(raw))
+    print(json.dumps(result,separators=(',',':'),sort_keys=True))
+
+
+if __name__=='__main__':
+    try:main()
+    except Exception:
+        print('{"error":"hermes_turn_failed"}')
+        raise SystemExit(2)

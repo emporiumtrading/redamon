@@ -88,11 +88,16 @@ def job(service,conn,p,job_id,*,active=True):
     if not row or row['requested_by']!=p.user_id:raise AccessDenied('specialist_agent_not_owned')
     service._case(conn,p,row['case_id'],open_only=active)
     if active and (row['stopped'] or row['expired']):raise AccessDenied('specialist_agent_not_active')
+    if active and row.get('supervisor_run_id'):
+        root=coordinator.load(conn,p,row['supervisor_run_id'])
+        if root['requested_by']!=p.user_id:raise AccessDenied('hermes_run_not_owned')
+        coordinator.active(service,conn,p,root)
     return row
 
 
 class SpecialistWorker(ModelWorker):
-    def __init__(self,cases,vault,job_id,role,tool_results,key_scope):
+    def __init__(self,cases,vault,job_id,role,tool_results,key_scope,supervisor_run_id=None):
+        self.supervisor_run_id=identifier(supervisor_run_id) if supervisor_run_id else None
         super().__init__(cases,vault)
         self.job_id=identifier(job_id);self.role=role_name(role)
         self.tool_results=list(tool_results);self.key_scope=key_scope
@@ -104,6 +109,8 @@ class SpecialistWorker(ModelWorker):
         p=self._principal(conn,token,write=write)
         job(self.cases,conn,p,self.job_id,active=False)
         return p
+
+    def _budget_request(self,request_id):return self.supervisor_run_id or request_id
 
     def _configuration(self,model):return configuration(self.role,model)
 
@@ -127,6 +134,9 @@ class SpecialistWorker(ModelWorker):
 
     def _scope(self,conn,p,run_id,case_id=None,*,_exclude_ingestion=None):
         current=job(self.cases,conn,p,self.job_id)
+        if current.get('supervisor_run_id'):
+            from gabriel.identity.hermes_supervisor import active
+            active(self.cases,conn,p,current['supervisor_run_id'],self._current_token)
         return super()._scope(conn,p,run_id,current['case_id'],_exclude_ingestion=_exclude_ingestion)
 
     def _verify_sources(self,conn,p,evidence_id,prepared):
@@ -134,6 +144,7 @@ class SpecialistWorker(ModelWorker):
         return super()._verify_sources(conn,p,evidence_id,prepared)
 
     def _input(self,token,run_id,evidence_id,model):
+        self._current_token=token
         config=self._admission(model)
         with connection(self.cases._dsn) as conn:
             p=self._principal(conn,token)
@@ -163,7 +174,7 @@ def tool(service,token,job_id,name):
     return execute(service,token,current['case_id'],current['input_evidence_id'],current['role'],name,job_id=job_id)
 
 
-def start(service,vault,token,case_id,request_id,role,input_evidence_id,*,model=DEFAULT_MODEL,key_scope='personal',approved=False):
+def start(service,vault,token,case_id,request_id,role,input_evidence_id,*,model=DEFAULT_MODEL,key_scope='personal',approved=False,_supervisor_run_id=None):
     role=role_name(role);config=configuration(role,model)
     if approved is not True:raise AccessDenied('specialist_ai_export_consent_required')
     if key_scope not in {'personal','organization'}:raise InvalidIdentityInput('invalid_specialist_key_scope')
@@ -173,19 +184,23 @@ def start(service,vault,token,case_id,request_id,role,input_evidence_id,*,model=
         p=service._human(conn,token,write=True,content=True)
         if key_scope=='organization' and p.role not in {'owner','admin'}:raise AccessDenied('organization_provider_admin_required')
         case=service._case(conn,p,case_id,open_only=True)
+        if _supervisor_run_id:
+            from gabriel.identity.hermes_supervisor import active
+            root,meta,_=active(service,conn,p,_supervisor_run_id,token)
+            if root['case_id']!=case['id'] or meta['input_evidence_id']!=input_evidence_id or (meta['specialist_model'],meta['key_scope'])!=(model,key_scope):raise AccessDenied('hermes_specialist_scope_mismatch')
         _,document,_=verified_input(service,conn,p,case,input_evidence_id)
         row=conn.execute('SELECT * FROM gabriel_identity.specialist_agent_jobs WHERE organization_id=%s AND requested_by=%s AND request_id=%s',
             (p.organization_id,p.user_id,request_id)).fetchone()
-        if row and (row['case_id'],row['role'],row['input_evidence_id'],row['model'],row['key_scope'])!=(case['id'],role,input_evidence_id,model,key_scope):
+        if row and (row['case_id'],row['role'],row['input_evidence_id'],row['model'],row['key_scope'],row['supervisor_run_id'])!=(case['id'],role,input_evidence_id,model,key_scope,identifier(_supervisor_run_id) if _supervisor_run_id else None):
             raise AccessDenied('specialist_agent_request_conflict')
         if not row:
             count=conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_agent_jobs WHERE organization_id=%s AND case_id=%s',
                 (p.organization_id,case['id'])).fetchone()['n']
             if count>=128:raise AccessDenied('case_specialist_agent_limit')
             row=conn.execute('''INSERT INTO gabriel_identity.specialist_agent_jobs
-                (organization_id,id,case_id,requested_by,request_id,input_evidence_id,role,model,key_scope)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
-                (p.organization_id,uuid4(),case['id'],p.user_id,request_id,input_evidence_id,role,model,key_scope)).fetchone()
+                (organization_id,id,case_id,requested_by,request_id,input_evidence_id,role,model,key_scope,supervisor_run_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
+                (p.organization_id,uuid4(),case['id'],p.user_id,request_id,input_evidence_id,role,model,key_scope,identifier(_supervisor_run_id) if _supervisor_run_id else None)).fetchone()
             _audit(conn,'specialist_agent.started',p,row['id'])
     return resume(service,vault,token,row['id'])
 
@@ -202,7 +217,7 @@ def resume(service,vault,token,job_id):
     if current['role'] in {'exposure_vulnerability','response_remediation'} and any(f['type']=='exposure' for f in document['facts']):
         tool_results.append(tool(service,token,job_id,'assess_exposure'))
     for step in range(1,MAX_ROUNDS+1):
-        worker=SpecialistWorker(service,vault,job_id,current['role'],tool_results,current['key_scope'])
+        worker=SpecialistWorker(service,vault,job_id,current['role'],tool_results,current['key_scope'],current.get('supervisor_run_id'))
         worker._admission(current['model'])
         prepared=project(document,current['role'],job_id,tool_results)
         request=uuid5(identifier(job_id),'round/'+str(step))
@@ -252,17 +267,7 @@ def history(service,token,case_id):
 
 
 def orchestrate(service,vault,token,case_id,request_id,input_evidence_id,*,model=DEFAULT_MODEL,key_scope='personal',approved=False):
-    """Delegate only relevant roles; a shared provider does not merge agent identities."""
-    if approved is not True:raise AccessDenied('specialist_ai_export_consent_required')
-    with connection(service._dsn) as conn:
-        p=service._human(conn,token,content=True)
-        case=service._case(conn,p,case_id,open_only=True)
-        _,document,_=verified_input(service,conn,p,case,identifier(input_evidence_id))
-        kinds={f['type'] for f in document['facts']}
-    selected=[role for role in ROLES if ROLE_TYPES[role]&kinds]
-    results=[]
-    for role in selected:
-        result=start(service,vault,token,case_id,uuid5(identifier(request_id),role),role,input_evidence_id,
-            model=model,key_scope=key_scope,approved=True)
-        results.append(dict(role=role,result=result))
-    return dict(state='coordinator_completed_requires_review',agents=results,delegated_roles=selected,external_actions_authorized=False,quality_qualified=False)
+    """Autonomous orchestration always goes through the required Hermes supervisor."""
+    from gabriel.identity.hermes_supervisor import start
+    return start(service,vault,token,case_id,request_id,input_evidence_id,
+        specialist_model=model,key_scope=key_scope,approved=approved)

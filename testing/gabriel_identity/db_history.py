@@ -253,9 +253,17 @@ def remove_v28(conn):
 
 
 def remove_v29(conn):
+    remove_v30(conn)
     if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=29').fetchone():
         conn.execute('DROP TABLE gabriel_identity.specialist_agent_stops,gabriel_identity.specialist_agent_jobs,gabriel_identity.personal_provider_secrets')
         conn.execute('ALTER TABLE gabriel_identity.model_price_quotes DROP COLUMN purpose')
         conn.execute('ALTER TABLE gabriel_identity.coordinator_runs DROP CONSTRAINT coordinator_plan_bounds')
         conn.execute("ALTER TABLE gabriel_identity.coordinator_runs ADD CONSTRAINT coordinator_plan_bounds CHECK ((plan_version='local-coordinator-v1' AND input_evidence_id IS NULL AND max_steps BETWEEN 1 AND 2) OR (plan_version='local-specialist-coordinator-v2' AND input_evidence_id IS NOT NULL AND max_steps=12) OR (plan_version='browser-ai-coordinator-v1' AND input_evidence_id IS NOT NULL AND max_steps=1))")
         conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=29')
+
+
+def remove_v30(conn):
+    if conn.execute('SELECT 1 FROM gabriel_identity.migrations WHERE version=30').fetchone():
+        conn.execute('ALTER TABLE gabriel_identity.specialist_agent_jobs DROP COLUMN supervisor_run_id')
+        conn.execute('DROP TABLE gabriel_identity.hermes_runs')
+        conn.execute('DELETE FROM gabriel_identity.migrations WHERE version=30')
