@@ -164,7 +164,7 @@ def relay():
                     self.request.settimeout(3)
                     pair={self.request:upstream,upstream:self.request}
                     remaining=4*1024*1024
-                    end=time.monotonic()+30
+                    end=time.monotonic()+240
                     while remaining>0 and time.monotonic()<end:
                         ready,_,_=select.select(list(pair),[],[],max(0,end-time.monotonic()))
                         if not ready: return

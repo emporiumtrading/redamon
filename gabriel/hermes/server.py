@@ -30,7 +30,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path!='/health':return self.reply(404,{'error':'not_found'})
         try:
             p=json.loads(Path('/etc/hermes/image-provenance.json').read_text())
-            if p.get('revision')!=UPSTREAM:raise ValueError
+            if p.get('revision')!=UPSTREAM or json.loads(Path('/opt/hermes/install-stamp.json').read_text()).get('commit')!=UPSTREAM:raise ValueError
             self.reply(200,dict(version=VERSION,upstream=UPSTREAM,runtime_digest=fingerprint()))
         except Exception:self.reply(503,{'error':'hermes_source_unavailable'})
 

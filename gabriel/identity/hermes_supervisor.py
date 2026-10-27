@@ -89,6 +89,10 @@ def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
     if type(lease_ids) not in {list,tuple} or len(lease_ids)>8 or len(set(map(str,lease_ids)))!=len(lease_ids):
         raise InvalidIdentityInput('invalid_hermes_tab_selection')
     sources={identifier(f['evidence_id']) for f in document['facts']}
+    if lease_ids:
+        from gabriel.identity.cases import timestamp
+        sampled=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
+        if not 0<=(sampled-timestamp(document['as_of'])).total_seconds()<=120:raise AccessDenied('hermes_fresh_dashboard_facts_required')
     from gabriel.identity.browser_navigation import BrowserNavigationService
     browser=BrowserNavigationService(service._dsn,service.store)
     checked=[]
@@ -100,12 +104,12 @@ def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
         state=browser.get_browser_lease(token,lease_id)
         if not state['authorization_current'] or not state['heartbeat_fresh'] or row['state']!='active' or not row['intake_enabled']:
             raise AccessDenied('hermes_selected_tab_not_current')
-        observation=conn.execute('''SELECT o.*,clock_timestamp()-o.observed_at AS age
+        observation=conn.execute('''SELECT o.*,clock_timestamp()-o.observed_at AS age,clock_timestamp()-r.created_at AS capture_age
             FROM gabriel_identity.browser_observations o JOIN gabriel_identity.browser_observation_receipts r
             ON (r.organization_id,r.observation_id,r.evidence_id)=(o.organization_id,o.id,o.evidence_id)
             WHERE o.organization_id=%s AND o.lease_id=%s AND o.state='captured'
             ORDER BY o.sequence DESC LIMIT 1''',(p.organization_id,lease_id)).fetchone()
-        if not observation or not 0<=observation['age'].total_seconds()<=120 or observation['visibility']!='visible_text_only':
+        if not observation or not 0<=observation['age'].total_seconds()<=120 or not 0<=observation['capture_age'].total_seconds()<=120 or observation['visibility']!='visible_text_only':
             raise AccessDenied('hermes_fresh_tab_read_required')
         if observation['evidence_id'] not in sources:raise AccessDenied('hermes_typed_facts_must_bind_current_tab_read')
         artifact=service._evidence(conn,p,observation['evidence_id'])

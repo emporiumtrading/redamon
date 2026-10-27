@@ -22,7 +22,8 @@ def execute(packet):
             len(json.dumps(messages).encode())>7000 or type(packet['answer']) is not str or len(packet['answer'].encode())>16384):
         raise ValueError('invalid_hermes_context')
     provenance=json.loads(Path('/etc/hermes/image-provenance.json').read_text())
-    if provenance.get('revision')!=UPSTREAM:raise ValueError('unexpected_hermes_source')
+    if provenance.get('revision')!=UPSTREAM or json.loads(Path('/opt/hermes/install-stamp.json').read_text()).get('commit')!=UPSTREAM:
+        raise ValueError('unexpected_hermes_source')
     sys.path.insert(0,'/opt/hermes')
     import httpx
     from openai import OpenAI

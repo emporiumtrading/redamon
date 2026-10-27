@@ -129,3 +129,77 @@ def test_unowned_selected_tab_cannot_be_substituted_for_a_fresh_read(tenant,case
     with pytest.raises(AccessDenied,match='selected_tab_not_owned'):
         hermes.preflight(cases,supervision['vault'],supervision['token'],case['id'],holder['id'],lease_ids=[uuid4()])
     assert not supervision['posts']
+
+
+@pytest.fixture(autouse=True)
+def scoped_process_dsn(database,tmp_path,monkeypatch):
+    path=tmp_path/'hermes-workbench.dsn'
+    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    with os.fdopen(fd,'w') as out:out.write(database.app)
+    monkeypatch.setenv('GABRIEL_IDENTITY_DSN_FILE',str(path))
+
+
+from testing.gabriel_identity.test_workbench_integration import boot,server,connect,call,csrf
+
+
+@pytest.mark.parametrize('boot',['owner','analyst'],indirect=True)
+def test_actual_https_supervisor_page_and_preflight_require_csrf_and_expose_blockers(tenant,cases,case,evidence,server):
+    _,holder=intake(tenant,cases,case,evidence)
+    cookie,_,_=connect(server)
+    path='/cases/'+str(case['id'])+'/hermes'
+    code,html,_=call(server,path,cookie=cookie)
+    assert code==200 and 'Hermes investigation supervisor' in html and 'Check readiness' in html and 'qualification pending' in html
+    fields=dict(csrf=csrf(html),request_id=str(uuid4()),input_evidence_id=str(holder['id']),model=hermes.DEFAULT_MODEL,
+        specialist_model=hermes.DEFAULT_MODEL,key_scope='personal',selected_leases='local',operation='preflight')
+    code,html,_=call(server,path,fields,cookie=cookie)
+    assert code==200 and 'Investigation is blocked' in html and 'No inference was performed' in html
+    fields['csrf']='incorrect'
+    assert call(server,path,fields,cookie=cookie)[0]==403
+
+
+def tab_sources(tenant,cases,case,supervision,*,count=2,visibility='visible_text_only',capture=True):
+    from datetime import datetime,timezone
+    from hashlib import sha256
+    from gabriel.identity.browser_navigation import BrowserNavigationService
+    from testing.gabriel_identity.test_specialist_analysis import document
+    browser=BrowserNavigationService(tenant.db.app,cases.store)
+    task=browser.create_browser_task(supervision['token'],'Generated Hermes selected tabs',900,20)
+    facts=[];leases=[];contexts=[]
+    for tab in range(count):
+        scope=dict(browser='chrome',extension_version='0.4.0',installation_id=str(uuid4()),tab_id=tab+1,
+            document_id=str(uuid4()),page_url='https://generated-console.invalid/security',account_label='Generated Hermes lab')
+        lease=browser.issue_browser_lease(supervision['token'],task['id'],case['id'],scope,share_observations=True)
+        browser.connect_browser(lease.token,scope)
+        leases.append(lease);contexts.append(scope)
+        if capture:
+            text='Generated dashboard sign-in assertion '+str(tab+1)
+            reply=browser.observe_browser(supervision['token'],lease.token,dict(schema_version=1,operation='browser.observe',
+                request_id=str(uuid4()),sequence=1,context=scope,observed_at=datetime.now(timezone.utc).isoformat(),
+                visibility=visibility,client_minimized=True,content=text))
+            source=document('identity',dict(event='mfa_disabled',authorized='no'))
+            fact=source['facts'][0];fact.update(evidence_id=str(reply['evidence_id']),evidence_digest=sha256(text.encode()).hexdigest())
+            facts.append(fact)
+    if not capture:return browser,leases,contexts,None
+    source['case_id']=str(case['id']);source['as_of']=datetime.now(timezone.utc).isoformat().replace('+00:00','Z');source['facts']=facts
+    holder=cases.acquire(tenant.token,case['id'],uuid4(),json.dumps(source),'Generated browser-bound typed facts',approved=True)
+    return browser,leases,contexts,holder
+
+
+def test_two_selected_tabs_require_real_current_captures_and_matching_typed_sources(tenant,cases,case,supervision):
+    browser,leases,contexts,holder=tab_sources(tenant,cases,case,supervision)
+    ids=[str(l.id) for l in leases]
+    result=hermes.preflight(cases,supervision['vault'],supervision['token'],case['id'],holder['id'],lease_ids=ids)
+    assert result['ready'] and result['selected_leases']==ids and result['scope']=='selected_tabs_and_bound_typed_facts'
+    assert not supervision['posts']
+    browser.revoke_browser_lease(supervision['token'],leases[1].id)
+    with pytest.raises(AccessDenied,match='selected_tab_not_current'):
+        hermes.preflight(cases,supervision['vault'],supervision['token'],case['id'],holder['id'],lease_ids=ids)
+
+
+@pytest.mark.parametrize('visibility',['partial','missing'])
+def test_heartbeat_or_partial_capture_never_passes_tab_preflight(tenant,cases,case,evidence,supervision,visibility):
+    _,fallback=intake(tenant,cases,case,evidence)
+    browser,leases,contexts,holder=tab_sources(tenant,cases,case,supervision,count=1,visibility='partial',capture=visibility!='missing')
+    with pytest.raises(AccessDenied,match='fresh_tab_read_required|fresh_dashboard_facts_required'):
+        hermes.preflight(cases,supervision['vault'],supervision['token'],case['id'],(holder or fallback)['id'],lease_ids=[str(leases[0].id)])
+    assert not supervision['posts']
