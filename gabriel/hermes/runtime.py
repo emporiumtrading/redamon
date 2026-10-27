@@ -11,6 +11,7 @@ import traceback
 UPSTREAM='bf0203a794a07aac3ff764972ab9087baa4e4f4e'
 VERSION='gabriel-hermes-bridge-v1'
 STAGE='start'
+NATIVE_REQUESTS=[]
 
 
 class BoundaryViolation(BaseException):
@@ -18,7 +19,7 @@ class BoundaryViolation(BaseException):
 
 
 def execute(packet):
-    global STAGE
+    global STAGE,NATIVE_REQUESTS
     if type(packet) is not dict or set(packet)!={'model','messages','answer'}:
         raise ValueError('invalid_hermes_packet')
     if packet['model']!='openai/gpt-oss-120b':raise ValueError('unsupported_hermes_model')
@@ -26,7 +27,7 @@ def execute(packet):
     if (type(messages) is not list or len(messages)!=2 or
             [m.get('role') for m in messages]!=['system','user'] or
             any(set(m)!={'role','content'} or type(m['content']) is not str for m in messages) or
-            len(json.dumps(messages).encode())>7000 or type(packet['answer']) is not str or len(packet['answer'].encode())>65536):
+            len(json.dumps(messages).encode())>7000 or type(packet['answer']) is not str or len(packet['answer'].encode())>16384):
         raise ValueError('invalid_hermes_context')
     provenance=json.loads(Path('/etc/hermes/image-provenance.json').read_text())
     if provenance.get('revision')!=UPSTREAM or json.loads(Path('/opt/hermes/install-stamp.json').read_text()).get('commit')!=UPSTREAM:
@@ -41,16 +42,22 @@ def execute(packet):
     from openai import OpenAI
     from run_agent import AIAgent
     calls=[]
+    NATIVE_REQUESTS=calls
     def handle(request):
         body=json.loads(request.content)
         if calls:raise BoundaryViolation('hermes_single_turn_limit')
         calls.append(body)
         if body.get('messages')!=messages or body.get('tools') or body.get('model')!=packet['model']:
             raise BoundaryViolation('hermes_request_binding_failed')
+        usage=dict(prompt_tokens=100,completion_tokens=50,total_tokens=150)
+        if not body.get('stream'):
+            reply=dict(id='gabriel-replay',object='chat.completion',created=1,model=packet['model'],
+                choices=[dict(index=0,finish_reason='stop',message=dict(role='assistant',content=packet['answer']))],usage=usage)
+            return httpx.Response(200,json=reply,request=request)
         chunk=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
             choices=[dict(index=0,finish_reason=None,delta=dict(role='assistant',content=packet['answer']))])
         end=dict(id='gabriel-replay',object='chat.completion.chunk',created=1,model=packet['model'],
-            choices=[dict(index=0,finish_reason='stop',delta={})],usage=dict(prompt_tokens=0,completion_tokens=0,total_tokens=0))
+            choices=[dict(index=0,finish_reason='stop',delta={})],usage=usage)
         data='data: '+json.dumps(chunk)+'\n\ndata: '+json.dumps(end)+'\n\ndata: [DONE]\n\n'
         return httpx.Response(200,content=data.encode(),headers={'content-type':'text/event-stream'},request=request)
     client=OpenAI(api_key='gabriel-internal-replay-no-provider-credential',base_url='http://127.0.0.1:9/v1',max_retries=0,
@@ -62,8 +69,10 @@ def execute(packet):
         api_mode='chat_completions',model=packet['model'],max_iterations=1,max_tokens=768,enabled_toolsets=[],
         save_trajectories=False,quiet_mode=True,verbose_logging=False,skip_context_files=True,load_soul_identity=False,
         skip_memory=True,skip_background_review=True,checkpoints_enabled=False,run_budget_seconds=20,platform='gabriel',
-        request_overrides=dict(temperature=0,response_format=dict(type='json_object')))
+        request_overrides=dict(stream=False,temperature=0,response_format=dict(type='json_object')))
     try:
+        agent.client=client
+        agent._create_openai_client=lambda *args,**kwargs:client
         agent.tools=[];agent.valid_tool_names=set();agent._persist_disabled=True
         from agent.agent_init import set_config_context_length
         set_config_context_length(agent,65536)
@@ -97,5 +106,5 @@ if __name__=='__main__':
     except (Exception,BoundaryViolation) as error:
         code=str(error) if str(error) in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source'} else 'details_withheld'
         frames=[dict(file=Path(f.filename).name,line=f.lineno,function=f.name) for f in traceback.extract_tb(error.__traceback__)[-12:]]
-        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(error).__name__,code=code,frames=frames)))
+        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(error).__name__,code=code,frames=frames,native_calls=len(NATIVE_REQUESTS),stream=NATIVE_REQUESTS[0].get('stream') if NATIVE_REQUESTS else None)))
         raise SystemExit(2)

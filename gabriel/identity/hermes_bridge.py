@@ -34,7 +34,7 @@ def request(path,packet=None):
                         type(f.get('file')) is str and re.fullmatch(r'[a-zA-Z0-9_.-]{1,64}',f['file']) and
                         type(f.get('function')) is str and re.fullmatch(r'[a-zA-Z0-9_<>]{1,64}',f['function'])):
                     frames.append((f['file'],f['line'],f['function']))
-            logging.getLogger(__name__).warning('Required Hermes runtime failure; static stack locations: %s',frames)
+            logging.getLogger(__name__).warning('Required Hermes runtime failure; static stack locations: %s; native calls: %s; stream: %s',frames,result.get('native_calls') if type(result.get('native_calls')) is int else None,result.get('stream') if type(result.get('stream')) is bool else None)
             code=result.get('code')
             if code in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source'}:
                 raise AccessDenied(code)

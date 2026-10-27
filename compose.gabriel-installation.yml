@@ -64,7 +64,7 @@ services:
       timeout: 5s
       retries: 12
   hermes:
-    image: gabriel-hermes-supervisor:local
+    image: ${GABRIEL_HERMES_IMAGE:-gabriel-hermes-supervisor:local}
     build:
       context: .
       dockerfile: gabriel/hermes/Dockerfile

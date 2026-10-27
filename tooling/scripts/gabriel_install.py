@@ -103,7 +103,7 @@ class Installation:
                 or re.fullmatch(r'sha256:[a-f0-9]{64}',c['image']) is None
                 or re.fullmatch(r'[a-f0-9]{40}',c['source']) is None or type(c['port']) is not int or not 1024<=c['port']<=65535):
             raise ValueError('invalid_installation')
-        self.env=dict(os.environ,GABRIEL_INSTALL_ROOT=str(root),GABRIEL_INSTALL_PORT=str(c['port']),GABRIEL_INSTALL_IMAGE=c['image'])
+        self.env=dict(os.environ,GABRIEL_INSTALL_ROOT=str(root),GABRIEL_INSTALL_PORT=str(c['port']),GABRIEL_INSTALL_IMAGE=c['image'],GABRIEL_HERMES_IMAGE=c['project']+'-hermes:local')
         self.command=['docker','compose','--project-name',c['project'],'--file',str(COMPOSE)]
 
     def compose(self,*args,payload=None,output=None):
