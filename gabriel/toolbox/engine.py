@@ -10,7 +10,7 @@ import sys
 MAX_BYTES=1048576
 MAX_PACKETS=10000
 MAX_RECORDS=5000
-VERSIONS={'yara-python':'4.5.5','dpkt':'1.9.8'}
+VERSIONS={'yara-python':'4.5.4','dpkt':'1.9.8'}
 RULES='''
 rule powershell_encoded_command {
  strings: $p="powershell" nocase $e="-encodedcommand" nocase

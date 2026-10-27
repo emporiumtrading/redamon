@@ -1,5 +1,6 @@
 """Role-bound tool catalog, packaged skills and checked local evidence execution."""
 import base64
+from datetime import datetime
 from hashlib import sha256
 import http.client
 import json
@@ -71,9 +72,9 @@ def remote(name,data=None):
         result=json.loads(raw)
         if type(result) is not dict:raise ValueError
         if name=='inspect_toolkit':
-            available=result.get('status')=='ready' and result.get('packages')=={'yara-python':'4.5.5','dpkt':'1.9.8'} and set(result.get('tools',[]))==REMOTE and result.get('engine_sha256')==sha256((Path(__file__).parents[1]/'toolbox'/'engine.py').read_bytes()).hexdigest()
+            available=result.get('status')=='ready' and result.get('packages')=={'yara-python':'4.5.4','dpkt':'1.9.8'} and set(result.get('tools',[]))==REMOTE and result.get('engine_sha256')==sha256((Path(__file__).parents[1]/'toolbox'/'engine.py').read_bytes()).hexdigest()
             return dict(status='ready' if available else 'version_mismatch',packaged_tools_ready=available,
-                expected_packages={'yara-python':'4.5.5','dpkt':'1.9.8'},automatic_installation=False)
+                expected_packages={'yara-python':'4.5.4','dpkt':'1.9.8'},automatic_installation=False)
         return minimized(name,result)
     except (OSError,http.client.HTTPException,ValueError,TypeError,KeyError):
         return dict(status='tool_unavailable',required_action='check_private_toolbox_service',automatic_installation=False)
@@ -116,7 +117,7 @@ def native(name,document,role,ref_count):
     facts=document['facts']
     if name=='verify_sources':return dict(verified_artifact_count=ref_count-1,source_authenticity='unverified')
     if name=='inspect_timeline':
-        times=sorted(f['event_time'] for f in facts)
+        times=sorted((f['event_time'] for f in facts),key=lambda t:datetime.fromisoformat(t.replace('Z','+00:00')))
         return dict(earliest=times[0],latest=times[-1],reported_as_of=document['as_of'],source_clock_verified=False)
     if name=='review_rules':
         result=analyze(role,document,'local-input')

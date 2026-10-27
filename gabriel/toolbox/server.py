@@ -45,8 +45,15 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:self.reply(422,dict(status='analysis_failed'))
 
 
+class BoundedServer(HTTPServer):
+    def get_request(self):
+        sock,address=super().get_request()
+        sock.settimeout(5)
+        return sock,address
+
+
 def main():
-    HTTPServer(('0.0.0.0',8450),Handler).serve_forever()
+    BoundedServer(('0.0.0.0',8450),Handler).serve_forever()
 
 
 if __name__=='__main__':main()
