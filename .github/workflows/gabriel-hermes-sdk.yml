@@ -27,7 +27,7 @@ jobs:
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m \
             -e HERMES_HOME=/tmp/hermes -e HOME=/tmp/hermes-home -e GABRIEL_HERMES_SOURCE -e GABRIEL_HERMES_IMAGE="$HERMES_IMAGE" \
             --mount "type=bind,src=$GITHUB_WORKSPACE/testing/gabriel_hermes/sdk_probe.py,dst=/probe.py,readonly" \
-            --mount "type=bind,src=$RUNNER_TEMP/hermes-sdk,dst=/output" --entrypoint python "$HERMES_IMAGE" /probe.py
+            --mount "type=bind,src=$RUNNER_TEMP/hermes-sdk,dst=/output" --entrypoint timeout "$HERMES_IMAGE" --kill-after=10 150 /opt/hermes/.venv/bin/python /probe.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
