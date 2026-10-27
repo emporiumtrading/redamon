@@ -48,7 +48,7 @@ The installation starts `investigation-tools` from the same immutable image as G
 
 Only case-authorized, digest-verified source bytes are sent to that local service. Fixed subprocesses receive bounded stdin with a stripped environment, closed inherited file descriptors and CPU, memory, output and wall-time limits. They do not execute evidence or user-authored commands/rules. Provider-visible summaries accept only registered identifiers, counts and closed statuses: no file contents, packet payloads, addresses or raw log identities.
 
-One request accepts at most 1 MiB of stored source content; a tool invocation covers at most eight selected sources and 4 MiB total. PCAP parsing is limited to 10,000 packets; normalized log parsing to 5,000 records. Oversized inputs require a narrower scope. Unsupported, malformed, missing or failed analyses remain visible; no-match and empty summaries never prove safety.
+The existing case intake accepts at most 128 KiB of UTF-8 source content per artifact. The isolated parser endpoint separately enforces a 1 MiB ceiling; a tool invocation covers at most eight selected sources and 4 MiB total. PCAP parsing is limited to 10,000 packets; normalized log parsing to 5,000 records. Oversized inputs require a narrower scope. Unsupported, malformed, missing or failed analyses remain visible; no-match and empty summaries never prove safety.
 
 ## Using tools locally
 
@@ -63,7 +63,7 @@ The text intake accepts ordinary UTF-8 source files directly. For binary files o
 {"format":"gabriel-artifact-v1","kind":"pcap","encoding":"base64","data":"BASE64_OF_CAPTURE_BYTES"}
 ```
 
-Use `kind: "file"` for other binary source files. The stored envelope itself must fit the 1 MiB limit. There is no file-path or URL dereference. `inspect_logs` accepts one JSON object per line with exactly `timestamp` (ISO8601 with timezone), `entity` (a local correlation identifier), and `outcome` (`failure`, `success`, `blocked` or `observed`). Convert vendor exports explicitly; do not assume field meanings.
+Use `kind: "file"` for other binary source files. The stored envelope itself must fit the existing 128 KiB case-intake limit. There is no file-path or URL dereference. `inspect_logs` accepts one JSON object per line with exactly `timestamp` (ISO8601 with timezone), `entity` (a local correlation identifier), and `outcome` (`failure`, `success`, `blocked` or `observed`). Convert vendor exports explicitly; do not assume field meanings.
 
 ## AI and qualification
 
