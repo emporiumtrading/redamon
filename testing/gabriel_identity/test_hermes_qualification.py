@@ -38,12 +38,19 @@ def test_generic_evaluator_still_rejects_assignment_actions():
 
 
 def test_wrong_or_duplicate_assignments_fail_without_rewriting_records():
-    for actions in [[],['shell'],['identity_access'],['alert_triage','alert_triage']]:
+    for actions in [[],['shell'],['identity_access']]:
         rows={stage:submission(stage) for stage in ('plan','report')}
         run=rows['plan']['runs'][0];run['decision']['requested_actions']=actions
         rows['plan']['reviews'][0]['run_sha256']=digest(run)
         report=qualification.evaluate_supervisor(rows)
         assert any(f['reason']=='supervisor_assignment_mismatch' for f in report['stages']['plan']['failures'])
+
+
+    rows={stage:submission(stage) for stage in ('plan','report')}
+    run=rows['plan']['runs'][0];run['decision']['requested_actions']=['alert_triage','alert_triage']
+    rows['plan']['reviews'][0]['run_sha256']=digest(run)
+    with pytest.raises(EvaluationError,match='duplicate_reference'):
+        qualification.evaluate_supervisor(rows)
 
 
 def test_unbound_labels_and_stale_human_reviews_are_rejected():
