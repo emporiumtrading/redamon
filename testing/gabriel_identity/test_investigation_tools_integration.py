@@ -14,6 +14,7 @@ from testing.gabriel_identity.test_cases_integration import cases,case,evidence
 from testing.gabriel_identity.test_specialist_analysis_integration import intake
 from testing.gabriel_identity.test_investigation_tools import capture,logs
 from testing.gabriel_identity.test_workbench_integration import boot,server,connect,call,csrf
+from testing.gabriel_identity.test_specialist_agents_integration import setup
 
 pytestmark=pytest.mark.integration
 
@@ -63,6 +64,7 @@ def test_worker_refuses_unknown_commands_and_never_returns_source_text():
     assert response.status==422 and b'private generated source' not in body
 
 
+@pytest.mark.parametrize('boot',['owner','analyst'],indirect=True)
 def test_local_tool_form_works_without_a_model_call_and_requires_csrf(server,cases,tenant,case,evidence):
     _,holder=intake(tenant,cases,case,evidence)
     cookie,_,_=connect(server)
@@ -73,3 +75,31 @@ def test_local_tool_form_works_without_a_model_call_and_requires_csrf(server,cas
     assert status==200 and 'No model call was made' in html
     fields['csrf']='invalid'
     assert call(server,'/cases/'+str(case['id'])+'/tools',fields,cookie=cookie)[0]==403
+
+
+def test_logout_during_parser_call_blocks_result_publication(tenant,cases,case,evidence,monkeypatch):
+    _,holder=intake(tenant,cases,case,evidence)
+    original=tools.remote
+    def revoke(name,data=None):
+        result=original(name,data)
+        if name=='inspect_logs':cases.logout(tenant.token)
+        return result
+    monkeypatch.setattr(tools,'remote',revoke)
+    from gabriel.identity.service import AuthenticationDenied
+    with pytest.raises(AuthenticationDenied):
+        tools.inspect(cases,tenant.token,case['id'],holder['id'],'alert_triage','inspect_logs',uuid4())
+
+
+def test_agent_model_tool_model_loop_executes_real_yara_without_exporting_raw_bytes(tenant,cases,case,setup):
+    from gabriel.identity import specialist_agents as agents
+    content='Generated private artifact: powershell -EncodedCommand example-only'
+    source=cases.acquire(tenant.token,case['id'],uuid4(),content,'Generated artifact source',approved=True)
+    _,holder=intake(tenant,cases,case,source,'artifact',dict(integrity='match',custody='complete'))
+    setup['client'].chosen_tool='scan_artifacts'
+    result=agents.start(cases,setup['vault'],setup['token'],case['id'],uuid4(),'dfir_evidence',holder['id'],approved=True)
+    assert len(result['steps'])==2 and len(setup['posts'])==2
+    second=json.loads(setup['posts'][1]['messages'][1]['content'])
+    scan=next(t for t in second['tool_results'] if t['tool']=='scan_artifacts')
+    assert scan['result']['artifacts'][0]['matched_rule_ids']==['powershell_encoded_command']
+    assert content not in json.dumps(setup['posts']) and setup['secret'] not in json.dumps(second)
+    assert 'Use scan_artifacts' in setup['posts'][0]['messages'][0]['content']

@@ -57,7 +57,11 @@ def main():
         (directory/'browser-ai-readiness.json').write_text(json.dumps(readiness,indent=2))
         config=json.loads(app.compose('--profile','operator','config','--format','json'))
         assert config['networks']['private']['internal']
-        assert set(config['services']['workbench']['networks'])=={'private'}
+        assert set(config['services']['workbench']['networks'])=={'private','toolbus'}
+        toolbox=config['services']['investigation-tools']
+        assert config['networks']['toolbus']['internal'] and set(toolbox['networks'])=={'toolbus'}
+        assert not toolbox.get('secrets') and not toolbox.get('volumes') and not toolbox.get('ports') and not toolbox.get('environment')
+        assert toolbox['read_only'] and toolbox['cap_drop']==['ALL'] and toolbox['user']=='10001:10001'
         assert not config['services']['identity-db'].get('ports')
         assert not config['services']['workbench'].get('ports')
         assert config['services']['local-entry']['ports'][0]['host_ip']=='127.0.0.1'
@@ -73,6 +77,8 @@ def main():
         else: raise AssertionError('duplicate initialization admitted')
         cookie,csrf=connect(root,app,secret)
         assert request(root,18444,'/providers',cookie=cookie)[0]==200
+        tooling=json.loads(app.compose('exec','-T','workbench','python','-c',"import json; from gabriel.identity.investigation_tools import remote; print(json.dumps(remote('inspect_toolkit')))"))
+        assert tooling['status']=='ready' and tooling['packaged_tools_ready']
         analyst_password=secrets.token_urlsafe(24)
         assert request(root,18444,'/members/create',dict(csrf=csrf,username='generated-install-analyst',password=analyst_password,role='analyst'),cookie)[0]==303
         opened=app.open(analyst_password,username='generated-install-analyst')
@@ -86,7 +92,8 @@ def main():
         optional=Installation(root)
         optional.command.extend(['--file',str(repo/'compose.gabriel-specialist-ai.yml')])
         ai_config=json.loads(optional.compose('--profile','operator','config','--format','json'))
-        assert set(ai_config['services']['workbench']['networks'])=={'private','ai_egress'}
+        assert set(ai_config['services']['workbench']['networks'])=={'private','toolbus','ai_egress'}
+        assert set(ai_config['services']['investigation-tools']['networks'])=={'toolbus'}
         assert set(ai_config['services']['identity-db']['networks'])=={'private'}
 
         code,html,_=request(root,18444,'/cases/new',cookie=cookie);assert code==200
