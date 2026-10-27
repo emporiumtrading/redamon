@@ -143,7 +143,7 @@ def main():
                 wait(lambda:cdp.evaluate(session,'document.title==='+json.dumps(title+' · Gabriel')))
             base='/cases/'+case_id
             navigate(base+'/agents','Specialist AI agents')
-            cdp.evaluate(session,"document.querySelector('[name=role_tool]').value='incident_scoping/inspect_logs';document.querySelector('form[action$=\"/tools\"] [name=input_evidence_id]').value="+json.dumps(holder['id'])+";true")
+            cdp.evaluate(session,"document.querySelector('[name=role_tool]').value='incident_scoping/inspect_logs';document.querySelector('form[action$=\"/tools\"] [name=input_evidence_id]').value="+json.dumps(str(holder['id']))+";true")
             capture('select-investigation-tool','Choose a specialist and run an allowed local tool',selector='form[action$="/tools"]')
             navigate(base+'/evidence/'+str(report['report_evidence_id']),'Evidence and custody')
             cdp.evaluate(session,"document.querySelector('form[action$=\"/content\"]').requestSubmit();true")
