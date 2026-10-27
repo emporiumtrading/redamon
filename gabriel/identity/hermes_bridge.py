@@ -3,6 +3,7 @@ from hashlib import sha256
 import http.client
 import json
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -40,6 +41,8 @@ def request(path,packet=None):
             meta=result.get('request_metadata')
             if type(meta) is dict and set(meta)<={'expected_count','actual_count','actual_roles','message_keys','content_equal','tools_present','model_matches'}:
                 logging.getLogger(__name__).warning('Native request shape: %s',meta)
+            if os.environ.get('GABRIEL_REQUIRE_HERMES')=='1' and result.get('system_diff'):
+                logging.getLogger(__name__).warning('Generated-fixture static supervisor prompt diff: %s',result['system_diff'])
             code=result.get('code')
             if code in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source','hermes_replay_api_error'}:
                 raise AccessDenied(code)
