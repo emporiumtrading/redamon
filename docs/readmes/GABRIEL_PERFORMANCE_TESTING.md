@@ -11,7 +11,7 @@ Case isolation cannot detect someone manually copying test text into a new opera
 ## Before the first exercise
 
 - Complete the production release gates separately. The simulator does not replace independent model qualification, native OS acceptance or security/operational review.
-- Record the exact Gabriel source and image IDs, extension version, model/provider route and all configuration hashes, tool/skill versions, spending limits and memory-disabled case IDs. Freeze that baseline before revealing the test cases.
+- Record the exact Gabriel source and image IDs, extension version, model/provider route and all configuration hashes, tool/skill versions, spending limits and memory-disabled case IDs. Freeze that baseline before revealing the test cases. Record the returned provider/model identity for each call; a hosted provider can limit reproducibility even when Gabriel’s configuration is unchanged.
 - Confirm the owner's authorized platform account, available scenarios, selected tabs/pages and permitted read/navigation actions after access is provided. Keep login, credentials, MFA and account changes human-controlled. Do not assume access, platform permissions or a working adapter.
 - Keep scenario answer keys, grading panels, walkthroughs and analyst labels outside Gabriel's browser scope and inference context. An independent evaluator retains the scoring key.
 - Establish an explicit scenario manifest with expected attack/benign/visibility cases, critical cases, observable opportunities, time limits and a fixed scoring rubric. An unobserved event is a visibility gap, not evidence of a successful detection.
@@ -24,7 +24,7 @@ Publish counts and denominators for true/false positives, missed attacks and cri
 
 ## Fix and repeat without changing the baseline
 
-During an active scored round, freeze Gabriel's build, prompts, tools, model configuration and learning state. Record defects as they occur. Pause the exercise for a necessary fix, create a new versioned engineering change, run regression/security checks, and start a separately identified round. Retain the original failures and baseline scores; do not overwrite them with the retest.
+During an active scored round, freeze Gabriel's build, prompts, tools, model configuration and learning state. Record defects as they occur. Pause the exercise for a necessary fix, create a new versioned engineering change, run regression/security checks, and start a separately identified round in a fresh performance-test case. Do not reuse an earlier round’s case capture history as an unseen baseline. Retain the original failures and baseline scores; do not overwrite them with the retest.
 
 Use synthetic engineering regressions for a discovered product defect without copying platform content or answers. Report a replay of a previously seen scenario as a regression retest. Use new, unseen evaluation scenarios for a fresh performance claim. Compare results per build and scenario set; do not mix versions into one headline score. These are software updates based on measured behavior, not AI training on TryHackMe.
 

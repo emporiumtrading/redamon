@@ -1,0 +1,30 @@
+name: Gabriel proposed release compatibility packet
+on:
+  pull_request:
+    paths: ['testing/gabriel_release_trial/**', 'gabriel/identity/**', '.github/workflows/gabriel-release-packet.yml']
+permissions:
+  contents: read
+jobs:
+  packet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build the source without credentials
+        run: docker build --target production -f gabriel/identity/Dockerfile -t gabriel-proposed-release .
+      - name: Validate and export offline with no credential or network
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/gabriel-release-packet"
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_release_trial:/trial:ro" gabriel-proposed-release /trial/test_packet.py
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_release_trial:/trial:ro" gabriel-proposed-release /trial/packet.py > "$RUNNER_TEMP/gabriel-release-packet/request-packet.json"
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-release-packet/source-sha.txt"
+          docker image inspect gabriel-proposed-release --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-release-packet/image-id.txt"
+          sha256sum "$RUNNER_TEMP/gabriel-release-packet/request-packet.json" > "$RUNNER_TEMP/gabriel-release-packet/request-packet.sha256"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-proposed-release-compatibility-packet
+          path: ${{ runner.temp }}/gabriel-release-packet
+          if-no-files-found: error
+          retention-days: 14
