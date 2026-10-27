@@ -46,7 +46,7 @@ def setup(tenant,cases,monkeypatch):
             if type(self).callback:type(self).callback()
             if type(self).unknown:raise ProbeError('provider_transport_unresolved')
             packet=json.loads(payload['messages'][1]['content'])
-            action=['external-execute'] if type(self).bad_tool else [type(self).chosen_tool] if not packet['tool_results'] or type(self).always_tool else []
+            action=['external-execute'] if type(self).bad_tool else [type(self).chosen_tool] if type(self).chosen_tool not in {t['tool'] for t in packet['tool_results']} or type(self).always_tool else []
             decision=dict(disposition='abstain',claims=[dict(id='claim-1',statement='Generated role-scoped evidence requires review.',references=[packet['observations'][0]['id']])],
                 alternatives=['An approved administrative explanation remains possible.'],contradictions=['No independent source corroboration supplied.'],
                 uncertainty=['Source semantics remain unverified.'],reported_gaps=['source-unverified'],requested_actions=action)
@@ -71,8 +71,10 @@ def test_every_specialist_reasons_uses_local_tool_and_persists_answer(tenant,cas
     assert len(result['steps'])==2 and len(setup['posts'])==2
     assert agents.readiness(role)['model_enabled']
     first,second=[json.loads(p['messages'][1]['content']) for p in setup['posts']]
-    assert first['role']==role and second['tool_results'][0]['tool']=='review_rules'
-    assert expected in second['tool_results'][0]['result']['observations'][0]
+    assert first['role']==role
+    rules=next(t for t in second['tool_results'] if t['tool']=='review_rules')
+    assert expected in rules['result']['observations'][0]
+    if kind=='exposure':assert first['tool_results'][0]['tool']=='assess_exposure'
     wire=json.dumps(setup['posts'])
     for private in [setup['secret'],str(case['id']),str(evidence['id']),doc['facts'][0]['id'],doc['facts'][0]['entity_id']]:assert private not in wire
     answer=json.loads(cases.read_evidence(setup['token'],result['steps'][-1]['answer_evidence_id']).reveal())

@@ -39,6 +39,9 @@ COPY gabriel/identity/model_answers.py gabriel/identity/schema_v18.sql /app/gabr
 COPY gabriel/identity/coordinator.py gabriel/identity/schema_v17.sql gabriel/identity/schema_v25.sql /app/gabriel/identity/
 COPY gabriel/identity/model_budget.py gabriel/identity/budget_cli.py gabriel/identity/schema_v16.sql /app/gabriel/identity/
 RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for p in pathlib.Path('/app/gabriel').rglob('*.py')]"
+COPY gabriel/toolbox/ /app/gabriel/toolbox/
+COPY gabriel/identity/investigation_tools.py /app/gabriel/identity/
+COPY gabriel/identity/investigation_skills/ /app/gabriel/identity/investigation_skills/
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]
 
@@ -102,5 +105,5 @@ FROM runtime AS production
 USER 0:0
 # Production installs dependencies at build time; bundled build tools add attack surface.
 RUN python -m pip uninstall --yes setuptools wheel pip \
-    && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn"
+    && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
 USER 10001:10001

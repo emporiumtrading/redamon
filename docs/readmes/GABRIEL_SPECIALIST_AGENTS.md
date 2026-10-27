@@ -19,7 +19,9 @@ The implemented agent runtime is separate from the existing deterministic specia
 | Response and remediation | Dependency and recovery-readiness analysis |
 | Recovery and learning | Recovery checks and reviewed lessons |
 
-The tools currently implemented are source-byte/custody verification, local role-rule review, supplied-timeline inspection and reviewed-memory availability. Tool summaries may be included in later reasoning requests. Raw reviewed-memory text remains local. These tools do not grant general browsing, arbitrary shell execution, external searches, changes to firewall/cloud settings, or remediation. Browser capture/navigation remains governed by the companion's separately approved session. The new case-agent coordinator does not automatically replace the browser's earlier shared AI triage path.
+The role-bound catalog includes source integrity, local rule review, supplied timelines, reviewed-memory availability, YARA file-pattern analysis, offline dpkt packet analysis, normalized JSONL correlation, typed-fact correlation, exposure prioritization and installed-tool inspection. Packaged usage skills are loaded into the model context and bound to its configuration hash. Analysts can also run local tools and review encrypted reports without an AI key. See [tool assignments, licenses, formats and isolation](GABRIEL_INVESTIGATION_TOOLS.md).
+
+These tools do not grant arbitrary shell execution, package installation, external searches or remediation. Browser capture/navigation remains governed by the companion's separately approved session. The case-agent coordinator does not automatically replace the browser's shared AI triage path.
 
 ## Personal keys and member accounts
 

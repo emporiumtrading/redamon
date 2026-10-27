@@ -13,7 +13,7 @@ from gabriel.identity.specialist_analysis import ROLE_TYPES,analyze
 from gabriel.identity.specialist_analysis_runs import verified_input
 from gabriel.identity.specialist_contracts import ROLES,role_name
 
-VERSION='specialist-agent-v1'
+VERSION='specialist-agent-v2'
 MAX_ROUNDS=3
 DEFAULT_MODEL='openai/gpt-oss-120b'
 MISSIONS={
@@ -30,8 +30,8 @@ MISSIONS={
     'response_remediation':'Review response dependencies and recovery readiness; draft recommendations without performing remediation.',
     'recovery_learning':'Assess recovery checks against supplied baselines and propose lessons for human memory review.',
 }
-TOOLS={role:('verify_sources','review_rules','inspect_timeline') for role in ROLES}
-TOOLS['recovery_learning']=('verify_sources','review_rules','review_memory')
+from gabriel.identity.investigation_tools import TOOLS,instructions,manifest,VERSION as TOOLKIT_VERSION
+
 
 
 def prompt(role):
@@ -44,7 +44,8 @@ def prompt(role):
         'verify_sources checks ciphertext/custody; review_rules returns local role-rule observations; inspect_timeline summarizes supplied times; '+
         'review_memory checks reviewed local memory availability without exporting its contents. '+
         'Choose a final evidence-linked decision with requested_actions=[] when ready. Maximum three model rounds; '+
-        'never repeat a tool already present in tool_results. Missing context must remain explicit; never force an escalation.')
+        'never repeat a tool already present in tool_results. Missing context must remain explicit; never force an escalation. '+
+        '\nUse these packaged skills to select and interpret tools:\n'+instructions(role))
 
 
 def configuration(role,model=DEFAULT_MODEL):
@@ -52,14 +53,15 @@ def configuration(role,model=DEFAULT_MODEL):
     if model not in model_routes.ROUTES:raise InvalidIdentityInput('unknown_specialist_model')
     return dict(base_configuration(model),version=VERSION,role=role,prompt_digest=sha256(prompt(role).encode()).hexdigest(),
         projection_version='specialist-facts-minimized-v1',orchestration_version=coordinator.SPECIALIST_AI_PLAN,
-        tools=list(TOOLS[role]),max_rounds=MAX_ROUNDS)
+        tools=list(TOOLS[role]),max_rounds=MAX_ROUNDS,toolkit_version=TOOLKIT_VERSION,
+        tool_manifest_digest=digest(manifest(role)))
 
 
 def readiness(role,model=DEFAULT_MODEL):
     config=configuration(role,model)
     admitted=digest(config) in model_routes.PRODUCTION_CONFIGURATIONS
     return dict(role=role,model=model,ai_capable=True,model_enabled=admitted,configuration_digest=digest(config),
-        qualification='production_admitted' if admitted else 'qualification_pending',tools=list(TOOLS[role]))
+        qualification='production_admitted' if admitted else 'qualification_pending',tools=list(TOOLS[role]),tool_manifest=manifest(role))
 
 
 def project(document,role,job_id,tool_results):
@@ -120,6 +122,8 @@ class SpecialistWorker(ModelWorker):
     def _validate_actions(self,decision):
         values=decision['requested_actions']
         if len(values)>1 or any(v not in TOOLS[self.role] for v in values):raise ProbeError('specialist_tool_not_admitted')
+        if decision['disposition']=='benign' and any(t['tool']=='assess_exposure' and t['result'].get('urgent_exposure_count',0)>0 for t in self.tool_results):
+            raise ProbeError('urgent_exposure_cannot_be_benign')
 
     def _scope(self,conn,p,run_id,case_id=None,*,_exclude_ingestion=None):
         current=job(self.cases,conn,p,self.job_id)
@@ -155,24 +159,8 @@ def tool(service,token,job_id,name):
     with connection(service._dsn) as conn:
         p=service._human(conn,token,write=True,content=True)
         current=job(service,conn,p,job_id)
-        if name not in TOOLS[current['role']]:raise AccessDenied('specialist_tool_not_admitted')
-        case=service._case(conn,p,current['case_id'],open_only=True)
-        _,document,refs=verified_input(service,conn,p,case,current['input_evidence_id'])
-        if name=='verify_sources':
-            result=dict(verified_artifact_count=len(refs)-1,source_authenticity='unverified')
-        elif name=='inspect_timeline':
-            times=sorted(f['event_time'] for f in document['facts'])
-            result=dict(earliest=times[0],latest=times[-1],reported_as_of=document['as_of'],source_clock_verified=False)
-        elif name=='review_rules':
-            assessment=analyze(current['role'],document,'local-input')
-            result=dict(urgency=assessment['urgency'],observations=[r['statement'] for r in assessment['observations']],
-                hypotheses=[r['statement'] for r in assessment['hypotheses']],qualified=False)
-        else:
-            result=None
-        _audit(conn,'specialist_agent.local_tool',p,current['id'])
-    if name=='review_memory':
-        result=dict(reviewed_local_references=len(service.retrieve_memory(token,current['case_id'])),contents_exported=False)
-    return dict(tool=name,result=result)
+    from gabriel.identity.investigation_tools import execute
+    return execute(service,token,current['case_id'],current['input_evidence_id'],current['role'],name,job_id=job_id)
 
 
 def start(service,vault,token,case_id,request_id,role,input_evidence_id,*,model=DEFAULT_MODEL,key_scope='personal',approved=False):
@@ -211,6 +199,8 @@ def resume(service,vault,token,job_id):
     if not any(f['type'] in ROLE_TYPES[current['role']] for f in document['facts']):
         return dict(job_id=str(job_id),state='abstained_no_role_evidence',model_used=False,steps=[])
     reports=[];tool_results=[]
+    if current['role'] in {'exposure_vulnerability','response_remediation'} and any(f['type']=='exposure' for f in document['facts']):
+        tool_results.append(tool(service,token,job_id,'assess_exposure'))
     for step in range(1,MAX_ROUNDS+1):
         worker=SpecialistWorker(service,vault,job_id,current['role'],tool_results,current['key_scope'])
         worker._admission(current['model'])

@@ -2,3 +2,5 @@ psycopg[binary]==3.3.6
 argon2-cffi==25.1.0
 cryptography==50.0.2
 gunicorn==26.2.0
+yara-python==4.5.4
+dpkt==1.9.8
