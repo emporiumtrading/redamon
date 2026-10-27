@@ -18,7 +18,7 @@ ROLES = frozenset({'owner', 'admin', 'analyst', 'viewer'})
 HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 DUMMY_HASH = HASHER.hash(secrets.token_urlsafe(32))
 AUDIENCE = 'gabriel-identity-v1'
-MIGRATION_FILES = ((1, 'schema.sql'), (2, 'schema_v2.sql'), (3, 'schema_v3.sql'), (4, 'schema_v4.sql'), (5, 'schema_v5.sql'), (6, 'schema_v6.sql'), (7, 'schema_v7.sql'), (8, 'schema_v8.sql'), (9, 'schema_v9.sql'), (10, 'schema_v10.sql'), (11, 'schema_v11.sql'), (12, 'schema_v12.sql'), (13, 'schema_v13.sql'), (14, 'schema_v14.sql'), (15, 'schema_v15.sql'), (16, 'schema_v16.sql'), (17, 'schema_v17.sql'), (18, 'schema_v18.sql'), (19, 'schema_v19.sql'), (20, 'schema_v20.sql'), (21, 'schema_v21.sql'), (22, 'schema_v22.sql'), (23, 'schema_v23.sql'), (24, 'schema_v24.sql'), (25, 'schema_v25.sql'), (26, 'schema_v26.sql'), (27, 'schema_v27.sql'), (28, 'schema_v28.sql'), (29, 'schema_v29.sql'))
+MIGRATION_FILES = ((1, 'schema.sql'), (2, 'schema_v2.sql'), (3, 'schema_v3.sql'), (4, 'schema_v4.sql'), (5, 'schema_v5.sql'), (6, 'schema_v6.sql'), (7, 'schema_v7.sql'), (8, 'schema_v8.sql'), (9, 'schema_v9.sql'), (10, 'schema_v10.sql'), (11, 'schema_v11.sql'), (12, 'schema_v12.sql'), (13, 'schema_v13.sql'), (14, 'schema_v14.sql'), (15, 'schema_v15.sql'), (16, 'schema_v16.sql'), (17, 'schema_v17.sql'), (18, 'schema_v18.sql'), (19, 'schema_v19.sql'), (20, 'schema_v20.sql'), (21, 'schema_v21.sql'), (22, 'schema_v22.sql'), (23, 'schema_v23.sql'), (24, 'schema_v24.sql'), (25, 'schema_v25.sql'), (26, 'schema_v26.sql'), (27, 'schema_v27.sql'), (28, 'schema_v28.sql'), (29, 'schema_v29.sql'), (30, 'schema_v30.sql'))
 
 
 class IdentityError(Exception):

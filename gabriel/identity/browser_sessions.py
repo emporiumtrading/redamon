@@ -203,19 +203,23 @@ class BrowserSessionService(EvidenceKeyService):
                 (p.organization_id,identifier(lease_id))).fetchone()
             if not row:
                 raise AccessDenied('browser_lease_not_accessible')
-            session = conn.execute('''SELECT 1 FROM gabriel_identity.sessions s
-                JOIN gabriel_identity.memberships m USING (organization_id,user_id)
-                JOIN gabriel_identity.users u ON (u.organization_id,u.id)=(m.organization_id,m.user_id)
-                WHERE s.organization_id=%s AND s.user_id=%s AND s.token_digest=%s AND s.revoked_at IS NULL
-                    AND s.expires_at>clock_timestamp() AND m.active AND u.active AND m.role IN ('owner','admin','analyst')''',
-                (p.organization_id,row['issued_by'],row['human_session_digest'])).fetchone()
-            task = task_record(conn,p.organization_id,row['task_id'])
-            case = self._case(conn,p,row['case_id'])
-            now = conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
-            result = lease_metadata(row)
-            result['authorization_current'] = bool(session and row['expires_at']>now and row['state']!='disconnected'
-                and task['creator_authorized'] and not task['expired'] and task['state'] in {'active','exhausted'} and case['state']=='open'
-                and task['resource']=='browser-observation-v1' and task['operations']==['browser.observe'])
-            result['heartbeat_fresh'] = bool(row['last_seen'] and 0<=(now-row['last_seen']).total_seconds()<=45)
-            result['page_content_received'] = False
-            return result
+            return self._browser_lease_status(conn,p,row)
+
+    def _browser_lease_status(self,conn,p,row):
+        # Reuse the caller's transaction so session and task locks cannot block themselves.
+        session = conn.execute('''SELECT 1 FROM gabriel_identity.sessions s
+            JOIN gabriel_identity.memberships m USING (organization_id,user_id)
+            JOIN gabriel_identity.users u ON (u.organization_id,u.id)=(m.organization_id,m.user_id)
+            WHERE s.organization_id=%s AND s.user_id=%s AND s.token_digest=%s AND s.revoked_at IS NULL
+                AND s.expires_at>clock_timestamp() AND m.active AND u.active AND m.role IN ('owner','admin','analyst')''',
+            (p.organization_id,row['issued_by'],row['human_session_digest'])).fetchone()
+        task = task_record(conn,p.organization_id,row['task_id'])
+        case = self._case(conn,p,row['case_id'])
+        now = conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
+        result = lease_metadata(row)
+        result['authorization_current'] = bool(session and row['expires_at']>now and row['state']!='disconnected'
+            and task['creator_authorized'] and not task['expired'] and task['state'] in {'active','exhausted'} and case['state']=='open'
+            and task['resource']=='browser-observation-v1' and task['operations']==['browser.observe'])
+        result['heartbeat_fresh'] = bool(row['last_seen'] and 0<=(now-row['last_seen']).total_seconds()<=45)
+        result['page_content_received'] = False
+        return result

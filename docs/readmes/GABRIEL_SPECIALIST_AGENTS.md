@@ -2,7 +2,7 @@
 
 Gabriel has twelve designated agent roles. Each has a distinct mission/prompt, model configuration identity, permitted local read tools and a durable investigation job. Roles may share the same hosted model; they retain separate reasoning contexts and evidence links. Agreement between agents is not independent corroboration.
 
-The implemented agent runtime is separate from the existing deterministic specialist reviews. The coordinator selects relevant roles from the supplied typed facts. Each agent can reason, request an allowed local read, inspect its result and reason again, for at most three model rounds. Final answers are encrypted, source-linked, unreviewed evidence. Unknown claimed provider outcomes never automatically resend. Repeated tool requests, missing scope, Stop, credential revocation and exhausted budgets stop the loop.
+The implemented agent runtime is separate from the existing deterministic specialist reviews. The required Hermes AI supervisor selects relevant roles from the supplied typed facts after preflight; see [Hermes supervision, its own model, selected-tab checks and shared budgets](GABRIEL_HERMES.md). Each agent can reason, request an allowed local read, inspect its result and reason again, for at most three model rounds. Final answers are encrypted, source-linked, unreviewed evidence. Unknown claimed provider outcomes never automatically resend. Repeated tool requests, missing scope, Stop, credential revocation and exhausted budgets stop the loop.
 
 | Agent | Investigation focus |
 | --- | --- |
@@ -29,7 +29,7 @@ Owners/admins can create analysts through **Team members**. Each analyst signs i
 
 OpenRouter remains the implemented inference transport for this agent runtime. Its fixed endpoint, exact route, privacy and price checks apply. Personal setup retains the existing dedicated-key requirement: an $18 monthly cap and at least $18 initially available in both account credit and key allowance. Normal subsequent use can reduce available balance. Organization-level reservation limits still apply collectively: at most $18/month, $0.50/day and $0.05 per model investigation, with two held/in-flight slots. Personal keys do not grant budget administration or response-action permission. NVIDIA storage in the organization vault does not imply implemented NVIDIA inference.
 
-An existing installation can be rebuilt using the backed-up rebuild command. Migration 29 retains the original owner, evidence/provider encryption keys and volumes. To open a member's workbench with provider connectivity:
+An existing installation can be rebuilt using the backed-up rebuild command. Migrations 29–30 retain the original owner, evidence/provider encryption keys and volumes. To open a member's workbench with provider connectivity:
 
 ```bash
 python3 tooling/scripts/gabriel_install.py open "$HOME/gabriel-private-test" --username ANALYST_USERNAME --ai-egress
@@ -37,7 +37,7 @@ python3 tooling/scripts/gabriel_install.py open "$HOME/gabriel-private-test" --u
 
 The password is prompted privately. This uses the member account previously created by an owner/admin. The installation remains a single active workbench; opening another account revokes the previous workbench session. The provider-connectivity overlay attaches only the workbench to an outbound network; the database stays private. Ordinary `open` remains private. The API client accepts only its fixed OpenRouter endpoints, never a user-supplied provider URL. Connectivity does not grant configuration admission.
 
-In a case, open **Specialist AI agents**, select an approved `specialist-facts-v1` artifact, select a specialist or the coordinator, choose the model/key scope and approve minimized-fact export. The projector preserves role-relevant typed semantics and opaque entity grouping while excluding private case/evidence/entity identifiers and raw source text. Oversized contexts require a narrower scope rather than silent truncation. Source bytes, case authority, key revision and budget are checked before dispatch and before publishing an answer.
+In a case, open **Specialist AI agents**, select an approved `specialist-facts-v1` artifact, select a manual specialist or open **Hermes supervisor** for required autonomous orchestration, choose the model/key scope and approve minimized-fact export. The projector preserves role-relevant typed semantics and opaque entity grouping while excluding private case/evidence/entity identifiers and raw source text. Oversized contexts require a narrower scope rather than silent truncation. Source bytes, case authority, key revision and budget are checked before dispatch and before publishing an answer.
 
 ## Qualification and production admission
 

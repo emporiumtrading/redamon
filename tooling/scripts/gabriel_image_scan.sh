@@ -7,7 +7,14 @@ report=${2:?New report directory required}
 mkdir -m 700 "$report"
 report=$(realpath "$report")
 cache=$(mktemp -d)
-trap 'rm -f "$report/core.tar"; rm -rf "$cache"' EXIT
+syft_cache=$(mktemp -d)
+syft_temp=(--tmpfs /tmp:rw,nosuid,nodev,size=1g,mode=1777)
+# The required Hermes image includes upstream browser/tool dependencies. Disk
+# scratch avoids exhausting the small RAM filesystem while scanning its layers.
+if [[ ${GABRIEL_SCAN_DISK_CACHE:-0} == 1 ]]; then
+    syft_temp=(-v "$syft_cache:/tmp:rw")
+fi
+trap 'rm -f "$report/core.tar"; rm -rf "$cache" "$syft_cache"' EXIT
 git rev-parse HEAD > "$report/source-sha.txt"
 docker image inspect "$image_id" --format '{{.Id}}' > "$report/image-id.txt"
 docker save "$image_id" -o "$report/core.tar"
@@ -19,7 +26,7 @@ done
 scanner=$(sed -n '1p' "$report/scanners.txt")
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 128 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
-    --tmpfs /tmp:rw,nosuid,nodev,size=1g,mode=1777 -e XDG_CACHE_HOME=/tmp -e SYFT_CHECK_FOR_APP_UPDATE=false \
+    "${syft_temp[@]}" -e XDG_CACHE_HOME=/tmp -e SYFT_CHECK_FOR_APP_UPDATE=false \
     -v "$report/core.tar:/image/core.tar:ro" \
     "$scanner" docker-archive:/image/core.tar -o syft-json > "$report/sbom.json"
 scanner=$(sed -n '2p' "$report/scanners.txt")

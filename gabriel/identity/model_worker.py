@@ -59,6 +59,15 @@ class ModelWorker:
     def _quote(self,token,model,config):
         return self.budget.quote(token,'openrouter',model,digest(config),500000,3000000)
 
+    def _post(self,client,body,guard):
+        return client.request('POST','/api/v1/chat/completions',body)
+
+    def _budget_request(self,request_id):
+        return request_id
+
+    def _transport(self,credential):
+        return OpenRouterTransport(credential)
+
     def _configuration(self,model):
         return configuration(model)
 
@@ -118,7 +127,7 @@ class ModelWorker:
 
     def reserve(self,token,run_id,evidence_id,request_id,model):
         config,run,_,_,binding=self._input(token,run_id,evidence_id,model)
-        job=self.budget.begin(token,run['case_id'],request_id)
+        job=self.budget.begin(token,run['case_id'],self._budget_request(request_id))
         with connection(self.cases._dsn) as conn:
             p=self._principal(conn,token)
             old=conn.execute('''SELECT quote_id FROM gabriel_identity.model_reservations
@@ -145,7 +154,7 @@ class ModelWorker:
                 or quote['output_microusd_per_million']!=3000000):
             raise AccessDenied('model_worker_reservation_binding_mismatch')
         credential,credential_binding=self._credential(token)
-        client=OpenRouterTransport(credential)
+        client=self._transport(credential)
         model_routes.eligible(client.request('GET','/api/v1/endpoints/zdr'),quote['model'])
         budget_check(client.request('GET','/api/v1/key').get('data'))
         dispatch_credit(client.request('GET','/api/v1/credits'),held['reserved_microusd'])
@@ -157,7 +166,7 @@ class ModelWorker:
         claimed=self.budget.claim(token,reservation_id,_guard=guard)
         if not claimed['new_claim']: raise AccessDenied('model_worker_already_claimed_no_resend')
         started=time.monotonic()
-        reply=client.request('POST','/api/v1/chat/completions',body)
+        reply=self._post(client,body,guard)
         elapsed=int((time.monotonic()-started)*1000)
         if not isinstance(reply,dict) or reply.get('model')!=quote['model'] or reply.get('provider')!=model_routes.ROUTES[quote['model']][0]:
             raise ProbeError('unexpected_model_or_provider')

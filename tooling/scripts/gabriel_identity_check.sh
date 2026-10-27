@@ -24,7 +24,7 @@ if [[ -n "$(docker ps -aq --filter "label=com.docker.compose.project=$project")"
     echo 'BLOCKED: disposable project name already exists.' >&2
     exit 2
 fi
-compose=(docker compose --project-name "$project" --file compose.gabriel-identity.yml --file compose.gabriel-tool-tests.yml)
+compose=(docker compose --project-name "$project" --file compose.gabriel-identity.yml --file compose.gabriel-tool-tests.yml --file compose.gabriel-hermes-tests.yml)
 cleanup() {
     status=$?
     "${compose[@]}" --profile test --profile operator down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -49,14 +49,14 @@ assert 'evidence_keyring' not in {s['source'] for s in c['services']['identity-d
 assert c['services']['case-data']['volumes'][0]['source']=='evidence_data'
 print('PASS: private network; separate evidence/provider keys and encrypted evidence volume')
 PY
-"${compose[@]}" --profile test build identity identity-tests investigation-tools
+"${compose[@]}" --profile test build identity identity-tests investigation-tools hermes
 docker build --build-arg "IDENTITY_BASE=${GABRIEL_IDENTITY_BASE:-python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd}" -f gabriel/identity/Dockerfile --target checkpoint-signer -t gabriel-checkpoint-signer:dev .
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
     --entrypoint python gabriel-checkpoint-signer:dev -c \
     "import importlib.util; from gabriel.identity.checkpoints import new_keypair,seal,verify; assert importlib.util.find_spec('psycopg') is None; assert importlib.util.find_spec('gabriel.identity.service') is None; print('PASS: offline signer excludes database drivers and application services')"
 docker image inspect gabriel-checkpoint-signer:dev --format '{{.Id}}' > "$report_dir/checkpoint-signer-image-id.txt"
 docker image inspect gabriel-identity:dev --format '{{.Id}}' > "$report_dir/identity-image-id.txt"
-"${compose[@]}" up -d --wait identity-db investigation-tools
+"${compose[@]}" up -d --wait identity-db investigation-tools hermes
 "${compose[@]}" exec -T identity-db postgres --version > "$report_dir/postgres-version.txt"
 "${compose[@]}" run --rm --no-deps -T identity-admin migrate
 "${compose[@]}" exec -T identity-db createdb -U postgres gabriel_checkpoint

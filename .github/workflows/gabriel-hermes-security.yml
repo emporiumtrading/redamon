@@ -1,0 +1,45 @@
+name: Gabriel Hermes image security
+on:
+  pull_request:
+    paths: ['gabriel/hermes/**', 'tooling/scripts/gabriel_image_scan.sh', '.github/workflows/gabriel-hermes-security.yml']
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Record minimal Python base identity
+        run: docker buildx imagetools inspect python:3.14-alpine --format '{{.Manifest.Digest}}'
+      - name: Build pinned required supervisor image
+        run: docker build -f gabriel/hermes/Dockerfile -t gabriel-hermes-security .
+      - name: Retain the exact source profile and dependency lock
+        run: |
+          mkdir -p "$RUNNER_TEMP/hermes-profile"
+          docker buildx imagetools inspect python:3.14-alpine --format '{{.Manifest.Digest}}' > "$RUNNER_TEMP/hermes-profile/base-digest.txt"
+          docker run --rm --network none --read-only --entrypoint cat gabriel-hermes-security /opt/gabriel-hermes/requirements.lock > "$RUNNER_TEMP/hermes-profile/requirements.lock"
+          docker run --rm --network none --read-only --entrypoint cat gabriel-hermes-security /etc/hermes/image-provenance.json > "$RUNNER_TEMP/hermes-profile/provenance.json"
+      - name: Scan actual supervisor with unchanged high-severity threshold
+        env:
+          GABRIEL_SCAN_DISK_CACHE: '1'
+        run: |
+          image_id="$(docker image inspect gabriel-hermes-security --format '{{.Id}}')"
+          bash tooling/scripts/gabriel_image_scan.sh "$image_id" "$RUNNER_TEMP/hermes-security"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gabriel-hermes-image-security
+          path: |
+            ${{ runner.temp }}/hermes-profile
+            ${{ runner.temp }}/hermes-security/source-sha.txt
+            ${{ runner.temp }}/hermes-security/image-id.txt
+            ${{ runner.temp }}/hermes-security/scanners.txt
+            ${{ runner.temp }}/hermes-security/summary.json
+            ${{ runner.temp }}/hermes-security/sbom.json
+            ${{ runner.temp }}/hermes-security/vulnerabilities.json
+            ${{ runner.temp }}/hermes-security/secrets.json
+          if-no-files-found: error
+          retention-days: 14

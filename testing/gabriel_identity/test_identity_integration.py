@@ -63,7 +63,7 @@ def test_accounts_hashes_sessions_and_migration_persist(tenant):
         digest = conn.execute('SELECT token_digest FROM gabriel_identity.sessions WHERE organization_id=%s', (tenant.org,)).fetchone()['token_digest']
         assert digest == sha256(tenant.token.encode()).hexdigest()
         assert digest != tenant.token
-        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.migrations').fetchone()['n'] == 29
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.migrations').fetchone()['n'] == 30
     assert IdentityService(tenant.db.app).whoami(tenant.token).organization_id == tenant.org
 
 

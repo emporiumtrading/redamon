@@ -62,6 +62,10 @@ def main():
         assert config['networks']['toolbus']['internal'] and set(toolbox['networks'])=={'toolbus'}
         assert not toolbox.get('secrets') and not toolbox.get('volumes') and not toolbox.get('ports') and not toolbox.get('environment')
         assert toolbox['read_only'] and toolbox['cap_drop']==['ALL'] and toolbox['user']=='10001:10001'
+        hermes=config['services']['hermes']
+        assert set(hermes['networks'])=={'toolbus'} and not hermes.get('secrets') and not hermes.get('volumes') and not hermes.get('ports')
+        assert hermes['read_only'] and hermes['cap_drop']==['ALL'] and hermes['user']=='10001:10001'
+        assert 'hermes' in config['services']['workbench']['depends_on']
         assert not config['services']['identity-db'].get('ports')
         assert not config['services']['workbench'].get('ports')
         assert config['services']['local-entry']['ports'][0]['host_ip']=='127.0.0.1'
@@ -79,6 +83,9 @@ def main():
         assert request(root,18444,'/providers',cookie=cookie)[0]==200
         tooling=json.loads(app.compose('exec','-T','workbench','python','-c',"import json; from gabriel.identity.investigation_tools import remote; print(json.dumps(remote('inspect_toolkit')))"))
         assert tooling['status']=='ready' and tooling['packaged_tools_ready']
+        supervisor=json.loads(app.compose('exec','-T','workbench','python','-c',"import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))"))
+        assert supervisor['status']=='ready' and supervisor['upstream']=='bf0203a794a07aac3ff764972ab9087baa4e4f4e'
+        (directory/'hermes-runtime-readiness.json').write_text(json.dumps(supervisor,indent=2))
         analyst_password=secrets.token_urlsafe(24)
         assert request(root,18444,'/members/create',dict(csrf=csrf,username='generated-install-analyst',password=analyst_password,role='analyst'),cookie)[0]==303
         opened=app.open(analyst_password,username='generated-install-analyst')
