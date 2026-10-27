@@ -45,7 +45,7 @@ def configuration(stage='plan',model=DEFAULT_MODEL):
         bridge_version=bridge.VERSION,runtime_digest=bridge.runtime_digest(),
         bridge_digest=sha256(Path(bridge.__file__).read_bytes()).hexdigest(),
         supervisor_digest=sha256(Path(__file__).read_bytes()).hexdigest(),
-        max_selected_roles=MAX_SELECTED_ROLES,max_total_calls=6,independent_agent_context=True)
+        max_selected_roles=MAX_SELECTED_ROLES,max_total_calls=6,independent_agent_context=True,local_working_context_tokens=16384)
 
 
 def readiness(model=DEFAULT_MODEL):

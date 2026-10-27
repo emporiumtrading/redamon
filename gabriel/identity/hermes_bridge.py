@@ -2,6 +2,8 @@
 from hashlib import sha256
 import http.client
 import json
+import logging
+import re
 from pathlib import Path
 
 from gabriel.identity.evidence_store import canonical
@@ -26,6 +28,13 @@ def request(path,packet=None):
         if len(raw)>32768:raise ValueError
         result=json.loads(raw)
         if response.status!=200:
+            frames=[]
+            for f in result.get('frames',[])[:12]:
+                if (type(f) is dict and type(f.get('line')) is int and 0<f['line']<100000 and
+                        type(f.get('file')) is str and re.fullmatch(r'[a-zA-Z0-9_.-]{1,64}',f['file']) and
+                        type(f.get('function')) is str and re.fullmatch(r'[a-zA-Z0-9_<>]{1,64}',f['function'])):
+                    frames.append((f['file'],f['line'],f['function']))
+            logging.getLogger(__name__).warning('Required Hermes runtime failure; static stack locations: %s',frames)
             code=result.get('code')
             if code in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source'}:
                 raise AccessDenied(code)

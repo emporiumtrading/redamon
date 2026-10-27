@@ -33,7 +33,7 @@ Stop, logout, lost membership/case authority, source changes, expired scope, cha
 
 ## Isolation and installation
 
-The private Hermes service has no provider credentials, database connection, evidence volumes, published port or outbound network. A fixed HTTP bridge passes only minimized typed facts, role names, bounded progress states and a provider reply. Each native SDK turn runs in a fresh temporary home. Built-in Hermes shell, browser, network, delegation, memory, skill discovery and persistent session tools are disabled. Gabriel performs the actual specialist delegation and permitted local tool execution.
+The private Hermes service has no provider credentials, database connection, evidence volumes, published port or outbound network. A fixed HTTP bridge passes only minimized typed facts, role names, bounded progress states and a provider reply. Each native SDK turn runs in a fresh temporary home with a conservative 16,384-token working context pinned locally. This avoids network metadata discovery; the gateway’s smaller input/output limits still apply. Built-in Hermes shell, browser, network, delegation, memory, skill discovery and persistent session tools are disabled. Gabriel performs the actual specialist delegation and permitted local tool execution.
 
 The bridge first checks the exact request produced by the native SDK; Gabriel reserves and sends that bounded request through its credential-owning model gateway. The real response is replayed through the native loop and checked for exact request/answer binding before Gabriel validates and publishes an encrypted receipt. The preparation sentinel is never a model verdict, evidence or a production qualification result. There is no hidden paid inference or upstream credential fallback.
 

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import signal
 import sys
+import traceback
 
 UPSTREAM='bf0203a794a07aac3ff764972ab9087baa4e4f4e'
 VERSION='gabriel-hermes-bridge-v1'
@@ -30,6 +31,10 @@ def execute(packet):
     provenance=json.loads(Path('/etc/hermes/image-provenance.json').read_text())
     if provenance.get('revision')!=UPSTREAM or json.loads(Path('/opt/hermes/install-stamp.json').read_text()).get('commit')!=UPSTREAM:
         raise ValueError('unexpected_hermes_source')
+    # Pin a conservative local working window; isolated turns must never probe
+    # provider metadata or silently infer a context window from the network.
+    Path(os.environ['HERMES_HOME'],'config.yaml').write_text(json.dumps(dict(model=dict(
+        default=packet['model'],provider='custom',base_url='http://127.0.0.1:9/v1',context_length=16384))))
     sys.path.insert(0,'/opt/hermes')
     STAGE='imports'
     import httpx
@@ -60,6 +65,9 @@ def execute(packet):
         request_overrides=dict(temperature=0,response_format=dict(type='json_object')))
     try:
         agent.tools=[];agent.valid_tool_names=set();agent._persist_disabled=True
+        from agent.agent_init import set_config_context_length
+        set_config_context_length(agent,16384)
+        agent.context_compressor.context_length=16384
         agent._build_system_prompt=lambda *args,**kwargs:messages[0]['content']
         agent._cached_system_prompt=messages[0]['content'];agent._cached_system_prompt_static=messages[0]['content']
         STAGE='conversation'
@@ -88,5 +96,6 @@ if __name__=='__main__':
     try:main()
     except (Exception,BoundaryViolation) as error:
         code=str(error) if str(error) in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source'} else 'details_withheld'
-        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(error).__name__,code=code)))
+        frames=[dict(file=Path(f.filename).name,line=f.lineno,function=f.name) for f in traceback.extract_tb(error.__traceback__)[-12:]]
+        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(error).__name__,code=code,frames=frames)))
         raise SystemExit(2)
