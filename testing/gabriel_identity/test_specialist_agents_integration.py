@@ -204,13 +204,15 @@ def test_workbench_stop_is_not_blocked_by_agent_provider_io(tenant,cases,case,ev
         assert running.result(timeout=3)=='200 OK'
 
 
-def test_memory_read_tool_keeps_contents_local(tenant,cases,case,evidence,setup):
+def test_memory_read_tool_without_supported_history_exports_no_contents(tenant,cases,case,evidence,setup):
     _,holder=intake(tenant,cases,case,evidence,kind='recovery',data=dict(check='restore',result='fail',baseline='current'))
     setup['client'].chosen_tool='review_memory'
     result=start(setup,cases,case,holder,role='recovery_learning')
     assert result['state']=='completed_requires_review'
     context=json.loads(setup['posts'][1]['messages'][1]['content'])['tool_results'][0]
-    assert context['tool']=='review_memory' and context['result']==dict(reviewed_local_references=0,contents_exported=False)
+    assert context['tool']=='review_memory' and context['result']['state']=='no_supported_references'
+    assert context['result']['historical_assertions']==[] and not context['result']['contents_exported']
+    assert not context['result']['free_text_exported'] and not context['result']['model_training_performed']
 
 
 def test_personal_ciphertext_is_cryptographically_bound_to_its_owner(tenant,cases,setup):
