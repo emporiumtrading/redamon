@@ -34,9 +34,9 @@ class ProposedPacket(unittest.TestCase):
         for index,role in enumerate(agents.ROLES,1):
             ordinary=json.loads(requests[role+'/current']['body']['messages'][1]['content'])
             historical=json.loads(requests[role+'/historical']['body']['messages'][1]['content'])
-            self.assertEqual(ordinary['tool_results'],[])
+            self.assertEqual([t['tool'] for t in ordinary['tool_results']],['assess_exposure'] if role=='exposure_vulnerability' else [])
             self.assertEqual(ordinary['observations'],historical['observations'])
-            reference=historical['tool_results'][0]['result']
+            reference=next(t['result'] for t in historical['tool_results'] if t['tool']=='review_memory')
             self.assertEqual(reference['historical_assertions'][0]['id'],'h1')
             self.assertFalse(reference['independent_corroboration'])
             wire=json.dumps(requests[role+'/historical']['body'])

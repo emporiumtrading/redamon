@@ -8,6 +8,7 @@ from gabriel.identity import hermes_supervisor as hermes,specialist_agents as ag
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.model_evaluation import digest
 from gabriel.identity.reviewed_memory import VERSION as MEMORY_VERSION
+from gabriel.identity.investigation_tools import native
 
 SAMPLES={
     'telemetry_health':('coverage',dict(state='missing')),
@@ -53,7 +54,7 @@ def export():
         wire=canonical(body)
         if len(wire)>7000:raise ValueError('proposed_request_exceeds_existing_wire_limit')
         if any(value.encode() in wire for value in private):raise ValueError('private_fixture_identifier_in_request')
-        requests.append(dict(name=name,configuration_digest=digest(configuration),body=body,body_sha256=digest(body),
+        requests.append(dict(name=name,configuration_digest=digest(configuration),body=body,body_sha256=digest(body),allowed_references=sorted(prepared['local_manifest']['lineage']),
             source_classification='authored_synthetic_development_only',independent_adjudication='pending'))
     composite=None
     for index,role in enumerate(agents.ROLES,1):
@@ -62,7 +63,8 @@ def export():
         if composite is None:composite=deepcopy(doc)
         else:composite['facts'].extend(deepcopy(doc['facts']))
         config=agents.configuration(role);configurations[role]=config
-        for name,tools in [('current',[]),('historical',[history(index,doc)])]:
+        initial=[dict(tool='assess_exposure',result=native('assess_exposure',doc,role,2))] if role=='exposure_vulnerability' else []
+        for name,tools in [('current',initial),('historical',initial+[history(index,doc)])]:
             add(role+'/'+name,config,agents.prompt(role),agents.project(doc,role,UUID(int=7000+index),tools))
     for stage in ('plan','report'):
         config=hermes.configuration(stage);configurations['hermes/'+stage]=config

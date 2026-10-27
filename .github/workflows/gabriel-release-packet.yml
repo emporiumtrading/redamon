@@ -18,6 +18,7 @@ jobs:
         run: |
           mkdir -m 700 "$RUNNER_TEMP/gabriel-release-packet"
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_release_trial:/trial:ro" gabriel-proposed-release /trial/test_packet.py
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=8m --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_release_trial:/trial:ro" gabriel-proposed-release /trial/test_runner.py
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -e PYTHONPATH=/app --entrypoint python -v "$GITHUB_WORKSPACE/testing/gabriel_release_trial:/trial:ro" gabriel-proposed-release /trial/packet.py > "$RUNNER_TEMP/gabriel-release-packet/request-packet.json"
           git rev-parse HEAD > "$RUNNER_TEMP/gabriel-release-packet/source-sha.txt"
           docker image inspect gabriel-proposed-release --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-release-packet/image-id.txt"
