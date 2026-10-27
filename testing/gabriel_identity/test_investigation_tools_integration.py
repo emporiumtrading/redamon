@@ -106,5 +106,6 @@ def test_agent_model_tool_model_loop_executes_real_yara_without_exporting_raw_by
     second=json.loads(setup['posts'][1]['messages'][1]['content'])
     scan=next(t for t in second['tool_results'] if t['tool']=='scan_artifacts')
     assert scan['result']['artifacts'][0]['matched_rule_ids']==['powershell_encoded_command']
+    assert scan['result']['artifacts'][0]['references']==['o1']
     assert content not in json.dumps(setup['posts']) and setup['secret'] not in json.dumps(second)
     assert 'Use scan_artifacts' in setup['posts'][0]['messages'][0]['content']
