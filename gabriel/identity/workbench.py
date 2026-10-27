@@ -395,12 +395,12 @@ class Workbench:
         if path=='/cases/new' and method=='GET':
             if principal.role=='viewer': raise AccessDenied('operation_not_permitted')
             self._create=secrets.token_urlsafe(32)
-            body=self._form('/cases','Create case','<input type="hidden" name="nonce" value="'+self._create+'"><label>Case title<input name="title" maxlength="160" required></label>')
+            body=self._form('/cases','Create case','<input type="hidden" name="nonce" value="'+self._create+'"><label>Case title<input name="title" maxlength="160" required></label><label>Purpose<select name="purpose"><option value="investigation">Investigation</option><option value="performance_test">Performance test — learning disabled</option></select></label>')
             return '200 OK',self._page('New investigation',body,principal),[]
         if path=='/cases' and method=='POST':
-            if set(fields)!={'csrf','nonce','title'} or not self._create or not hmac.compare_digest(fields['nonce'],self._create): raise AccessDenied('fresh_case_form_required')
+            if set(fields)-{'purpose'}!={'csrf','nonce','title'} or not self._create or not hmac.compare_digest(fields['nonce'],self._create): raise AccessDenied('fresh_case_form_required')
             self._create=None
-            case=self.service.create_case(self._token,fields['title'])
+            case=self.service.create_case(self._token,fields['title'],purpose=fields.get('purpose','investigation'))
             return '303 See Other',b'',[('Location','/cases/'+str(case['id']))]
         action=re.fullmatch('/cases/('+ID+')/(assign|question|answer)',path)
         if method=='POST' and action:
@@ -418,6 +418,10 @@ class Workbench:
             case_id,operation=memory.groups()
             path='/cases/'+case_id+'/memory'
             case=self.service.get_case(self._token,case_id)
+            if case['case']['purpose']=='performance_test':
+                if method!='GET' or operation:raise AccessDenied('performance_test_memory_excluded')
+                return '200 OK',self._page('Performance test — learning disabled',
+                    '<p class="notice">This case is for performance testing. Learning proposals and reference reuse are disabled. Evidence and investigation results remain available for performance review. No model training is performed.</p>',principal),[]
             history=self.service.list_memory(self._token,case_id)
             if method=='POST':
                 if operation=='propose' and set(fields)=={'csrf','request_id','evidence_id','kind','scope','topic','supersedes'}:
@@ -445,7 +449,7 @@ class Workbench:
                 labels={'proposed':'Needs review','eligible_pending_content_check':'Reviewed; source content will be verified before use',
                     'forgotten':'Excluded from retrieval','reset':'Excluded by organization reset','superseded':'Superseded by a proposed correction',
                     'expired':'Expired','rejected':'Rejected','authority_unavailable':'Excluded: contributor or reviewer access changed',
-                    'source_unavailable':'Excluded: source evidence is unavailable'}
+                    'source_unavailable':'Excluded: source evidence is unavailable','performance_test_excluded':'Excluded: performance test data'}
                 body+='<section><h2>'+e(row['topic'])+'</h2><p data-memory-status="'+e(row['status'])+'">'+e(labels[row['status']])+'</p><p>'+e(row['id'])+' · '+e(row['scope'])+' · '+e(row['sensitivity'])+' · Expires '+e(row['expires_at'])+'</p><p><a href="/cases/'+e(row['case_id'])+'/evidence/'+e(row['evidence_id'])+'">Review source evidence</a></p>'
                 if writable and row['status']=='proposed' and (row['scope']=='case' or principal.role in {'owner','admin'}):
                     body+=self._form(path+'/review','Record review','<input type="hidden" name="memory_id" value="'+e(row['id'])+'"><input type="hidden" name="expected_digest" value="'+e(row['source_digest'])+'"><label>Decision<select name="decision"><option value="approved">Approve as reference data</option><option value="rejected">Reject</option></select></label><label><input type="checkbox" name="acknowledged" value="yes" required>I reviewed this source and decision; approval is not proof of source truth.</label>')
@@ -671,6 +675,7 @@ class Workbench:
             return '200 OK',json.dumps(result,ensure_ascii=False,allow_nan=False).encode(),[('Content-Type','application/json'),('Content-Disposition','attachment; filename="gabriel-case-'+case_id+'.json"')]
         snapshot=result['snapshot']
         body='<p class="case-state">State: '+e(snapshot['case']['state'])+' · Coverage: partial · Assessment: not performed</p><p class="case-links"><a href="'+path+'/report">Download metadata report</a> · <a href="'+path+'/relationships">Explore provenance</a> · <a href="'+path+'/coordinator">Local investigation plan</a> · <a href="'+path+'/specialists">Specialist assessments</a> · <a href="'+path+'/hermes">Hermes supervisor</a> · <a href="'+path+'/agents">Specialist AI agents</a> · <a href="'+path+'/memory">Memory review</a></p>'
+        if snapshot['case']['purpose']=='performance_test':body+='<p class="notice">Performance test: learning disabled. Results are evaluation evidence, not training data.</p>'
         body+='<p class="case-links"><a href="'+path+'/attack-reviews">Attack pattern review</a> · <a href="'+path+'/environment">Environment and control profile</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']

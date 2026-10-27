@@ -220,7 +220,8 @@ class CaseService(IdentityService):
         aad = object_aad(row)
         return verified_read(self.store,conn,storage_row(conn,row,aad),aad)
 
-    def create_case(self,token,title):
+    def create_case(self,token,title,*,purpose='investigation'):
+        if type(purpose) is not str or purpose not in {'investigation','performance_test'}:raise InvalidIdentityInput('invalid_case_purpose')
         if not isinstance(title,str) or not 1<=len(title.strip())<=160 or any(ord(c)<32 or ord(c)==127 for c in title):
             raise InvalidIdentityInput('invalid_case_title')
         with connection(self._dsn) as conn:
@@ -229,8 +230,8 @@ class CaseService(IdentityService):
                 (principal.organization_id,)).fetchone()['n']
             if count>=100:
                 raise AccessDenied('open_case_limit')
-            row = conn.execute('''INSERT INTO gabriel_identity.cases (organization_id,id,title,created_by)
-                VALUES (%s,%s,%s,%s) RETURNING *''',(principal.organization_id,uuid4(),title.strip(),principal.user_id)).fetchone()
+            row = conn.execute('''INSERT INTO gabriel_identity.cases (organization_id,id,title,created_by,purpose)
+                VALUES (%s,%s,%s,%s,%s) RETURNING *''',(principal.organization_id,uuid4(),title.strip(),principal.user_id,purpose)).fetchone()
             _audit(conn,'case.created',principal,row['id'])
             return row
 
