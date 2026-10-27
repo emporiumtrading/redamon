@@ -37,6 +37,9 @@ def request(path,packet=None):
             logging.getLogger(__name__).warning('Required Hermes runtime failure; static stack locations: %s; native calls: %s; stream: %s',frames,result.get('native_calls') if type(result.get('native_calls')) is int else None,result.get('stream') if type(result.get('stream')) is bool else None)
             if result.get('error_type') in {'NameError','TypeError','ValueError','RuntimeError','AttributeError','APIConnectionError','JSONDecodeError','ModuleNotFoundError'}:
                 logging.getLogger(__name__).warning('Required Hermes failure type: %s',result['error_type'])
+            meta=result.get('request_metadata')
+            if type(meta) is dict and set(meta)<={'expected_count','actual_count','actual_roles','message_keys','content_equal','tools_present','model_matches'}:
+                logging.getLogger(__name__).warning('Native request shape: %s',meta)
             code=result.get('code')
             if code in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source','hermes_replay_api_error'}:
                 raise AccessDenied(code)

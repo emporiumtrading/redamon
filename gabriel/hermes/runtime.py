@@ -12,14 +12,16 @@ UPSTREAM='bf0203a794a07aac3ff764972ab9087baa4e4f4e'
 VERSION='gabriel-hermes-bridge-v1'
 STAGE='start'
 NATIVE_REQUESTS=[]
+POLICY_ERROR=''
+REQUEST_METADATA={}
 
 
-class BoundaryViolation(BaseException):
+class BoundaryViolation(RuntimeError):
     pass
 
 
 def execute(packet):
-    global STAGE,NATIVE_REQUESTS
+    global STAGE,NATIVE_REQUESTS,POLICY_ERROR,REQUEST_METADATA
     if type(packet) is not dict or set(packet)!={'model','messages','answer'}:
         raise ValueError('invalid_hermes_packet')
     if packet['model']!='openai/gpt-oss-120b':raise ValueError('unsupported_hermes_model')
@@ -56,10 +58,21 @@ def execute(packet):
         def __exit__(self,*args):self.close()
         def close(self):pass
     def completion(**body):
-        if calls:raise BoundaryViolation('hermes_single_turn_limit')
-        calls.append(body)
-        if body.get('messages')!=messages or body.get('tools') or body.get('model')!=packet['model']:
-            raise BoundaryViolation('hermes_request_binding_failed')
+        global POLICY_ERROR,REQUEST_METADATA
+        def reject(code):
+            global POLICY_ERROR
+            if not POLICY_ERROR:POLICY_ERROR=code
+            raise BoundaryViolation(code)
+        if calls:reject('hermes_single_turn_limit')
+        calls.append(dict(body,messages=json.loads(json.dumps(body.get('messages')))))
+        outgoing=body.get('messages')
+        REQUEST_METADATA=dict(expected_count=len(messages),actual_count=len(outgoing) if type(outgoing) is list else None,
+            actual_roles=[m.get('role') for m in outgoing if type(m) is dict] if type(outgoing) is list else [],
+            message_keys=[sorted(m) for m in outgoing if type(m) is dict] if type(outgoing) is list else [],
+            content_equal=[m.get('content')==messages[i]['content'] for i,m in enumerate(outgoing[:2]) if type(m) is dict] if type(outgoing) is list else [],
+            tools_present=bool(body.get('tools')),model_matches=body.get('model')==packet['model'])
+        if outgoing!=messages or body.get('tools') or body.get('model')!=packet['model']:
+            reject('hermes_request_binding_failed')
         # Replay bookkeeping is internal and synthetic; Gabriel separately
         # verifies and records the actual provider's usage and cost receipt.
         usage=dict(prompt_tokens=100,completion_tokens=50,total_tokens=150)
@@ -120,12 +133,12 @@ def main():
 if __name__=='__main__':
     try:main()
     except (Exception,BoundaryViolation) as error:
-        code=str(error) if str(error) in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source','hermes_replay_api_error'} else 'details_withheld'
+        code=POLICY_ERROR or (str(error) if str(error) in {'hermes_single_turn_limit','hermes_request_binding_failed','hermes_response_binding_failed','hermes_turn_deadline','unexpected_hermes_source','hermes_replay_api_error'} else 'details_withheld')
         root=error;seen=set()
         while id(root) not in seen:
             seen.add(id(root));cause=root.__cause__ or root.__context__
             if cause is None or id(cause) in seen:break
             root=cause
         frames=[dict(file=Path(f.filename).name,line=f.lineno,function=f.name) for f in traceback.extract_tb(root.__traceback__)[-12:]]
-        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(root).__name__,code=code,frames=frames,native_calls=len(NATIVE_REQUESTS),stream=NATIVE_REQUESTS[0].get('stream') if NATIVE_REQUESTS else None)))
+        print(json.dumps(dict(error='hermes_turn_failed',stage=STAGE,error_type=type(root).__name__,code=code,frames=frames,request_metadata=REQUEST_METADATA,native_calls=len(NATIVE_REQUESTS),stream=NATIVE_REQUESTS[0].get('stream') if NATIVE_REQUESTS else None)))
         raise SystemExit(2)
