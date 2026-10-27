@@ -218,17 +218,28 @@ class Workbench:
             body+=self._form('/personal-providers/save','Save and verify my key','<label>Personal OpenRouter API key<input type="password" name="api_key" autocomplete="off" maxlength="512" required></label>')
             body+=self._form('/personal-providers/revoke','Revoke my key','<p>Future dispatches using this key will be denied.</p>')
             return '200 OK',self._page('My AI key',body,principal),[]
+        tool_path=re.fullmatch('/cases/('+ID+')/tools',path)
+        if tool_path:
+            if method!='POST' or principal.role not in {'owner','admin','analyst'}:raise AccessDenied('operation_not_permitted')
+            if set(fields)!={'csrf','request_id','input_evidence_id','role_tool','approved'} or fields['approved']!='yes':raise AccessDenied('tool_analysis_consent_required')
+            from gabriel.identity.investigation_tools import inspect
+            parts=fields['role_tool'].split('/')
+            if len(parts)!=2:raise AccessDenied('invalid_tool_selection')
+            case_id=tool_path.group(1)
+            result=inspect(self.service,self._token,case_id,fields['input_evidence_id'],parts[0],parts[1],fields['request_id'])
+            body='<p>Local tool report saved. No model call was made. Review tool status, coverage and limits before drawing conclusions.</p><p><a href="/cases/'+case_id+'/evidence/'+e(result['report_evidence_id'])+'">Review encrypted tool report</a> · <a href="/cases/'+case_id+'/agents">Back to specialists and tools</a></p>'
+            return '200 OK',self._page('Investigation tool report',body,principal),[]
         agent_path=re.fullmatch('/cases/('+ID+')/agents(?:/('+ID+')/(resume|stop))?',path)
         if agent_path:
             from gabriel.identity import specialist_agents as agents
             from gabriel.identity.specialist_contracts import ROLES
             case_id,job_id,operation=agent_path.groups()
             if principal.role not in {'owner','admin','analyst'}:raise AccessDenied('operation_not_permitted')
-            if self._provider_vault is None:raise AccessDenied('provider_vault_not_configured')
             base='/cases/'+case_id+'/agents'
             snapshot=self.service.get_case(self._token,case_id)
             body='<p>Each specialist is a designated AI agent with a role-specific prompt, source-linked results and an allowlist of local read tools. Agents may investigate within three reasoning rounds; response actions remain separate.</p>'
             if method=='POST':
+                if self._provider_vault is None:raise AccessDenied('provider_vault_not_configured')
                 if job_id:
                     if set(fields)!={'csrf'}:raise AccessDenied('invalid_agent_form')
                     result=agents.stop(self.service,self._token,job_id) if operation=='stop' else agents.resume(self.service,self._provider_vault,self._token,job_id)
@@ -241,9 +252,14 @@ class Workbench:
             elif method!='GET':raise AccessDenied('workbench_route_denied')
             statuses=[agents.readiness(role) for role in ROLES]
             body+=table(['Agent','AI configuration','Local read tools'],[(e(x['role'].replace('_',' ')),e(x['qualification'].replace('_',' ')),e(', '.join(x['tools']))) for x in statuses])
+            body+='<p>Packaged open-source tools and their skills are available for local evidence analysis without an AI key. Parser availability is checked on use. Tool failures and unsupported formats remain explicit; missing tools are never silently installed.</p>'
             if snapshot['case']['state']=='open':
                 options=''.join('<option value="'+e(row['id'])+'">'+e(row['id'])+'</option>' for row in snapshot['evidence'] if row['state']=='ready' and row['storage_state']=='active')
                 if options:
+                    catalog={row['name']:row for status in statuses for row in status['tool_manifest']}
+                    body+=table(['Tool','Open-source license','Usage skill'],[(e(n.replace('_',' ')),e(row['license']),e(row['description'])) for n,row in catalog.items()])
+                    choices=''.join('<option value="'+role+'/'+name+'">'+e(role.replace('_',' ')+' / '+name.replace('_',' '))+'</option>' for role in ROLES for name in agents.TOOLS[role])
+                    body+=self._form('/cases/'+case_id+'/tools','Run local investigation tool','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Specialist and tool<select name="role_tool">'+choices+'</select></label><label>Typed evidence<select name="input_evidence_id">'+options+'</select></label><label><input type="checkbox" name="approved" value="yes" required>Analyze only the source artifacts linked by these typed facts, within this case.</label>')
                     body+=self._form(base,'Start specialist agent','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Specialist<select name="role"><option value="all">Coordinator: relevant agents</option>'+''.join('<option value="'+role+'">'+e(role.replace('_',' '))+'</option>' for role in ROLES)+'</select></label><label>Typed evidence<select name="input_evidence_id">'+options+'</select></label><label>Model<select name="model">'+''.join('<option value="'+e(m)+'"'+(' selected' if m==agents.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in agents.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label><label><input type="checkbox" name="approved" value="yes" required>I approve sending minimized typed facts and local tool summaries to this model for this investigation.</label>')
             for record in agents.history(self.service,self._token,case_id):
                 body+='<section><h2>'+e(record['role'].replace('_',' '))+'</h2><p>'+e(record['created_at'])+'</p>'+self._form(base+'/'+record['id']+'/resume','Inspect or resume agent','')+self._form(base+'/'+record['id']+'/stop','Stop agent','')+'</section>'
@@ -641,7 +657,7 @@ class Workbench:
         status='403 Forbidden'
         body=self._page('Access unavailable','<p>Check your access, scope and ticket expiry with your Gabriel operator.</p>')
         try:
-            slow=environ.get('REQUEST_METHOD')=='POST' and (re.fullmatch('/cases/'+ID+'/agents(?:/'+ID+'/(?:resume|stop))?',environ.get('PATH_INFO','')) or environ.get('PATH_INFO') in {'/personal-providers/save','/providers/save'})
+            slow=environ.get('REQUEST_METHOD')=='POST' and (re.fullmatch('/cases/'+ID+'/agents(?:/'+ID+'/(?:resume|stop))?',environ.get('PATH_INFO','')) or re.fullmatch('/cases/'+ID+'/tools',environ.get('PATH_INFO','')) or environ.get('PATH_INFO') in {'/personal-providers/save','/providers/save'})
             with self._lock:
                 now=time.monotonic()
                 if now-self._window>=60: self._window,self._calls=now,0

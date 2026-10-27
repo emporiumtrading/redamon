@@ -1,6 +1,6 @@
 # Explicit operator opt-in. Model transport retains its fixed provider endpoint.
 services:
   workbench:
-    networks: [private, ai_egress]
+    networks: [private, toolbus, ai_egress]
 networks:
   ai_egress: {}

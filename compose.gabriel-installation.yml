@@ -50,6 +50,10 @@ services:
     secrets: [app_dsn, owner_dsn, provider_keyring, evidence_keyring]
   workbench:
     <<: *app
+    networks: [private, toolbus]
+    depends_on:
+      investigation-tools:
+        condition: service_healthy
     entrypoint: [python, -m, gabriel.identity.installation, serve]
     secrets: [app_dsn, provider_keyring, evidence_keyring, tls_certificate, tls_key, tls_ca]
     healthcheck:
@@ -57,6 +61,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+  investigation-tools:
+    image: ${GABRIEL_INSTALL_IMAGE}
+    user: '10001:10001'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 256m
+    cpus: 1
+    networks: [toolbus]
+    tmpfs: ['/tmp:rw,noexec,nosuid,nodev,size=8m']
+    entrypoint: [python, -m, gabriel.toolbox.server]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8450/health',timeout=2).read()"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
   local-entry:
     image: ${GABRIEL_INSTALL_IMAGE}
     user: '10001:10001'
@@ -78,6 +99,8 @@ services:
       timeout: 3s
       retries: 15
 networks:
+  toolbus:
+    internal: true
   private:
     internal: true
   entry:

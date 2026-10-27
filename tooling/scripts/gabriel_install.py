@@ -122,7 +122,7 @@ class Installation:
         self.start_db()
         self.compose('stop','local-entry','workbench')
         self.operator('revoke')
-        self.compose('stop','identity-db')
+        self.compose('stop','investigation-tools','identity-db')
 
     def open(self,password,*,ai_egress=False,username=None):
         if type(ai_egress) is not bool:raise ValueError('invalid_ai_egress_option')

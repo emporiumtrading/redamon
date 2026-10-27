@@ -1,0 +1,75 @@
+"""Real private toolbox, PostgreSQL/custody, encrypted reports and HTTPS permissions."""
+import base64
+import http.client
+import json
+import os
+from uuid import uuid4
+
+import pytest
+
+from gabriel.identity import investigation_tools as tools
+from gabriel.identity.service import AccessDenied
+from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
+from testing.gabriel_identity.test_cases_integration import cases,case,evidence
+from testing.gabriel_identity.test_specialist_analysis_integration import intake
+from testing.gabriel_identity.test_investigation_tools import capture,logs
+from testing.gabriel_identity.test_workbench_integration import boot,server,connect,call,csrf
+
+pytestmark=pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def toolbox():
+    status=tools.remote('inspect_toolkit')
+    if status.get('status')!='ready':
+        if os.environ.get('GABRIEL_REQUIRE_TOOLBOX')=='1':pytest.fail('private_toolbox_required')
+        pytest.skip('private toolbox service required')
+
+
+@pytest.mark.parametrize('name,content,role',[
+    ('scan_artifacts','generated powershell -EncodedCommand example','dfir_evidence'),
+    ('inspect_packets',capture().decode(),'incident_scoping'),
+    ('inspect_logs',logs().decode(),'identity_access'),
+])
+def test_source_bytes_reach_real_tools_and_only_minimized_results_return(tenant,cases,case,name,content,role):
+    source=cases.acquire(tenant.token,case['id'],uuid4(),content,'Generated tool source',approved=True)
+    kind,data=('artifact',dict(integrity='match',custody='complete')) if role=='dfir_evidence' else ('activity',dict(category='network',outcome='failure',count=5)) if role=='incident_scoping' else ('identity',dict(event='mfa_disabled',authorized='no'))
+    _,holder=intake(tenant,cases,case,source,kind,data)
+    result=tools.inspect(cases,tenant.token,case['id'],holder['id'],role,name,uuid4())
+    item=result['result']['result']['artifacts'][0]
+    assert item['status']=='analyzed' and not result['model_used']
+    if name=='scan_artifacts':assert item['matched_rule_ids']==['powershell_encoded_command']
+    elif name=='inspect_packets':assert item['packet_count']==1
+    else:assert item['failure_burst_then_success_groups']==1
+    assert content not in json.dumps(result['result']) and str(source['id']) not in json.dumps(result['result'])
+    report=json.loads(cases.read_evidence(tenant.token,result['report_evidence_id']).reveal())
+    assert report['requires_review'] and report['tool_result']==result['result']
+
+
+def test_unowned_case_and_disallowed_role_tools_do_not_contact_worker(tenant,cases,case,evidence,monkeypatch):
+    _,holder=intake(tenant,cases,case,evidence)
+    def denied(*args):raise AssertionError('unauthorized remote call')
+    monkeypatch.setattr(tools,'remote',denied)
+    with pytest.raises(AccessDenied,match='not_admitted'):
+        tools.execute(cases,tenant.token,case['id'],holder['id'],'exposure_vulnerability','scan_artifacts')
+    other=cases.create_case(tenant.token,'Generated other case')
+    with pytest.raises(AccessDenied):tools.execute(cases,tenant.token,other['id'],holder['id'],'alert_triage','inspect_logs')
+
+
+def test_worker_refuses_unknown_commands_and_never_returns_source_text():
+    client=http.client.HTTPConnection('investigation-tools',8450,timeout=8)
+    client.request('POST','/analyze',body=json.dumps(dict(tool='shell',data=base64.b64encode(b'private generated source').decode())),headers={'Content-Type':'application/json'})
+    response=client.getresponse();body=response.read();client.close()
+    assert response.status==422 and b'private generated source' not in body
+
+
+def test_local_tool_form_works_without_a_model_call_and_requires_csrf(server,cases,tenant,case,evidence):
+    _,holder=intake(tenant,cases,case,evidence)
+    cookie,_,_=connect(server)
+    status,html,_=call(server,'/cases/'+str(case['id'])+'/agents',cookie=cookie)
+    assert status==200 and 'Run local investigation tool' in html and 'Apache-2.0' in html
+    fields=dict(csrf=csrf(html),request_id=str(uuid4()),input_evidence_id=str(holder['id']),role_tool='alert_triage/review_rules',approved='yes')
+    status,html,_=call(server,'/cases/'+str(case['id'])+'/tools',fields,cookie=cookie)
+    assert status==200 and 'No model call was made' in html
+    fields['csrf']='invalid'
+    assert call(server,'/cases/'+str(case['id'])+'/tools',fields,cookie=cookie)[0]==403
