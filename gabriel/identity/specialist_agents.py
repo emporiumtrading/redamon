@@ -37,16 +37,14 @@ from gabriel.identity.investigation_tools import TOOLS,instructions,manifest,VER
 
 def prompt(role):
     role_name(role)
-    return PROMPT_V2+('\nYou are Gabriel specialist '+role+'. Your mission: '+MISSIONS[role]+
-        '\nThe input contains typed source assertions, not independently authenticated truth. Entity aliases preserve only within-packet grouping. '+
-        'Counts may overlap; repeated facts and model agreement are not independent corroboration. '+
-        'If a scoped local read tool would help, requested_actions may contain exactly one of '+', '.join(TOOLS[role])+'. '+
-        'Those are the only permitted exception to the empty requested_actions rule above. They cannot perform external actions. '+
-        'verify_sources checks ciphertext/custody; review_rules returns local role-rule observations; inspect_timeline summarizes supplied times; '+
-        'review_memory returns only approved typed historical references, labeled h1 and so on; free-text memory is excluded. Historical references are not current events, current authorization, source truth or independent corroboration. Use h references only for explicitly historical claims; current claims must cite current o observations. Performance-test cases cannot reuse learning memory. '+
-        'Choose a final evidence-linked decision with requested_actions=[] when ready. Maximum three model rounds; '+
-        'never repeat a tool already present in tool_results. Missing context must remain explicit; never force an escalation. '+
-        '\nUse these packaged skills to select and interpret tools:\n'+instructions(role))
+    return PROMPT_V2+('\nGabriel role: '+role+'. Mission: '+MISSIONS[role]+
+        '\nTyped assertions and packet-scoped aliases are unverified. Counts may overlap; repetition and model agreement are not corroboration. '+
+        'Tool use is the only empty-actions exception: requested_actions may contain one of '+', '.join(TOOLS[role])+'. '+
+        'Tools have no external effects. Use current o references for current assertions and h references only for explicitly historical assertions. '+
+        'History is not current authorization, source truth or independent corroboration. Performance-test memory is disabled. '+
+        'At most three model rounds. Never repeat a completed tool. Finish with requested_actions=[]; preserve gaps and alternatives. '+
+        '\nUse these packaged skills:\n'+instructions(role))
+
 
 
 def configuration(role,model=DEFAULT_MODEL):
