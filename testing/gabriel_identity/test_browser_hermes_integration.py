@@ -99,14 +99,13 @@ def test_second_tab_change_during_provider_call_stops_without_child_dispatch(ten
 
 
 def test_receipt_assertion_time_does_not_inherit_client_clock_skew():
-    from gabriel.identity.cases import iso
     from gabriel.identity.specialist_analysis import validate_document
-    received=datetime.now(timezone.utc);case_id=uuid4()
+    received=datetime(2026,1,2,3,4,5,123456,tzinfo=timezone.utc);case_id=uuid4()
     observation=dict(id=uuid4(),received_at=received,observed_at=received+timedelta(seconds=3))
     artifact=dict(id=uuid4(),digest='a'*64)
     facts=browser_hermes.capture_facts(observation,artifact)
-    assert all(f['event_time']==iso(received) for f in facts)
-    document=dict(version='specialist-facts-v1',case_id=str(case_id),as_of=iso(received),facts=facts)
+    assert all(f['event_time']=='2026-01-02T03:04:05.123456Z' for f in facts)
+    document=dict(version='specialist-facts-v1',case_id=str(case_id),as_of='2026-01-02T03:04:05.123456Z',facts=facts)
     assert validate_document(document,case_id)==document
 
 

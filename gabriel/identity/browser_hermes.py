@@ -17,7 +17,7 @@ def capture_facts(observation,artifact):
     """These two claims concern the receipt, never the truth of page content."""
     parent=identifier(observation['id'])
     common=dict(evidence_id=str(artifact['id']),evidence_digest=artifact['digest'],entity_id=None,
-        event_time=iso(observation['received_at']))
+        event_time=iso(observation['received_at']).replace('+00:00','Z'))
     return [dict(common,id=str(uuid5(parent,VERSION+'/integrity')),type='artifact',data=dict(integrity='match',custody='unknown')),
         dict(common,id=str(uuid5(parent,VERSION+'/coverage')),type='coverage',data=dict(state='missing'))]
 
@@ -64,7 +64,8 @@ def snapshot(service,conn,p,case_id,lease_ids):
         if artifact['case_id']!=case_id or artifact['digest']!=observation['content_digest']:
             raise AccessDenied('hermes_capture_binding_mismatch')
         facts.extend(capture_facts(observation,artifact));captures.append(observation)
-    document=dict(version='specialist-facts-v1',case_id=str(case_id),as_of=iso(max(o['received_at'] for o in captures)),facts=facts)
+    document=dict(version='specialist-facts-v1',case_id=str(case_id),
+        as_of=iso(max(o['received_at'] for o in captures)).replace('+00:00','Z'),facts=facts)
     validate_document(document,case_id)
     return document,captures
 

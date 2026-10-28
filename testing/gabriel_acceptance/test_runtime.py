@@ -1,22 +1,23 @@
 """Run in the installation image; generated Docker inspect fault injection only."""
 from copy import deepcopy
 import json
+import hashlib
 from pathlib import Path
 import sys
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tooling/scripts'))
-from gabriel_acceptance import assess,SERVICES,NETWORKS,MOUNTS,RUNTIME_FILES,validate_runtime_sources
+from gabriel_acceptance import assess,SERVICES,NETWORKS,MOUNTS,RUNTIME_FILES,validate_runtime_sources,committed_runtime_sources,BIND_FILES,VOLUME_NAMES
 
 
 class RuntimeAcceptance(unittest.TestCase):
     def setUp(self):
-        self.config=dict(project='generated-project',image='sha256:'+'a'*64,hermes_image='sha256:'+'a'*64,port=18444)
+        self.config=dict(project='generated-project',image='sha256:'+'a'*64,hermes_image='sha256:'+'a'*64,port=18444,installation_root='/generated-install')
         self.rows=[]
         for service in SERVICES:
             self.rows.append(dict(Image=self.config['image'],Config=dict(User='10001:10001',Labels={
                 'com.docker.compose.project':self.config['project'],'com.docker.compose.service':service}),
-                State=dict(Running=True,Health=dict(Status='healthy')),Mounts=[dict(Destination=k,Type=v[0],RW=v[1]) for k,v in MOUNTS.get(service,{}).items()],
+                State=dict(Running=True,Health=dict(Status='healthy')),Mounts=[dict(Destination=k,Type=v[0],RW=v[1],**(dict(Source='/generated-install/'+BIND_FILES[k]) if v[0]=='bind' else dict(Name='generated-project_'+VOLUME_NAMES[k]))) for k,v in MOUNTS.get(service,{}).items()],
                 HostConfig=dict(Tmpfs={} if service=='local-entry' else {'/tmp':'rw,noexec,nosuid,size=8m'},Privileged=False,ReadonlyRootfs=True,CapDrop=['ALL'],SecurityOpt=['no-new-privileges:true'],Memory=1024,PidsLimit=32,
                     PortBindings={'8444/tcp':[dict(HostIp='127.0.0.1',HostPort='18444')]} if service=='local-entry' else {}),
                 NetworkSettings=dict(Networks={'generated-project_'+n:{} for n in NETWORKS[service]})))
@@ -35,6 +36,32 @@ class RuntimeAcceptance(unittest.TestCase):
         for bad in (dict(expected,**{'model_worker.py':'b'*64}),dict(expected,unexpected='a'*64),
                     {n:v for n,v in expected.items() if n!='browser_hermes.py'},dict(expected,**{'service.py':None})):
             with self.assertRaises(ValueError):validate_runtime_sources(expected,bad)
+    def test_runtime_source_hashes_come_from_named_commit_not_working_tree(self):
+        source='a'*40
+        calls=[]
+        def git_blob(command):
+            calls.append(command)
+            return ('committed:'+command[-1]).encode()
+        expected=committed_runtime_sources(source,git_blob)
+        self.assertEqual(calls,[['git','show',source+':gabriel/identity/'+name] for name in RUNTIME_FILES])
+        self.assertEqual(expected['service.py'],hashlib.sha256(('committed:'+source+':gabriel/identity/service.py').encode()).hexdigest())
+        dirty=dict(expected,**{'service.py':hashlib.sha256(b'generated dirty runtime and checkout bytes').hexdigest()})
+        with self.assertRaisesRegex(ValueError,'running_runtime_source_mismatch'):validate_runtime_sources(expected,dirty)
+        with self.assertRaisesRegex(ValueError,'invalid_source_identity'):committed_runtime_sources('HEAD',git_blob)
+    def test_wrong_secret_files_and_persistent_volume_names_are_rejected(self):
+        for service in SERVICES:
+            for target,expected in MOUNTS.get(service,{}).items():
+                rows=deepcopy(self.rows)
+                row=next(r for r in rows if r['Config']['Labels']['com.docker.compose.service']==service)
+                mount=next(m for m in row['Mounts'] if m['Destination']==target)
+                field='Source' if expected[0]=='bind' else 'Name'
+                mount[field]='/generated-other/wrong-file' if field=='Source' else 'generated-other-volume'
+                with self.subTest(service=service,target=target),self.assertRaisesRegex(ValueError,'secret_mount_source_changed|persistent_volume_changed'):
+                    assess(self.config,rows,self.networks)
+                del mount[field]
+                with self.subTest(service=service,target=target,missing=True),self.assertRaises(ValueError):
+                    assess(self.config,rows,self.networks)
+        self.assertNotIn('/generated-install',json.dumps(assess(self.config,self.rows,self.networks)))
     def test_every_service_required_healthy_and_unique(self):
         for change in ('missing','duplicate','unhealthy','foreign'):
             rows=deepcopy(self.rows)

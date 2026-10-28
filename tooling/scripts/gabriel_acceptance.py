@@ -22,6 +22,13 @@ RUNTIME_FILES=('service.py','schema.sql','schema_v31.sql','installation.py','wor
 
 NETWORKS={'identity-db':{'private'},'workbench':{'private','toolbus'},'hermes':{'toolbus'},
     'investigation-tools':{'toolbus'},'local-entry':{'private','entry'}}
+BIND_FILES={'/run/secrets/db_password':'database/db_password',
+    '/docker-entrypoint-initdb.d/01-gabriel-role.sql':'database/role_init.sql',
+    '/run/secrets/app_dsn':'database/app_dsn','/run/secrets/provider_keyring':'provider/keyring.json',
+    '/run/secrets/evidence_keyring':'evidence/keyring.json','/run/secrets/tls_certificate':'tls/server.pem',
+    '/run/secrets/tls_key':'tls/server.key','/run/secrets/tls_ca':'tls/ca.pem'}
+VOLUME_NAMES={'/var/lib/postgresql/data':'database','/var/lib/gabriel-evidence':'evidence',
+    '/var/lib/gabriel-workbench':'workbench'}
 MOUNTS={'identity-db':{'/var/lib/postgresql/data':('volume',True),'/run/secrets/db_password':('bind',False),
     '/docker-entrypoint-initdb.d/01-gabriel-role.sql':('bind',False)},
     'workbench':{'/var/lib/gabriel-evidence':('volume',True),'/var/lib/gabriel-workbench':('volume',True),
@@ -31,6 +38,12 @@ MOUNTS={'identity-db':{'/var/lib/postgresql/data':('volume',True),'/run/secrets/
 
 def require(condition,code):
     if not condition:raise ValueError(code)
+
+
+def committed_runtime_sources(source,run_command):
+    require(type(source) is str and re.fullmatch('[a-f0-9]{40}',source),'invalid_source_identity')
+    return {name:hashlib.sha256(run_command(['git','show',source+':gabriel/identity/'+name])).hexdigest()
+        for name in RUNTIME_FILES}
 
 
 def validate_runtime_sources(expected,actual):
@@ -45,6 +58,8 @@ def validate_runtime_sources(expected,actual):
 def assess(config,containers,networks,*,provider_egress=False):
     require(type(provider_egress) is bool,'invalid_egress_policy')
     require(re.fullmatch('sha256:[a-f0-9]{64}',config['image']) is not None,'invalid_image_identity')
+    root=Path(config['installation_root'])
+    require(root.is_absolute() and str(root)==config['installation_root'] and '..' not in root.parts,'invalid_installation_root')
     by_service={}
     for row in containers:
         labels=row['Config'].get('Labels') or {}
@@ -79,6 +94,10 @@ def assess(config,containers,networks,*,provider_egress=False):
             if mount.get('Type')=='tmpfs' and target=='/tmp':continue
             expected=MOUNTS.get(service,{}).get(target)
             require(expected is not None and (mount.get('Type'),mount.get('RW'))==expected,'unexpected_mount')
+            if expected[0]=='bind':
+                require(mount.get('Source')==str(root/BIND_FILES[target]),'secret_mount_source_changed')
+            else:
+                require(mount.get('Name')==config['project']+'_'+VOLUME_NAMES[target],'persistent_volume_changed')
         attached=row['NetworkSettings']['Networks']
         expected=set(NETWORKS[service])|({'ai_egress'} if service=='workbench' and provider_egress else set())
         require(set(attached)=={config['project']+'_'+n for n in expected},'network_membership_changed')
@@ -109,13 +128,12 @@ def collect(root,*,provider_egress=False):
     network_rows=json.loads(run(['docker','network','inspect',*names]))
     networks={row['Name']:row for row in network_rows}
     hermes_image=json.loads(run(['docker','image','inspect',app.config['project']+'-hermes:local']))[0]['Id']
-    report=assess(dict(app.config,hermes_image=hermes_image),containers,networks,provider_egress=provider_egress)
+    report=assess(dict(app.config,installation_root=str(root.resolve()),hermes_image=hermes_image),containers,networks,provider_egress=provider_egress)
     supervisor=json.loads(app.compose('exec','-T','workbench','python','-c',
         'import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))'))
     require(supervisor.get('status')=='ready' and re.fullmatch('[a-f0-9]{64}',supervisor.get('runtime_digest','')),'hermes_source_binding_failed')
     report['hermes_runtime']=supervisor
-    source_root=Path(__file__).resolve().parents[2]/'gabriel/identity'
-    expected={name:hashlib.sha256((source_root/name).read_bytes()).hexdigest() for name in RUNTIME_FILES}
+    expected=committed_runtime_sources(source,run)
     program=('import hashlib,json; from pathlib import Path; names='+repr(RUNTIME_FILES)+
         '; print(json.dumps({n:hashlib.sha256((Path("/app/gabriel/identity")/n).read_bytes()).hexdigest() for n in names}))')
     actual=json.loads(app.compose('exec','-T','workbench','python','-c',program))
