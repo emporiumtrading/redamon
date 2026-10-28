@@ -1,6 +1,8 @@
 """Real scoped captures and frozen multi-tab sources; provider replies are generated."""
 from datetime import datetime,timedelta,timezone
+from contextlib import contextmanager
 import json
+from threading import Event,Thread
 from types import SimpleNamespace
 from uuid import uuid4
 import pytest
@@ -27,6 +29,26 @@ def capture(tenant,cases,case,context,tab=1,sequence=1,existing=None,observed_of
         content='Generated dashboard\nGenerated lab account\nNo semantic parser is admitted for this page.')
     result=browser.observe_browser(tenant.token,lease.token,payload)
     return item,result
+
+
+@contextmanager
+def live_browser_links(items):
+    """Model extension heartbeats without refreshing the frozen page captures."""
+    stopped=Event();errors=[]
+    def pulse():
+        for browser,lease,scope,_,_ in items:browser.heartbeat_browser(lease.token,scope)
+    def run():
+        while not stopped.wait(5):
+            try:pulse()
+            except Exception as error:
+                errors.append(error);stopped.set()
+    pulse()
+    worker=Thread(target=run,daemon=True);worker.start()
+    try:yield
+    finally:
+        stopped.set();worker.join(timeout=15)
+        assert not worker.is_alive(),'generated_browser_heartbeat_did_not_stop'
+        assert not errors,'generated_browser_heartbeat_failed'
 
 
 def test_partial_tabs_prepare_idempotent_receipt_facts_without_text_export(tenant,cases,case,context):
@@ -73,19 +95,20 @@ def test_two_partial_tabs_run_native_hermes_and_personal_specialists_then_replay
     prepared=browser_hermes.prepare(cases,analyst.token,case['id'],ids)
     supervision['hermes_client'].selected=['telemetry_health','dfir_evidence']
     request=uuid4()
-    result=hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
-    assert result['state']=='hermes_completed_requires_review' and len(supervision['posts'])==6
-    assert result['scope']=='selected_tabs_and_bound_typed_facts'
-    assert result['delegated_roles']==['telemetry_health','dfir_evidence']
-    assert 'Generated dashboard' not in json.dumps(supervision['posts'])
-    replay=hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
-    for key in ('run_id','state','delegated_roles','plan_answer_evidence_id','report_answer_evidence_id'):
-        assert replay[key]==result[key]
-    for original,repeated in zip(result['agents'],replay['agents']):
-        assert repeated['result']['job_id']==original['result']['job_id']
-        assert [s['answer_evidence_id'] for s in repeated['result']['steps']]==[s['answer_evidence_id'] for s in original['result']['steps']]
-        assert all(s['historical'] for s in repeated['result']['steps'])
-    assert len(supervision['posts'])==6
+    with live_browser_links((one,two)):
+        result=hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
+        assert result['state']=='hermes_completed_requires_review' and len(supervision['posts'])==6
+        assert result['scope']=='selected_tabs_and_bound_typed_facts'
+        assert result['delegated_roles']==['telemetry_health','dfir_evidence']
+        assert 'Generated dashboard' not in json.dumps(supervision['posts'])
+        replay=hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
+        for key in ('run_id','state','delegated_roles','plan_answer_evidence_id','report_answer_evidence_id'):
+            assert replay[key]==result[key]
+        for original,repeated in zip(result['agents'],replay['agents']):
+            assert repeated['result']['job_id']==original['result']['job_id']
+            assert [s['answer_evidence_id'] for s in repeated['result']['steps']]==[s['answer_evidence_id'] for s in original['result']['steps']]
+            assert all(s['historical'] for s in repeated['result']['steps'])
+        assert len(supervision['posts'])==6
 
 
 def test_second_tab_change_during_provider_call_stops_without_child_dispatch(tenant,cases,case,context,supervision):
@@ -93,6 +116,7 @@ def test_second_tab_change_during_provider_call_stops_without_child_dispatch(ten
     one,_=capture(analyst,cases,case,context,1);two,_=capture(analyst,cases,case,context,2)
     ids=[str(one[1].id),str(two[1].id)]
     prepared=browser_hermes.prepare(cases,analyst.token,case['id'],ids)
+    supervision['hermes_client'].selected=['telemetry_health','dfir_evidence']
     supervision['hermes_client'].hermes_callback=lambda:capture(analyst,cases,case,context,2,2,two)
     with pytest.raises(AccessDenied):hermes.start(cases,supervision['vault'],analyst.token,case['id'],uuid4(),prepared['facts_evidence_id'],approved=True,lease_ids=ids)
     assert len(supervision['posts'])==1
