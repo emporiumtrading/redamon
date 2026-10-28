@@ -224,7 +224,15 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                 peer=read_document(directory/'peer.json',private=True)['token']
                 cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps(endpoint)+';document.getElementById("ticket").value='+json.dumps(ticket))
                 click(cdp,popup,'pair')
-                wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
+                def current_pairing():
+                    lease=navigation.get_browser_lease(human,enrollment['lease_id'])
+                    expected_scope='Organization '+str(lease['organization_id'])+'; Case '+str(case['id'])+'; Task '+str(task['id'])
+                    return (lease['state']=='active' and lease['authorization_current'] and lease['heartbeat_fresh']
+                        and str(lease['case_id'])==str(case['id']) and str(lease['task_id'])==str(task['id'])
+                        and all(str(lease[key])==str(value) for key,value in scope.items())
+                        and text(cdp,popup,'scope')==expected_scope)
+                # Periodic status can replace the pair notice before the next DOM poll.
+                wait_for(current_pairing)
                 granted=subprocess.run([sys.executable,'-m','testing.gabriel_browser.navigation_gateway','navigation-grant',
                     '--configuration',str(directory/'gateway.json'),'--navigation-file',str(plan_file)],env=env,capture_output=True,text=True,timeout=10)
                 assert granted.returncode==0 and not granted.stderr
