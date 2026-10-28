@@ -88,7 +88,7 @@ def test_invalid_or_unowned_selection_is_denied(tenant,cases,case):
     with pytest.raises(AccessDenied):browser_hermes.prepare(cases,tenant.token,case['id'],[uuid4()])
 
 
-def test_two_partial_tabs_run_native_hermes_and_personal_specialists_then_replay(tenant,cases,case,context,supervision):
+def test_two_partial_tabs_run_native_hermes_and_personal_specialists_reject_stale_replay(tenant,cases,case,context,supervision):
     analyst=SimpleNamespace(db=tenant.db,token=supervision['token'])
     one,_=capture(analyst,cases,case,context,1);two,_=capture(analyst,cases,case,context,2)
     ids=[str(one[1].id),str(two[1].id)]
@@ -101,14 +101,29 @@ def test_two_partial_tabs_run_native_hermes_and_personal_specialists_then_replay
         assert result['scope']=='selected_tabs_and_bound_typed_facts'
         assert result['delegated_roles']==['telemetry_health','dfir_evidence']
         assert 'Generated dashboard' not in json.dumps(supervision['posts'])
+        with owner_connection(tenant.db) as conn:
+            conn.execute("UPDATE gabriel_identity.browser_observation_receipts SET created_at=clock_timestamp()-interval '121 seconds' WHERE organization_id=%s AND observation_id IN (SELECT id FROM gabriel_identity.browser_observations WHERE lease_id=ANY(%s))",(tenant.org,[one[1].id,two[1].id]))
+        with pytest.raises(AccessDenied,match='hermes_fresh_tab_read_required'):
+            hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
+        assert len(supervision['posts'])==6
+
+
+def test_fresh_partial_tabs_replay_native_hermes_without_provider_resend(tenant,cases,case,context,supervision):
+    analyst=SimpleNamespace(db=tenant.db,token=supervision['token'])
+    one,_=capture(analyst,cases,case,context,1);two,_=capture(analyst,cases,case,context,2)
+    ids=[str(one[1].id),str(two[1].id)]
+    prepared=browser_hermes.prepare(cases,analyst.token,case['id'],ids)
+    supervision['hermes_client'].selected=[]
+    request=uuid4()
+    with live_browser_links((one,two)):
+        result=hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
+        assert result['state']=='hermes_completed_requires_review' and len(supervision['posts'])==2
+        assert result['scope']=='selected_tabs_and_bound_typed_facts'
+        assert result['agents']==[] and result['delegated_roles']==[]
         replay=hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
         for key in ('run_id','state','delegated_roles','plan_answer_evidence_id','report_answer_evidence_id'):
             assert replay[key]==result[key]
-        for original,repeated in zip(result['agents'],replay['agents']):
-            assert repeated['result']['job_id']==original['result']['job_id']
-            assert [s['answer_evidence_id'] for s in repeated['result']['steps']]==[s['answer_evidence_id'] for s in original['result']['steps']]
-            assert all(s['historical'] for s in repeated['result']['steps'])
-        assert len(supervision['posts'])==6
+        assert replay['agents']==[] and len(supervision['posts'])==2
 
 
 def test_second_tab_change_during_provider_call_stops_without_child_dispatch(tenant,cases,case,context,supervision):
