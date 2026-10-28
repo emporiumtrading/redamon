@@ -20,6 +20,7 @@ from wsgiref.simple_server import make_server,WSGIServer,WSGIRequestHandler
 import websocket
 from tls_lab import certificates
 from gabriel.identity.cases import CaseService
+from gabriel.identity.browser_observations import BrowserObservationService
 from gabriel.identity.checkpoints import read_document
 from gabriel.identity.cli import read_secret
 from gabriel.identity.evidence_store import EvidenceKeys,LocalEvidenceStore
@@ -98,6 +99,16 @@ def main():
         service.answer_question(token,case_id,question,report['report_evidence_id'],'Generated logs show five failures followed by a success. Verify the source identity, duplicate records and authorized activity before deciding on containment. This is an analyst review note, not an AI verdict.')
         service.add_question(token,case_id,uuid4(),'Is the reported reachable exposure covered by an approved mitigation?')
         memory=service.propose_memory(token,case_id,log_source['id'],uuid4(),'fact','case','sign_in_review')
+        browser=BrowserObservationService(app_dsn,service.store)
+        browser_task=browser.create_browser_task(token,'Generated UI source review',900,20)
+        browser_scopes=[]
+        for tab,state in [(1,'active'),(2,'pending'),(3,'disconnected')]:
+            scope=dict(browser='chrome',extension_version='0.4.0',installation_id=str(uuid4()),tab_id=tab,
+                document_id=str(uuid4()),page_url='https://generated-console.invalid/security',account_label='Generated lab account')
+            lease=browser.issue_browser_lease(token,browser_task['id'],case_id,scope,share_observations=True)
+            if state!='pending':browser.connect_browser(lease.token,scope)
+            if state=='disconnected':browser.disconnect_browser(lease.token)
+            browser_scopes.append((lease,scope,state))
         configuration=root/'workbench'
         listener=make_server('127.0.0.1',0,lambda e,s:[],server_class=Server,handler_class=Quiet)
         endpoint='https://localhost:'+str(listener.server_port)
@@ -127,7 +138,7 @@ def main():
             ticket=read_document(configuration/'claim.json',private=True)['ticket']
             cdp.evaluate(session,"document.querySelector('input[name=ticket]').value="+json.dumps(ticket)+";document.querySelector('form').requestSubmit();true")
             wait(lambda:cdp.evaluate(session,"document.title==='Investigations · Gabriel'"))
-            private_values=[password,token,ticket,app_dsn,owner_dsn]
+            private_values=[password,token,ticket,app_dsn,owner_dsn]+[lease.token for lease,_,_ in browser_scopes]
             def capture(name,title,kind='actual_generated_data',selector=None,width=1440):
                 cdp.send('Emulation.setDeviceMetricsOverride',dict(width=width,height=1000,deviceScaleFactor=1,mobile=False),session)
                 if selector:cdp.evaluate(session,"document.querySelector("+json.dumps(selector)+").scrollIntoView({block:'center'});true")
@@ -142,6 +153,19 @@ def main():
                 cdp.send('Page.navigate',{'url':endpoint+path},session)
                 wait(lambda:cdp.evaluate(session,'document.title==='+json.dumps(title+' · Gabriel')))
             base='/cases/'+case_id
+            capture('ui-investigation-dashboard','Bounded investigation queue and navigation')
+            navigate(base,'Generated lab: suspicious sign-ins')
+            capture('ui-case-overview','Evidence summary and next investigation steps')
+            capture('ui-mobile-overview','Case overview on mobile',selector='.summary-grid',width=390)
+            cdp.send('Emulation.setDeviceMetricsOverride',dict(width=320,height=1000,deviceScaleFactor=1,mobile=False),session)
+            assert cdp.evaluate(session,'document.documentElement.scrollWidth<=innerWidth')
+            active_lease,active_scope,_=browser_scopes[0]
+            browser.heartbeat_browser(active_lease.token,active_scope)
+            navigate('/sources','Browser health and coverage')
+            assert cdp.evaluate(session,"document.querySelectorAll('.source-card').length===3")
+            capture('ui-source-health','Connection state and unverified page visibility')
+            navigate(base+'/hermes','Hermes investigation supervisor')
+            capture('ui-hermes-workflow','Actual Hermes workflow and qualification state')
             navigate(base+'/agents','Specialist AI agents')
             cdp.evaluate(session,"document.querySelector('[name=role_tool]').value='incident_scoping/inspect_logs';document.querySelector('form[action$=\"/tools\"] [name=input_evidence_id]').value="+json.dumps(str(holder['id']))+";true")
             capture('select-investigation-tool','Choose a specialist and run an allowed local tool',selector='form[action$="/tools"]')
@@ -161,12 +185,15 @@ def main():
                 cdp.evaluate(session,'window.showView('+json.dumps(state)+');true')
                 capture('preview-'+state,title,kind='illustrative_design_not_implemented')
             manifest=dict(source_sha=os.environ['GABRIEL_GALLERY_SOURCE'],images=images,synthetic_data=True,
-                model_calls=0,production_admission=False,hermes_integrated=False,hermes_requirement='required_integration_in_progress',
+                model_calls=0,production_admission=False,hermes_integrated=True,hermes_requirement='required_runtime_not_production_admitted',
                 environment='Isolated Chromium screenshot lab, sandbox disabled inside non-root private Docker container',
                 actual_screens='Rendered current workbench against ephemeral PostgreSQL and actual local parser service',
                 design_previews='Clearly labeled static workflow concepts; external-response controls are disabled')
             (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-            print('PASS: five actual generated-data UI screens and three labeled workflow previews; no credentials or model calls')
+            ui_manifest=dict(manifest,images=[row for row in images if row['file'].startswith('ui-')],
+                design_previews='None in this subset; all five screens are current generated-data workbench captures')
+            (output/'workbench-manifest.json').write_text(json.dumps(ui_manifest,indent=2)+'\n')
+            print('PASS: ten actual generated-data UI screens and three labeled workflow previews; no credentials or model calls')
         finally:
             if cdp:cdp.ws.close()
             chrome.terminate();chrome.wait(timeout=10);listener.shutdown();listener.server_close()

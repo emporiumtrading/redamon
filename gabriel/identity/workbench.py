@@ -30,6 +30,11 @@ STYLE='''
 .shell{min-height:100vh;display:grid;grid-template-columns:250px minmax(0,1fr)}.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--line);padding:32px 20px;background:#0c1521eF;display:flex;flex-direction:column;gap:30px}.brand{display:flex;align-items:center;gap:12px;color:var(--text);text-decoration:none}.brand-mark{display:grid;place-items:center;width:54px;height:54px;flex-shrink:0;color:var(--accent)}.brand-mark svg{width:100%;height:100%;filter:drop-shadow(0 0 12px #e7c88a20)}.brand-name{display:block;font-size:21px;letter-spacing:2.5px;font-weight:650}.brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:2px;text-transform:uppercase}.nav-label,.eyebrow{color:var(--accent);font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:2px}.sidebar nav{display:grid;gap:7px;margin-top:12px}.sidebar nav a{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid transparent;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:550}.nav-icon{display:grid;place-items:center;width:24px;font-size:17px;color:var(--accent)}.sidebar nav a:hover{background:var(--raised);color:var(--text)}.sidebar nav a[aria-current=page]{background:#e7c88a12;border-color:#e7c88a45;color:var(--accent)}.team-card{margin-top:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}.team-card p{font-size:11px;color:var(--muted);overflow-wrap:anywhere;margin:8px 0}.team-card form{padding:0;border:0;background:none;margin:14px 0 0;box-shadow:none}.team-card button{width:100%;background:transparent;color:#ffd0cf;border-color:#815356;font-size:12px;padding:9px}.team-card button:hover{background:#41252d}
 .workspace{min-width:0}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 38px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}.workspace-label{letter-spacing:1.3px;text-transform:uppercase;font-size:10px;font-weight:700}.mode-tag{border:1px solid #60765b;color:#d0e0bd;background:#b5d5930b;padding:5px 10px;border-radius:30px;font-size:11px}main{width:100%;max-width:1440px;margin:auto;padding:38px;min-width:0}.page-heading{position:relative;isolation:isolate;overflow:hidden;margin-bottom:30px;padding:30px;border:1px solid #e7c88a30;border-radius:18px;background:radial-gradient(ellipse at 100% 0,#b2935524,transparent 65%),linear-gradient(120deg,#172333,#101a28)}.page-heading:after{content:"";position:absolute;z-index:-1;right:-65px;top:-165px;width:350px;height:350px;border:1px solid #e7c88a1c;border-radius:50%;box-shadow:0 0 0 28px #e7c88a05,0 0 0 58px #e7c88a04;pointer-events:none}h1{font-family:ui-serif,Georgia,"Times New Roman",serif;font-size:clamp(27px,3vw,40px);line-height:1.2;font-weight:650;letter-spacing:-1px;margin:10px 0 12px;overflow-wrap:anywhere}.page-heading p{color:var(--muted);max-width:720px;margin:0}h2{font-size:19px;line-height:1.4;letter-spacing:-.3px;margin:34px 0 16px;display:flex;align-items:center;gap:12px}h2:before{content:"";height:18px;width:3px;flex-shrink:0;border-radius:3px;background:var(--accent)}h3{font-size:16px;margin:0 0 14px}p{overflow-wrap:anywhere}small,.muted{color:var(--muted)}.content>p:first-child{color:var(--muted)}.notice{padding:17px 20px;border:1px solid #a2814b66;border-left:3px solid var(--gold);border-radius:0 12px 12px 0;background:#f3ca8708;color:#eed7b5;margin:20px 0}.content>section{padding:24px;background:linear-gradient(145deg,#162333,#101b29);border:1px solid var(--line);border-radius:var(--radius);margin:18px 0}.content>section h2:first-child{margin-top:0}
 form{padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin:20px 0;box-shadow:0 8px 25px #00000015}label{display:block;color:var(--muted);font-size:13px;font-weight:550;margin:0 0 18px;overflow-wrap:anywhere}input:not([type=hidden]):not([type=checkbox]),select,textarea{display:block;width:100%;max-width:660px;margin-top:8px;padding:12px 14px;border:1px solid #42566d;border-radius:9px;background:#0a1421;color:var(--text);min-height:46px}input[type=checkbox]{accent-color:var(--accent);width:18px;height:18px;vertical-align:middle;margin-right:9px}select{white-space:normal}textarea{resize:vertical;min-height:110px}button{padding:11px 19px;border:1px solid #e7c88a;border-radius:9px;background:linear-gradient(135deg,#f5dfb1,#d2af6c);color:#292011;font-weight:700;cursor:pointer;min-height:44px;max-width:100%;white-space:normal}button:hover{background:#fff0d1;box-shadow:0 3px 18px #e7c88a20}button:disabled{opacity:.55;cursor:not-allowed}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:22px;background:#080f19;border:1px solid var(--line);border-radius:12px;font:13px/1.8 ui-monospace,SFMono-Regular,Consolas,monospace}code{overflow-wrap:anywhere;font-size:.9em}.table-scroll{overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:var(--radius);margin:20px 0;background:var(--surface)}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{text-align:left;padding:16px 18px;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--line)}th{background:#1b2a3b;color:#c1d2e5;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:700}td{font-size:13px}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#e7c88a05}td a{font-weight:550}caption{text-align:left;padding:16px}.empty-state{padding:48px 25px;text-align:center;border:1px dashed #496176;border-radius:var(--radius);background:linear-gradient(145deg,#132331,#101a28)}.empty-state h2{display:block;margin:10px 0}.empty-state h2:before{display:none}.empty-state p{color:var(--muted);max-width:450px;margin:12px auto}.empty-mark{display:inline-grid;place-items:center;font-size:25px;color:var(--accent);width:58px;height:58px;background:#e7c88a12;border:1px solid #e7c88a50;border-radius:16px}.case-state{padding:15px 18px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--muted)}.case-links{display:flex;flex-wrap:wrap;gap:9px;align-items:center;color:transparent;font-size:0}.case-links a{font-size:12px;text-decoration:none;padding:9px 13px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--blue)}.case-links a:hover{border-color:var(--accent);color:var(--accent)}.footer{padding:25px 0;color:var(--muted);font-size:11px;letter-spacing:.3px;border-top:1px solid var(--line);margin-top:38px}.auth-shell .sidebar{height:auto;position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 35%,#a4874520,transparent 65%),#0c1521}.guardian-art{margin:auto 0;color:var(--accent);text-align:center}.guardian-art svg{width:100%;max-width:200px;opacity:.75}.guardian-art p{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);line-height:2.4}.auth-shell .workspace{display:flex;flex-direction:column;justify-content:center}.auth-shell main{max-width:850px}.auth-shell .topbar{display:none}
+
+.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:22px 0}.metric,.source-card,.action-card{min-width:0;padding:21px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#192a3b,#111c2a)}.metric dt{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}.metric dd{font-size:28px;line-height:1.3;margin:9px 0 5px;font-weight:650;color:var(--accent);min-width:0;overflow-wrap:anywhere}.metric dd.metric-detail{font-size:11px;font-weight:400;color:var(--muted);line-height:1.5}.metric small{display:block;font-size:11px}.section-nav{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0}.section-nav a,.button-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;min-height:44px;padding:9px 14px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-size:12px;font-weight:650}.button-link.primary{background:var(--accent);border-color:var(--accent);color:#292011}.action-grid,.source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.action-card h3,.source-card h3{margin:0 0 9px}.action-card p,.source-card p{color:var(--muted);font-size:12px}.source-card dl{display:grid;grid-template-columns:minmax(105px,.8fr) minmax(0,1.2fr);gap:9px;font-size:12px}.source-card dt{color:var(--muted)}.source-card dd{margin:0;overflow-wrap:anywhere}.status{display:inline-flex;align-items:center;gap:7px;border:1px solid #56758f;border-radius:30px;padding:4px 10px;font-size:11px;font-weight:650;background:#b7d5fa0a;color:var(--blue);white-space:normal}.status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}.status.attention{color:#f3ce96;border-color:#846a43;background:#f3ca870a}.status.neutral{color:#c0ccd9;border-color:#526274;background:#a9bacd08}.card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.card-header p{margin:0}.workflow-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));list-style:none;padding:0;gap:12px;margin:22px 0;counter-reset:stages}.workflow-stages li{counter-increment:stages;padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.workflow-stages li:before{content:counter(stages,decimal-leading-zero);display:block;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:10px}.workflow-stages strong{display:block;font-size:13px}.workflow-stages small{display:block;font-size:11px;margin-top:5px}.result-panel{border:1px solid #e7c88a60;border-radius:14px;padding:22px;margin:24px 0;background:#e7c88a08}.result-panel h2{margin-top:0}.result-links{display:flex;flex-wrap:wrap;gap:12px}.section-heading{scroll-margin-top:24px}.bounded-note{font-size:11px;color:var(--muted)}
+@media(max-width:1000px){.summary-grid,.workflow-stages{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.summary-grid{gap:10px}.metric{padding:16px}.metric dd{font-size:24px}.action-grid,.source-grid{grid-template-columns:1fr}.source-card,.action-card{padding:18px}.workflow-stages{gap:9px}.workflow-stages li{padding:14px}.source-card dl{grid-template-columns:minmax(90px,.8fr) minmax(0,1.2fr)}}
+@media(max-width:380px){.summary-grid{grid-template-columns:1fr}}
 @media(min-width:1500px){main{padding:48px 58px}.topbar{padding-left:58px;padding-right:58px}}
 @media(max-width:900px){.shell{grid-template-columns:210px minmax(0,1fr)}.sidebar{padding:26px 14px}.topbar{padding:18px 24px}main{padding:28px 24px}.brand-name{font-size:18px}}
 @media(max-width:640px){.shell{display:block}.sidebar{position:relative;height:auto;gap:18px;padding:20px;border-right:0;border-bottom:1px solid var(--line)}.sidebar nav{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.sidebar nav a{padding:10px;font-size:12px}.nav-label{display:none}.team-card{margin-top:0;padding:12px}.team-card p{margin:4px 0}.team-card form{margin-top:10px}.team-card button{width:auto}.topbar{padding:15px 20px;flex-wrap:wrap}main{padding:26px 20px}.page-heading{margin-bottom:22px}th,td{padding:12px 9px;font-size:12px}th{font-size:10px;letter-spacing:.3px}.table-scroll table{min-width:420px}form,.content>section{padding:18px}h1{letter-spacing:-.6px}.auth-shell .sidebar{padding:24px 20px}.guardian-art{display:none}.auth-shell main{padding-top:38px}.mode-tag{font-size:10px}}
@@ -89,6 +94,62 @@ def selected_hermes_leases(value):
 def table(columns,rows):
     return '<div class="table-scroll" role="region" aria-label="'+e(' / '.join(columns))+'" tabindex="0"><table><thead><tr>'+''.join('<th scope="col">'+e(c)+'</th>' for c in columns)+'</tr></thead><tbody>'+''.join(
         '<tr>'+''.join('<td>'+value+'</td>' for value in row)+'</tr>' for row in rows)+'</tbody></table></div>'
+
+
+def metrics(items,label='Summary of the records displayed'):
+    return '<dl class="summary-grid" aria-label="'+e(label)+'">'+''.join(
+        '<div class="metric"><dt>'+e(title)+'</dt><dd>'+e(value)+'</dd><dd class="metric-detail">'+e(detail)+'</dd></div>'
+        for title,value,detail in items)+'</dl>'
+
+
+def status_badge(value,*,attention=False,neutral=False):
+    return '<span class="status'+(' attention' if attention else ' neutral' if neutral else '')+'">'+e(value)+'</span>'
+
+
+def action_card(title,description,path,label):
+    return '<article class="action-card"><h3>'+e(title)+'</h3><p>'+e(description)+'</p><a class="button-link" href="'+e(path)+'">'+e(label)+' <span aria-hidden="true">↗</span></a></article>'
+
+
+def source_cards(result):
+    rows=result['sources']
+    current=sum(row['authorization_current'] and row['heartbeat_fresh'] and row['state']=='active' for row in rows)
+    body=metrics([('Sessions displayed',len(rows),'Bounded to the latest 32 sessions'),
+        ('Recent active links',current,'Authority and heartbeat at sample time'),
+        ('Other connection states',len(rows)-current,'Review missing or inactive connections'),
+        ('Page visibility','Unverified','A heartbeat is not a complete page read')])
+    if not rows:return body+'<div class="empty-state"><span class="empty-mark" aria-hidden="true">◎</span><h2>No browser sessions recorded</h2><p>Pair an approved browser session through the operator workflow, then review its connection and capture receipts here.</p></div>'
+    body+='<div class="source-grid">'
+    for index,row in enumerate(rows,1):
+        live=row['authorization_current'] and row['heartbeat_fresh'] and row['state']=='active'
+        body+='<article class="source-card"><div class="card-header"><h3>'+e({'chrome':'Chrome','brave':'Brave'}.get(row['browser'],row['browser']))+' · Session '+str(index)+'</h3>'+status_badge(row['health'].replace('_',' '),attention=not live)+'</div><p>Connection and capture metadata only.</p><dl>'
+        values=[('Authority','Current' if row['authorization_current'] else 'Unavailable'),('Heartbeat',row['last_seen'] or 'Never recorded'),
+            ('Captured receipts',row['captured_observations']),('Last capture',row['last_capture'] or 'None'),
+            ('Page visibility',row['page_visibility']),('Scheduled review','Approved; activity unverified' if row['scheduled_permission'] else 'Not approved'),('Expires',row['expires_at'])]
+        body+=''.join('<dt>'+e(k)+'</dt><dd>'+e(v)+'</dd>' for k,v in values)+'</dl><a class="button-link" href="/cases/'+e(row['case_id'])+'">Open linked investigation</a></article>'
+    return body+'</div>'
+
+
+def hermes_stages():
+    return '<ol class="workflow-stages" aria-label="Hermes investigation workflow">'+''.join(
+        '<li><strong>'+e(title)+'</strong><small>'+e(detail)+'</small></li>' for title,detail in [
+        ('Check readiness','Source, permission, runtime, key and budget checks'),('Plan the scope','Hermes selects relevant eligible specialists'),
+        ('Investigate','Bounded specialist reasoning and approved local tools'),('Review the report','An analyst inspects the evidence and limitations')])+'</ol>'
+
+
+def hermes_outcome(result,case_id):
+    state=result.get('state','Stopped.' if result.get('stopped') else 'Preflight complete.')
+    body='<div class="result-panel"><h2>Recorded investigation result</h2><p id="hermes-result">'+e(state)+'</p><p class="bounded-note">This is the recorded result of your submitted operation. It is not a live background monitor or an accepted incident verdict.</p><div class="result-links">'
+    for label,key in [('Review Hermes assignment plan','plan_answer_evidence_id'),('Review Hermes analyst report','report_answer_evidence_id')]:
+        if result.get(key):body+='<a class="button-link" href="/cases/'+e(case_id)+'/evidence/'+e(result[key])+'">'+label+'</a>'
+    body+='</div></div>'
+    if result.get('agents'):
+        body+='<h2>Specialist results</h2><div class="action-grid">'
+        for row in result['agents']:
+            body+='<article class="action-card"><h3>'+e(row['role'].replace('_',' ').title())+'</h3>'+status_badge(row['result']['state'].replace('_',' '),neutral=True)
+            for step in row['result'].get('steps',[]):body+='<p><a href="/cases/'+e(case_id)+'/evidence/'+e(step['answer_evidence_id'])+'">Review specialist answer, round '+e(step['round'])+'</a></p>'
+            body+='</article>'
+        body+='</div>'
+    return body
 
 
 class Workbench:
@@ -254,7 +315,7 @@ class Workbench:
             base='/cases/'+case_id+'/hermes'
             body='<p>Hermes is Gabriel’s required AI investigation supervisor. It checks readiness, assigns relevant specialists and reports their progress. Each specialist has its own context and tools. Response actions require a separate analyst decision.</p>'
             state=hermes.readiness()
-            body+='<p>Supervisor model: '+e(state['model'])+' · '+e(state['qualification'].replace('_',' '))+'</p>'
+            body+=hermes_stages()+'<div class="card-header"><p>Supervisor model: '+e(state['model'])+'</p>'+status_badge(state['qualification'].replace('_',' '),attention=state['qualification']!='production_admitted')+'</div><nav class="section-nav" aria-label="Case investigation navigation"><a href="/cases/'+case_id+'">Case overview</a><a href="/cases/'+case_id+'/agents">Specialists and tools</a><a href="/sources">Browser health</a></nav>'
             if method=='POST':
                 if self._provider_vault is None:raise AccessDenied('provider_vault_not_configured')
                 if run_id:
@@ -282,12 +343,7 @@ class Workbench:
                     elif fields['operation']=='start' and fields.get('approved')=='yes':
                         result=hermes.start(self.service,self._provider_vault,self._token,case_id,fields['request_id'],input_evidence_id,approved=True,**options)
                     else:raise AccessDenied('hermes_ai_export_consent_required')
-                body+='<p id="hermes-result">'+e(result.get('state','Stopped.' if result.get('stopped') else 'Preflight complete.'))+'</p>'
-                for label,key in [('Hermes assignment plan','plan_answer_evidence_id'),('Hermes analyst report','report_answer_evidence_id')]:
-                    if result.get(key):body+='<p><a href="/cases/'+case_id+'/evidence/'+e(result[key])+'">'+label+' — requires review</a></p>'
-                for row in result.get('agents',[]):
-                    body+='<h2>'+e(row['role'].replace('_',' '))+'</h2><p>'+e(row['result']['state'].replace('_',' '))+'</p>'
-                    for step in row['result'].get('steps',[]):body+='<p><a href="/cases/'+case_id+'/evidence/'+e(step['answer_evidence_id'])+'">Review specialist answer, round '+e(step['round'])+'</a></p>'
+                body+=hermes_outcome(result,case_id)
             elif method!='GET':raise AccessDenied('workbench_route_denied')
             body+='<p>Preflight verifies signed-in case access, stored source bytes, current selected-tab reads, required Hermes runtime, tool versions, key availability, spending limits and exact model qualification. Fresh text does not prove complete dashboard visibility. Unsupported or inaccessible dashboards remain blocked.</p>'
             body+='<p>The whole investigation shares a six-call limit and one spending allowance. Unfinished work remains visible when a limit is reached. Stop prevents further work; an already sent request may still incur a charge.</p>'
@@ -399,7 +455,7 @@ class Workbench:
         if method=='GET' and path=='/sources':
             result=source_health(self.service,self._token)
             body='<p class="notice">Partial coverage. A recent heartbeat does not establish current page visibility or uninterrupted monitoring. Sources are sampled individually.</p>'
-            body+=table(['Browser','Health','Last heartbeat','Captured','Last capture','Scheduled permission','Expires','Case'],[(e(row['browser']),e(row['health']),e(row['last_seen'] or 'Never recorded'),e(row['captured_observations']),e(row['last_capture'] or 'None'),e('Approved; activity unverified' if row['scheduled_permission'] else 'Not approved'),e(row['expires_at']),'<a href="/cases/'+e(row['case_id'])+'">'+e(row['case_id'])+'</a>') for row in result['sources']]) if result['sources'] else '<p>No browser sessions recorded.</p>'
+            body+=source_cards(result)
             body+='<p>Showing up to 32 most recent sessions.'+(' Older sessions are omitted.' if result['truncated'] else '')+'</p>'
             return '200 OK',self._page('Browser health and coverage',body,principal),[]
         if method=='GET' and path=='/audit':
@@ -416,6 +472,7 @@ class Workbench:
             rows=self.service.list_cases(self._token)
             body='<p class="notice">Collection coverage is partial. Incident assessment has not been performed.</p>'
             body+=table(['Case','State','Created'],[(f'<a href="/cases/{e(row["id"])}">{e(row["title"])}</a>',e(row['state']),e(row['created_at'])) for row in rows]) if rows else '<div class="empty-state"><span class="empty-mark" aria-hidden="true">◇</span><h2>Your investigation workspace</h2><p id="empty">No cases yet.</p><p>Cases bring evidence, questions and review history together in one place.</p></div>'
+            body=metrics([('Investigations displayed',len(rows),'Latest 100 cases in this view'),('Open cases',sum(row['state']=='open' for row in rows),'In the displayed case list'),('Other case states',sum(row['state']!='open' for row in rows),'Historical case records'),('Assessment','Not inferred','Open each case to inspect recorded reviews')])+('<p><a class="button-link primary" href="/cases/new">Start an investigation</a></p>' if principal.role!='viewer' else '')+body
             body+='<p class="muted">Showing up to 100 most recently created cases.</p>'
             return '200 OK',self._page('Investigations',body,principal),[]
         if path=='/cases/new' and method=='GET':
@@ -705,7 +762,17 @@ class Workbench:
         body+='<p class="case-links"><a href="'+path+'/attack-reviews">Attack pattern review</a> · <a href="'+path+'/environment">Environment and control profile</a></p>'
         workflow=self.service.case_workflow(self._token,case_id)
         current=workflow['assignment']
-        body+='<h2>Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'
+        open_questions=sum(row['answer'] is None for row in workflow['questions'])
+        summary=metrics([('Evidence records',len(snapshot['evidence']),'Metadata; contents stay private'),
+            ('Questions awaiting answers','Restricted' if workflow['questions_restricted'] else open_questions,'Analyst role required' if workflow['questions_restricted'] else 'Visible analyst workflow questions'),
+            ('Timeline records',len(snapshot['timeline']),'Recorded events; clocks unverified'),
+            ('Browser observations',len(snapshot['browser_observations']),'Historical receipts; visibility remains partial')])
+        quick='<nav class="section-nav" aria-label="Jump to investigation section"><a href="#case-assignment-heading">Assignment</a><a href="#case-questions">Questions</a><a href="#case-evidence">Evidence</a><a href="#case-timeline">Timeline</a><a href="#case-observations">Browser observations</a></nav>'
+        quick+='<div class="action-grid">'+action_card('Inspect the evidence trail','Review stored links and custody before drawing a conclusion.',path+'/relationships','Explore provenance')
+        if principal.role!='viewer' and snapshot['case']['state']=='open':quick+=action_card('Prepare the next investigation step','Check Hermes readiness or choose an allowed local investigation tool. Opening this page performs no model inference.',path+'/hermes','Open Hermes supervisor')
+        quick+='</div>'
+        body=summary+body+quick
+        body+='<h2 id="case-assignment-heading" class="section-heading">Assignment</h2><p id="case-assignment">'+(e(current['assigned_to'])+(' · Active member' if current.get('assignee_active') else ' · Inactive or unassigned') if current and current['assigned_to'] else 'Unassigned')+'</p>'
         writable=principal.role!='viewer' and snapshot['case']['state']=='open'
         if writable and principal.role in {'owner','admin'}:
             members=self.service.list_members(self._token)
@@ -713,7 +780,7 @@ class Workbench:
             body+=self._form(path+'/assign','Update assignment','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Assign to<select name="assigned_to">'+options+'</select></label>')
         elif writable and (not current or current['assigned_to'] in {None,str(principal.user_id)}):
             body+=self._form(path+'/assign','Assign to me','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><input type="hidden" name="assigned_to" value="'+e(principal.user_id)+'">')
-        body+='<h2>Investigation questions</h2><p>Answers are evidence-linked analyst comments. They do not validate source truth or enter learned memory. The metadata report covers evidence/custody; workflow comments are available here and through the workflow CLI.</p>'
+        body+='<h2 id="case-questions" class="section-heading">Investigation questions</h2><p>Answers are evidence-linked analyst comments. They do not validate source truth or enter learned memory. The metadata report covers evidence/custody; workflow comments are available here and through the workflow CLI.</p>'
         if workflow['questions_restricted']: body+='<p>Analyst comments require an analyst, admin or owner role.</p>'
         if writable:
             body+=self._form(path+'/question','Add question','<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Question<input name="question" maxlength="512" required></label>')
@@ -726,13 +793,13 @@ class Workbench:
                 if options:
                     body+=self._form(path+'/answer','Record analyst answer','<input type="hidden" name="question_id" value="'+e(question['id'])+'"><label>Supporting evidence<select name="evidence_id" required>'+options+'</select></label><label>Analyst answer<input name="answer" maxlength="1024" required></label>')
             body+='</section>'
-        body+='<h2>Evidence</h2>'+table(['Artifact','Source','Storage'],[(f'<a href="{path}/evidence/{e(row["id"])}">{e(row["id"])}</a>',e(row['source_label']),e(row['storage_state'])) for row in snapshot['evidence']])
+        body+='<h2 id="case-evidence" class="section-heading">Evidence</h2>'+table(['Artifact','Source','Storage'],[(f'<a href="{path}/evidence/{e(row["id"])}">{e(row["id"])}</a>',e(row['source_label']),e(row['storage_state'])) for row in snapshot['evidence']])
         text_reviews=[row for row in snapshot['evidence'] if row['source_label']=='Browser text candidate passages - unqualified']
         if text_reviews:
             body+='<h2>Browser candidate reviews</h2><p>These source-linked local reviews identify candidate passages, not confirmed incidents. Open a review to inspect its quoted evidence and limitations.</p>'+table(['Review evidence','Source','Storage'],[('<a href="'+path+'/evidence/'+e(row['id'])+'">'+e(row['id'])+'</a>',e(row['source_label']),e(row['storage_state'])) for row in text_reviews])
             body+='<p><a href="'+path+'/memory">Review learning proposals and approved references</a>. Later browser reviews attach approved reference context as separate historical evidence. Forgotten or expired references are excluded from new context.</p>'
-        body+='<h2>Timeline</h2><p>Source and client clocks are unverified. Times do not establish causal ordering.</p>'+table(['Time','Time basis','Event','Evidence'],[(e(row['time']),e(row['time_basis']),e(row['kind']),e(row['evidence_id'] or '')) for row in snapshot['timeline']])
-        body+='<h2>Browser observations</h2>'+table(['Observation','State','Visibility'],[(e(row['id']),e(row['state']),e(row['coverage'])) for row in snapshot['browser_observations']])
+        body+='<h2 id="case-timeline" class="section-heading">Timeline</h2><p>Source and client clocks are unverified. Times do not establish causal ordering.</p>'+table(['Time','Time basis','Event','Evidence'],[(e(row['time']),e(row['time_basis']),e(row['kind']),e(row['evidence_id'] or '')) for row in snapshot['timeline']])
+        body+='<h2 id="case-observations" class="section-heading">Browser observations</h2>'+table(['Observation','State','Visibility'],[(e(row['id']),e(row['state']),e(row['coverage'])) for row in snapshot['browser_observations']])
         return '200 OK',self._page(snapshot['case']['title'],body,principal),[]
 
     def __call__(self,environ,start_response):
