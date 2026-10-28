@@ -55,8 +55,19 @@ def validate_runtime_sources(expected,actual):
         json.dumps(actual,sort_keys=True,separators=(',',':')).encode()).hexdigest())
 
 
-def assess(config,containers,networks,*,provider_egress=False):
+NATIVE_MOUNTS='native-exact-v1'
+DESKTOP_MOUNTS='darwin-docker-desktop-host-mnt-v1'
+
+
+def mount_source_profile(host_system,engine):
+    require(type(host_system) is str and type(engine) is dict,'invalid_mount_platform_evidence')
+    return DESKTOP_MOUNTS if (host_system=='Darwin' and engine.get('OSType')=='linux'
+        and engine.get('OperatingSystem')=='Docker Desktop') else NATIVE_MOUNTS
+
+
+def assess(config,containers,networks,*,provider_egress=False,mount_profile=NATIVE_MOUNTS):
     require(type(provider_egress) is bool,'invalid_egress_policy')
+    require(mount_profile in {NATIVE_MOUNTS,DESKTOP_MOUNTS},'invalid_mount_source_profile')
     require(re.fullmatch('sha256:[a-f0-9]{64}',config['image']) is not None,'invalid_image_identity')
     root=Path(config['installation_root'])
     require(root.is_absolute() and str(root)==config['installation_root'] and '..' not in root.parts,'invalid_installation_root')
@@ -95,7 +106,10 @@ def assess(config,containers,networks,*,provider_egress=False):
             expected=MOUNTS.get(service,{}).get(target)
             require(expected is not None and (mount.get('Type'),mount.get('RW'))==expected,'unexpected_mount')
             if expected[0]=='bind':
-                require(mount.get('Source')==str(root/BIND_FILES[target]),'secret_mount_source_changed')
+                sources={str(root/BIND_FILES[target])}
+                if mount_profile==DESKTOP_MOUNTS:
+                    sources.add('/host_mnt'+str(root/BIND_FILES[target]))
+                require(mount.get('Source') in sources,'secret_mount_source_changed')
             else:
                 require(mount.get('Name')==config['project']+'_'+VOLUME_NAMES[target],'persistent_volume_changed')
         attached=row['NetworkSettings']['Networks']
@@ -110,6 +124,7 @@ def assess(config,containers,networks,*,provider_egress=False):
             require(network['Internal']==(name not in {config['project']+'_entry',config['project']+'_ai_egress'}),'network_privacy_changed')
         result.append(dict(service=service,image=row['Image'],healthy=True,memory_limit_bytes=host.get('Memory',0)))
     return dict(runtime_checks_passed=True,services=result,provider_egress_explicit=provider_egress,
+        mount_source_profile=mount_profile,
         production_admitted=False,native_browser_acceptance='pending',operational_acceptance='pending',
         limitations=['Docker health is not analyst session freshness or detection effectiveness.',
             'Private CA TLS verification is not native browser certificate trust.',
@@ -119,6 +134,9 @@ def assess(config,containers,networks,*,provider_egress=False):
 def collect(root,*,provider_egress=False):
     from gabriel_install import Installation,run
     app=Installation(root)
+    engine=json.loads(run(['docker','info','--format','{{json .}}']))
+    host_system=platform.system()
+    mount_profile=mount_source_profile(host_system,engine)
     source=run(['git','rev-parse','HEAD']).decode().strip()
     require(source==app.config['source'],'installation_source_differs_from_checkout')
     ids=app.compose('ps','--all','--quiet').decode().split()
@@ -128,7 +146,7 @@ def collect(root,*,provider_egress=False):
     network_rows=json.loads(run(['docker','network','inspect',*names]))
     networks={row['Name']:row for row in network_rows}
     hermes_image=json.loads(run(['docker','image','inspect',app.config['project']+'-hermes:local']))[0]['Id']
-    report=assess(dict(app.config,installation_root=str(root.resolve()),hermes_image=hermes_image),containers,networks,provider_egress=provider_egress)
+    report=assess(dict(app.config,installation_root=str(root.resolve()),hermes_image=hermes_image),containers,networks,provider_egress=provider_egress,mount_profile=mount_profile)
     supervisor=json.loads(app.compose('exec','-T','workbench','python','-c',
         'import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))'))
     require(supervisor.get('status')=='ready' and re.fullmatch('[a-f0-9]{64}',supervisor.get('runtime_digest','')),'hermes_source_binding_failed')
@@ -146,11 +164,10 @@ def collect(root,*,provider_egress=False):
         response.read(4096)
         report['trusted_private_ca_https_denies_unauthenticated_cases']=True
     finally:client.close()
-    engine=json.loads(run(['docker','info','--format','{{json .}}']))
     report.update(version='gabriel-native-runtime-evidence-v1',source=source,image=app.config['image'],
         collected_at=datetime.now(timezone.utc).isoformat(),
-        collector_host=dict(system=platform.system(),architecture=platform.machine(),release=platform.release()),
-        docker_engine={k:engine.get(k) for k in ('OSType','Architecture','NCPU','MemTotal','ServerVersion')})
+        collector_host=dict(system=host_system,architecture=platform.machine(),release=platform.release()),
+        docker_engine={k:engine.get(k) for k in ('OSType','OperatingSystem','Architecture','NCPU','MemTotal','ServerVersion')})
     return report
 
 

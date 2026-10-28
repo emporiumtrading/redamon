@@ -7,7 +7,7 @@ import sys
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tooling/scripts'))
-from gabriel_acceptance import assess,SERVICES,NETWORKS,MOUNTS,RUNTIME_FILES,validate_runtime_sources,committed_runtime_sources,BIND_FILES,VOLUME_NAMES
+from gabriel_acceptance import assess,SERVICES,NETWORKS,MOUNTS,RUNTIME_FILES,validate_runtime_sources,committed_runtime_sources,BIND_FILES,VOLUME_NAMES,mount_source_profile,NATIVE_MOUNTS,DESKTOP_MOUNTS
 
 
 class RuntimeAcceptance(unittest.TestCase):
@@ -62,6 +62,44 @@ class RuntimeAcceptance(unittest.TestCase):
                 with self.subTest(service=service,target=target,missing=True),self.assertRaises(ValueError):
                     assess(self.config,rows,self.networks)
         self.assertNotIn('/generated-install',json.dumps(assess(self.config,self.rows,self.networks)))
+    def test_desktop_source_mapping_requires_darwin_and_linux_desktop_engine(self):
+        rows=deepcopy(self.rows)
+        config=dict(self.config,installation_root='/Users/generated/gabriel')
+        for row in rows:
+            for mount in row['Mounts']:
+                if mount['Type']=='bind':mount['Source']='/host_mnt'+config['installation_root']+'/'+BIND_FILES[mount['Destination']]
+        metadata=dict(OSType='linux',OperatingSystem='Docker Desktop')
+        profile=mount_source_profile('Darwin',metadata)
+        self.assertEqual(profile,DESKTOP_MOUNTS)
+        result=assess(config,rows,self.networks,mount_profile=profile)
+        self.assertEqual(result['mount_source_profile'],DESKTOP_MOUNTS)
+        self.assertEqual(result['native_browser_acceptance'],'pending')
+        self.assertNotIn('/Users/',json.dumps(result))
+        native=deepcopy(rows)
+        for row in native:
+            for mount in row['Mounts']:
+                if mount['Type']=='bind':mount['Source']=config['installation_root']+'/'+BIND_FILES[mount['Destination']]
+        self.assertTrue(assess(config,native,self.networks,mount_profile=profile)['runtime_checks_passed'])
+        for host,engine in [('Linux',metadata),('Windows',metadata),('Darwin',dict(metadata,OSType='windows')),
+                ('Darwin',dict(metadata,OperatingSystem='Ubuntu')),('Darwin',dict(OSType='linux'))]:
+            profile=mount_source_profile(host,engine)
+            self.assertEqual(profile,NATIVE_MOUNTS)
+            with self.subTest(host=host,engine=engine),self.assertRaisesRegex(ValueError,'secret_mount_source_changed'):
+                assess(config,rows,self.networks,mount_profile=profile)
+        with self.assertRaisesRegex(ValueError,'secret_mount_source_changed'):assess(config,rows,self.networks)
+        with self.assertRaisesRegex(ValueError,'invalid_mount_source_profile'):
+            assess(config,rows,self.networks,mount_profile='generic-prefix-strip')
+    def test_desktop_mapping_rejects_wrong_file_prefix_and_traversal(self):
+        for source in ('/host_mnt/generated-other/database/app_dsn','/host_mnt/generated-install/database/other',
+                '/host_mnt/host_mnt/generated-install/database/app_dsn','/run/desktop/mnt/host/generated-install/database/app_dsn',
+                '/host_mnt/generated-install/database/../database/app_dsn'):
+            rows=deepcopy(self.rows)
+            row=next(r for r in rows if r['Config']['Labels']['com.docker.compose.service']=='workbench')
+            next(m for m in row['Mounts'] if m['Destination']=='/run/secrets/app_dsn')['Source']=source
+            with self.subTest(source=source),self.assertRaisesRegex(ValueError,'secret_mount_source_changed'):
+                assess(self.config,rows,self.networks,mount_profile=DESKTOP_MOUNTS)
+        with self.assertRaisesRegex(ValueError,'invalid_installation_root'):
+            assess(dict(self.config,installation_root='/generated-install/../other'),self.rows,self.networks,mount_profile=DESKTOP_MOUNTS)
     def test_every_service_required_healthy_and_unique(self):
         for change in ('missing','duplicate','unhealthy','foreign'):
             rows=deepcopy(self.rows)
