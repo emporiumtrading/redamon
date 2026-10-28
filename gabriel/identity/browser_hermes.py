@@ -30,7 +30,7 @@ def selected(value):
 
 
 def snapshot(service,conn,p,case_id,lease_ids):
-    from gabriel.identity.browser_navigation import BrowserNavigationService,pending_navigation
+    from gabriel.identity.browser_navigation import BrowserNavigationService,context_of,pending_navigation
     browser=BrowserNavigationService(service._dsn,service.store)
     facts=[];captures=[]
     for lease_id in selected(lease_ids):
@@ -46,6 +46,16 @@ def snapshot(service,conn,p,case_id,lease_ids):
             WHERE o.organization_id=%s AND o.lease_id=%s AND o.state='captured' ORDER BY o.sequence DESC LIMIT 1''',(p.organization_id,lease_id)).fetchone()
         if not observation or not 0<=observation['age'].total_seconds()<=120 or not 0<=observation['capture_age'].total_seconds()<=120:
             raise AccessDenied('hermes_fresh_tab_read_required')
+        navigation=conn.execute('''SELECT c.created_at,r.context,r.context_digest
+            FROM gabriel_identity.browser_navigation_commits c
+            JOIN gabriel_identity.browser_navigation_receipts r USING(organization_id,intent_id)
+            JOIN gabriel_identity.browser_navigation_intents i ON (i.organization_id,i.id)=(c.organization_id,c.intent_id)
+            JOIN gabriel_identity.browser_navigation_grants g ON (g.organization_id,g.id)=(i.organization_id,i.grant_id)
+            WHERE g.organization_id=%s AND g.lease_id=%s ORDER BY c.created_at DESC,c.intent_id DESC LIMIT 1''',
+            (p.organization_id,lease_id)).fetchone()
+        if navigation and (observation['created_at']<=navigation['created_at'] or navigation['context']!=context_of(lease)
+                or navigation['context_digest']!=digest(navigation['context'])):
+            raise AccessDenied('hermes_post_navigation_capture_required')
         artifact=service._evidence(conn,p,observation['evidence_id'])
         content=service._verify(conn,artifact).decode('utf-8')
         import re

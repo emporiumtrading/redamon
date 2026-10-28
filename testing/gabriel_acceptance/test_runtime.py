@@ -6,7 +6,7 @@ import sys
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tooling/scripts'))
-from gabriel_acceptance import assess,SERVICES,NETWORKS,MOUNTS
+from gabriel_acceptance import assess,SERVICES,NETWORKS,MOUNTS,RUNTIME_FILES,validate_runtime_sources
 
 
 class RuntimeAcceptance(unittest.TestCase):
@@ -29,6 +29,12 @@ class RuntimeAcceptance(unittest.TestCase):
         self.assertEqual(result['native_browser_acceptance'],'pending')
         self.assertEqual(result['operational_acceptance'],'pending')
         self.assertNotIn('Config',json.dumps(result))
+    def test_actual_runtime_source_map_must_match_checkout_exactly(self):
+        expected={n:'a'*64 for n in RUNTIME_FILES}
+        self.assertEqual(validate_runtime_sources(expected,dict(expected))['critical_file_sha256'],expected)
+        for bad in (dict(expected,**{'model_worker.py':'b'*64}),dict(expected,unexpected='a'*64),
+                    {n:v for n,v in expected.items() if n!='browser_hermes.py'},dict(expected,**{'service.py':None})):
+            with self.assertRaises(ValueError):validate_runtime_sources(expected,bad)
     def test_every_service_required_healthy_and_unique(self):
         for change in ('missing','duplicate','unhealthy','foreign'):
             rows=deepcopy(self.rows)

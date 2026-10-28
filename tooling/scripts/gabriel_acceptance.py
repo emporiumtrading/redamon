@@ -14,6 +14,12 @@ import sys
 
 SERVICES={'identity-db','workbench','hermes','investigation-tools','local-entry'}
 APP=SERVICES-{'identity-db'}
+RUNTIME_FILES=('service.py','schema.sql','schema_v31.sql','installation.py','workbench.py',
+    'model_worker.py','model_budget.py','model_routes.py','model_transport.py','personal_providers.py',
+    'specialist_agents.py','specialist_qualification.py','hermes_supervisor.py','hermes_bridge.py',
+    'hermes_qualification.py','browser_hermes.py','release_qualification.py','reviewed_memory.py',
+    'memory.py','coordinator.py','browser_sessions.py','browser_observations.py','browser_events.py','browser_specialists.py')
+
 NETWORKS={'identity-db':{'private'},'workbench':{'private','toolbus'},'hermes':{'toolbus'},
     'investigation-tools':{'toolbus'},'local-entry':{'private','entry'}}
 MOUNTS={'identity-db':{'/var/lib/postgresql/data':('volume',True),'/run/secrets/db_password':('bind',False),
@@ -25,6 +31,15 @@ MOUNTS={'identity-db':{'/var/lib/postgresql/data':('volume',True),'/run/secrets/
 
 def require(condition,code):
     if not condition:raise ValueError(code)
+
+
+def validate_runtime_sources(expected,actual):
+    for value in (expected,actual):
+        require(type(value) is dict and set(value)==set(RUNTIME_FILES),'runtime_source_manifest_invalid')
+        require(all(type(v) is str and re.fullmatch('[a-f0-9]{64}',v) for v in value.values()),'runtime_source_manifest_invalid')
+    require(actual==expected,'running_runtime_source_mismatch')
+    return dict(critical_file_sha256=actual,manifest_sha256=hashlib.sha256(
+        json.dumps(actual,sort_keys=True,separators=(',',':')).encode()).hexdigest())
 
 
 def assess(config,containers,networks,*,provider_egress=False):
@@ -99,6 +114,12 @@ def collect(root,*,provider_egress=False):
         'import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))'))
     require(supervisor.get('status')=='ready' and re.fullmatch('[a-f0-9]{64}',supervisor.get('runtime_digest','')),'hermes_source_binding_failed')
     report['hermes_runtime']=supervisor
+    source_root=Path(__file__).resolve().parents[2]/'gabriel/identity'
+    expected={name:hashlib.sha256((source_root/name).read_bytes()).hexdigest() for name in RUNTIME_FILES}
+    program=('import hashlib,json; from pathlib import Path; names='+repr(RUNTIME_FILES)+
+        '; print(json.dumps({n:hashlib.sha256((Path("/app/gabriel/identity")/n).read_bytes()).hexdigest() for n in names}))')
+    actual=json.loads(app.compose('exec','-T','workbench','python','-c',program))
+    report['runtime_source_binding']=validate_runtime_sources(expected,actual)
     client=http.client.HTTPSConnection('localhost',app.config['port'],timeout=10,
         context=ssl.create_default_context(cafile=str(root/'tls/ca.pem')))
     try:

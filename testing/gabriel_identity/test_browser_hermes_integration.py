@@ -18,12 +18,12 @@ from testing.gabriel_identity.test_browser_monitoring_integration import databas
 pytestmark=pytest.mark.integration
 
 
-def capture(tenant,cases,case,context,tab=1,sequence=1,existing=None):
+def capture(tenant,cases,case,context,tab=1,sequence=1,existing=None,observed_offset=0):
     item=existing or enrollment(tenant,cases,case,context,tab=tab,monitoring_approved=True)
     browser,lease,scope,_,_=item
     if existing is None:browser.connect_browser(lease.token,scope)
     payload=dict(schema_version=1,operation='browser.observe',request_id=str(uuid4()),sequence=sequence,context=scope,
-        observed_at=datetime.now(timezone.utc).isoformat(),visibility='partial',client_minimized=True,
+        observed_at=(datetime.now(timezone.utc)+timedelta(seconds=observed_offset)).isoformat(),visibility='partial',client_minimized=True,
         content='Generated dashboard\nGenerated lab account\nNo semantic parser is admitted for this page.')
     result=browser.observe_browser(tenant.token,lease.token,payload)
     return item,result
@@ -46,7 +46,7 @@ def test_partial_tabs_prepare_idempotent_receipt_facts_without_text_export(tenan
         with pytest.raises(AccessDenied):hermes.check_tabs(cases,conn,p,tenant.token,case['id'],ids,document)
 
 
-@pytest.mark.parametrize('change',['disconnect','new_capture','stale','future'])
+@pytest.mark.parametrize('change',['disconnect','new_capture','stale'])
 def test_frozen_snapshot_cannot_survive_scope_or_freshness_change(tenant,cases,case,context,change):
     item,_=capture(tenant,cases,case,context)
     ids=[str(item[1].id)];prepared=browser_hermes.prepare(cases,tenant.token,case['id'],ids)
@@ -54,8 +54,7 @@ def test_frozen_snapshot_cannot_survive_scope_or_freshness_change(tenant,cases,c
     if change=='disconnect':item[0].disconnect_browser(item[1].token)
     elif change=='new_capture':capture(tenant,cases,case,context,sequence=2,existing=item)
     else:
-        offset=timedelta(seconds=4 if change=='future' else -121)
-        with owner_connection(tenant.db) as conn:conn.execute("UPDATE gabriel_identity.browser_observations SET observed_at=clock_timestamp()+%s WHERE lease_id=%s",(offset,item[1].id))
+        with owner_connection(tenant.db) as conn:conn.execute("UPDATE gabriel_identity.browser_observation_receipts SET created_at=clock_timestamp()-interval '121 seconds' WHERE organization_id=%s AND observation_id IN (SELECT id FROM gabriel_identity.browser_observations WHERE lease_id=%s)",(tenant.org,item[1].id))
     with connection(cases._dsn) as conn:
         p=cases._human(conn,tenant.token)
         with pytest.raises(AccessDenied):hermes.check_tabs(cases,conn,p,tenant.token,case['id'],ids,document)
@@ -109,3 +108,32 @@ def test_receipt_assertion_time_does_not_inherit_client_clock_skew():
     assert all(f['event_time']==iso(received) for f in facts)
     document=dict(version='specialist-facts-v1',case_id=str(case_id),as_of=iso(received),facts=facts)
     assert validate_document(document,case_id)==document
+
+
+def test_future_client_observation_is_not_laundered_into_fresh_receipt_facts(tenant,cases,case,context):
+    item,_=capture(tenant,cases,case,context,observed_offset=4)
+    with pytest.raises(AccessDenied,match='hermes_fresh_tab_read_required'):
+        browser_hermes.prepare(cases,tenant.token,case['id'],[str(item[1].id)])
+
+
+def test_completed_navigation_requires_new_bound_capture_before_hermes(tenant,cases,case,context):
+    from urllib.parse import urlsplit
+    from gabriel.identity.browser_navigation import OPERATOR_PAGES
+    item,_=capture(tenant,cases,case,context)
+    browser,lease,scope,_,_=item
+    ids=[str(lease.id)];prepared=browser_hermes.prepare(cases,tenant.token,case['id'],ids)
+    original=json.loads(cases.read_evidence(tenant.token,prepared['facts_evidence_id']).reveal())
+    parsed=urlsplit(scope['page_url']);destination=parsed.scheme+'://'+parsed.netloc+'/alerts'
+    browser.grant_navigation(tenant.token,lease.token,uuid4(),OPERATOR_PAGES,[destination])
+    intent=browser.prepare_navigation(tenant.token,lease.token,uuid4(),destination)
+    updated=dict(scope,page_url=destination,document_id=str(uuid4()))
+    browser.complete_navigation(tenant.token,lease.token,intent['id'],updated)
+    with pytest.raises(AccessDenied,match='post_navigation_capture_required'):
+        browser_hermes.prepare(cases,tenant.token,case['id'],ids)
+    renewed=(browser,lease,updated,item[3],item[4])
+    capture(tenant,cases,case,context,sequence=2,existing=renewed)
+    fresh=browser_hermes.prepare(cases,tenant.token,case['id'],ids)
+    assert fresh['facts_evidence_id']!=prepared['facts_evidence_id']
+    with connection(cases._dsn) as conn:
+        p=cases._human(conn,tenant.token)
+        with pytest.raises(AccessDenied):hermes.check_tabs(cases,conn,p,tenant.token,case['id'],ids,original)
