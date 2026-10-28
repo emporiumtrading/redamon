@@ -372,7 +372,7 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
         if (deduplicate) {
           if (!monitoring?.enabled || monitoring.captures >= monitoring.max_captures) throw new Error("Scheduled capture budget reached; review the case before renewing.");
           hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(view.content)))).map(x=>x.toString(16).padStart(2,"0")).join("");
-          if (monitoring.digests[selected.page_url] === hash) {
+          if (monitoring.digests[selected.page_url] === hash && Date.now() - (monitoring.capture_times?.[selected.page_url] || 0) < 60000) {
             await persist({monitoring: {...monitoring, unchanged: monitoring.unchanged + 1, last_checked: Date.now(), state: "reviewed_unchanged"}}, revision);
             return;
           }
@@ -414,7 +414,7 @@ async function capture(selected, session, revision, tour, intent = null, dedupli
         if (deduplicate) {
           const {monitoring: latest} = await storage.get("monitoring");
           await persist({monitoring: {...latest, captures: latest.captures + 1, last_checked: Date.now(), last_capture: Date.now(),
-            state: latest.ai?.state === "deferred_budget_slot" ? "waiting_for_ai_budget" : "reviewed", digests: {...latest.digests, [selected.page_url]: hash}}}, revision);
+            state: latest.ai?.state === "deferred_budget_slot" ? "waiting_for_ai_budget" : "reviewed", digests: {...latest.digests, [selected.page_url]: hash}, capture_times: {...latest.capture_times, [selected.page_url]: Date.now()}}}, revision);
         }
 
 }

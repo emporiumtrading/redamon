@@ -14,6 +14,8 @@ The upstream all-purpose Hermes image failed the high-severity scan threshold. T
 
 ## Live AI qualification
 
+The combined offline [sealed qualification command](GABRIEL_SEALED_QUALIFICATION.md) binds all fourteen current configurations to a separately retained pre-run seal, rejects reused provider generation IDs across roles, and checks declared reviewer separation. This is validation software, not independent corpus acquisition, identity authentication or a successful live evaluation. Production admission remains disabled until the actual evidence and release review exist.
+
 There are fourteen exact candidate configurations: Hermes planning, Hermes reporting and twelve specialist roles. The CI artifact `gabriel-qualification-configurations-<runner>` records their current runtime hashes and the tested checkout. It contains no provider key, customer evidence or inference result. Run these entry points inside the checked Gabriel image/container, never on the host. Export the configuration identities without inference:
 
 ```bash
@@ -33,6 +35,10 @@ The specialist qualification entry point remains `specialist_qualification.evalu
 Concrete remaining evidence: authorized/licensed artifacts with verified hashes and rights; independently sealed labels; qualified analyst review of the actual original model answers and assignments; exact provider/route, privacy, cost and configuration provenance. A software evaluator cannot authenticate the reviewer or establish source truth. Both evaluation entry points return `production_admission: false`; reviewed release promotion is a separate step. Do not populate the production registry from fixtures or a connectivity test.
 
 ## Integrated deployment acceptance
+
+The workbench can freeze one to eight selected tab captures into [bounded Hermes receipt investigations](GABRIEL_SELECTED_TAB_HERMES.md). Partial captures supply capture-integrity and missing-coverage facts only; their page text stays local. These facts support visibility/custody review, not autonomous interpretation of dashboard incidents. Real console semantic extraction, admitted navigation and the background gateway-to-Hermes investigation loop still need implementation and acceptance. Current authority, freshness and selected sources are rechecked after provider I/O; changed scope or sources prevent publishing an obsolete result.
+
+The [runtime acceptance collector](GABRIEL_RUNTIME_ACCEPTANCE.md) checks an actual installation's source/image identities, service health, network/mount isolation, resource limits, Hermes binding and trusted HTTPS denial of unauthenticated access. Installation CI retains these sanitized reports. A passed collector does not establish native browser/device behavior, measured workload/recovery performance or human operational/security acceptance.
 
 Use the owner's Apple Silicon/Docker Desktop host with the checked images and separately retained keys. Record actual Mac certificate trust, extension pairing, selected-tab scope, visible capture/privacy, Stop/logout/revocation, source drift, spending exhaustion and restart behavior. Repeat the supported consumer-browser/OS and guest-VM matrix before advertising those combinations. Linux ARM CI does not substitute for Mac or Windows UAT.
 
