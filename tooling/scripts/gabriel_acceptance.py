@@ -53,7 +53,8 @@ def assess(config,containers,networks,*,provider_egress=False):
             require('ALL' in [v.upper() for v in host.get('CapDrop',[])] and not host.get('CapAdd'),'capability_policy_changed')
             require(any(v in {'no-new-privileges','no-new-privileges:true'} for v in host.get('SecurityOpt',[])),'privilege_policy_missing')
             temporary=host.get('Tmpfs') or {}
-            require(set(temporary)=={'/tmp'} and {'noexec','nosuid'}<=set(temporary['/tmp'].split(',')),'temporary_mount_hardening_missing')
+            if service=='local-entry':require(not temporary,'relay_temporary_mount_denied')
+            else:require(set(temporary)=={'/tmp'} and {'noexec','nosuid'}<=set(temporary['/tmp'].split(',')),'temporary_mount_hardening_missing')
             require(type(host.get('Memory')) is int and host['Memory']>0 and host.get('PidsLimit',0)>0,'resource_limits_missing')
         mounts=row.get('Mounts',[])
         targets=[m.get('Destination') for m in mounts]

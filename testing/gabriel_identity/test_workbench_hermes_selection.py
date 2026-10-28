@@ -59,9 +59,12 @@ def test_non_hermes_forms_still_reject_duplicate_fields_and_oversized_field_sets
 
 
 @pytest.mark.parametrize('operation,approved',[('preflight',False),('start',True)])
-def test_selected_tab_snapshot_routes_to_hermes_with_exact_selected_scope(operation,approved):
+@pytest.mark.parametrize('automatic',[True,False])
+def test_selected_tab_snapshot_routes_to_hermes_with_exact_selected_scope(operation,approved,automatic):
     from gabriel.identity import browser_hermes,hermes_supervisor as hermes
-    wb=app();env=form(fields(operation,approved))
+    submitted=fields(operation,approved)
+    if not automatic:submitted=[(k,str(UUID(int=44)) if k=='input_evidence_id' else v) for k,v in submitted if k!='selected_leases']
+    wb=app();env=form(submitted)
     env.update(REQUEST_METHOD='POST',HTTP_HOST='localhost:9443',HTTP_ORIGIN=wb.target,**{'wsgi.url_scheme':'https'})
     principal=SimpleNamespace(role='analyst')
     @contextmanager
@@ -76,10 +79,11 @@ def test_selected_tab_snapshot_routes_to_hermes_with_exact_selected_scope(operat
             patch.object(browser_hermes,'prepare',return_value={'facts_evidence_id':str(UUID(int=33))}) as prepare,\
             patch.object(hermes,'preflight',return_value=outcome) as preflight,patch.object(hermes,'start',return_value=outcome) as start:
         assert wb._route(env)[0]=='200 OK'
-        prepare.assert_called_once_with(wb.service,wb._token,CASE,TABS)
+        if automatic:prepare.assert_called_once_with(wb.service,wb._token,CASE,TABS)
+        else:prepare.assert_not_called()
         dispatched=start if operation=='start' else preflight
-        assert dispatched.call_args.kwargs['lease_ids']==TABS
-        assert str(UUID(int=33)) in dispatched.call_args.args
+        assert dispatched.call_args.kwargs['lease_ids']==(TABS if automatic else [])
+        assert str(UUID(int=33 if automatic else 44)) in dispatched.call_args.args
         if operation=='start':assert dispatched.call_args.kwargs['approved'] is True
         else:start.assert_not_called()
 
@@ -92,3 +96,15 @@ def test_missing_start_consent_prevents_snapshot_creation_and_dispatch():
             patch.object(browser_hermes,'prepare') as prepare,patch.object(hermes,'start') as start:
         with pytest.raises(AccessDenied,match='hermes_ai_export_consent_required'):wb._route(env)
         prepare.assert_not_called();start.assert_not_called()
+
+
+@pytest.mark.parametrize('operation,approved',[('preflight',False),('start',True)])
+def test_automatic_snapshot_requires_tabs_before_preparation(operation,approved):
+    from gabriel.identity import browser_hermes,hermes_supervisor as hermes
+    submitted=[(k,v) for k,v in fields(operation,approved) if k!='selected_leases']
+    wb=app();env=form(submitted);env.update(REQUEST_METHOD='POST',HTTP_HOST='localhost:9443',HTTP_ORIGIN=wb.target,**{'wsgi.url_scheme':'https'})
+    with patch.object(wb,'_authenticate',return_value=SimpleNamespace(role='analyst')),\
+            patch.object(hermes,'readiness',return_value=dict(model='fixture',qualification='qualification_pending')),\
+            patch.object(browser_hermes,'prepare') as prepare,patch.object(hermes,'start') as start,patch.object(hermes,'preflight') as preflight:
+        with pytest.raises(AccessDenied,match='hermes_selected_tabs_required'):wb._route(env)
+        prepare.assert_not_called();start.assert_not_called();preflight.assert_not_called()

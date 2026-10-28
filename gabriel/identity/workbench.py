@@ -261,9 +261,9 @@ class Workbench:
                     if set(fields)!={'csrf'}:raise AccessDenied('invalid_hermes_form')
                     result=hermes.stop(self.service,self._token,run_id) if operation=='stop' else hermes.resume(self.service,self._provider_vault,self._token,run_id)
                 else:
-                    required={'csrf','request_id','input_evidence_id','model','specialist_model','key_scope','selected_leases','operation'}
-                    if set(fields)-{'approved'}!=required:raise AccessDenied('invalid_hermes_form')
-                    leases=selected_hermes_leases(fields['selected_leases'])
+                    required={'csrf','request_id','input_evidence_id','model','specialist_model','key_scope','operation'}
+                    if set(fields)-{'approved','selected_leases'}!=required:raise AccessDenied('invalid_hermes_form')
+                    leases=selected_hermes_leases(fields.get('selected_leases','local'))
                     if fields['operation'] not in {'preflight','start'} or fields['operation']=='start' and fields.get('approved')!='yes':
                         raise AccessDenied('hermes_ai_export_consent_required')
                     input_evidence_id=fields['input_evidence_id']
@@ -301,8 +301,8 @@ class Workbench:
                 inputs=''.join('<option value="'+e(r['id'])+'">'+e(r['id'])+'</option>' for r in snapshot['evidence'] if r['state']=='ready' and r['storage_state']=='active')
                 if owned:inputs='<option value="selected_tabs">Selected tabs: capture integrity and visibility gaps (no dashboard incident parsing)</option>'+inputs
                 if inputs:
-                    tab_options='<option value="local">Local typed evidence only</option>'+''.join('<option value="'+e(v)+'"'+(' selected' if i==0 else '')+'>Selected session '+e(str(i+1))+'</option>' for i,v in enumerate(owned))
-                    common='<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Investigation input<select name="input_evidence_id">'+inputs+'</select></label><label>Investigation scope — choose up to eight sessions<select name="selected_leases" multiple size="5" required>'+tab_options+'</select></label><label>Hermes model<select name="model"><option>'+e(hermes.DEFAULT_MODEL)+'</option></select></label><label>Specialist model<select name="specialist_model">'+''.join('<option'+(' selected' if m==hermes.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in hermes.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label>'
+                    tab_options='<option value="local" selected>Local typed evidence only</option>'+''.join('<option value="'+e(v)+'">Selected session '+e(str(i+1))+'</option>' for i,v in enumerate(owned))
+                    common='<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Investigation input<select name="input_evidence_id">'+inputs+'</select></label><label>Investigation scope — choose one to eight sessions for automatic snapshots; optional for local typed evidence<select name="selected_leases" multiple size="5">'+tab_options+'</select></label><label>Hermes model<select name="model"><option>'+e(hermes.DEFAULT_MODEL)+'</option></select></label><label>Specialist model<select name="specialist_model">'+''.join('<option'+(' selected' if m==hermes.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in hermes.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label>'
                     body+=self._form(base,'Check readiness',common+'<input type="hidden" name="operation" value="preflight">')
                     body+=self._form(base,'Start Hermes investigation',common+'<input type="hidden" name="operation" value="start"><label><input type="checkbox" name="approved" value="yes" required>I approve sending the displayed minimized scope and eligible reviewed typed historical references to Hermes and the relevant specialists through my selected key and spending limits. Automatic selected-tab snapshots contain capture integrity and visibility gaps, without dashboard incident parsing. Free-text and performance-test memory are excluded.</label>')
             for record in hermes.history(self.service,self._token,case_id):

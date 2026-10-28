@@ -17,7 +17,7 @@ class RuntimeAcceptance(unittest.TestCase):
             self.rows.append(dict(Image=self.config['image'],Config=dict(User='10001:10001',Labels={
                 'com.docker.compose.project':self.config['project'],'com.docker.compose.service':service}),
                 State=dict(Running=True,Health=dict(Status='healthy')),Mounts=[dict(Destination=k,Type=v[0],RW=v[1]) for k,v in MOUNTS.get(service,{}).items()],
-                HostConfig=dict(Tmpfs={'/tmp':'rw,noexec,nosuid,size=8m'},Privileged=False,ReadonlyRootfs=True,CapDrop=['ALL'],SecurityOpt=['no-new-privileges:true'],Memory=1024,PidsLimit=32,
+                HostConfig=dict(Tmpfs={} if service=='local-entry' else {'/tmp':'rw,noexec,nosuid,size=8m'},Privileged=False,ReadonlyRootfs=True,CapDrop=['ALL'],SecurityOpt=['no-new-privileges:true'],Memory=1024,PidsLimit=32,
                     PortBindings={'8444/tcp':[dict(HostIp='127.0.0.1',HostPort='18444')]} if service=='local-entry' else {}),
                 NetworkSettings=dict(Networks={'generated-project_'+n:{} for n in NETWORKS[service]})))
         self.networks={'generated-project_'+n:dict(Internal=n!='entry',Labels={'com.docker.compose.project':'generated-project'}) for n in ('private','toolbus','entry')}
@@ -42,13 +42,14 @@ class RuntimeAcceptance(unittest.TestCase):
             rows=deepcopy(self.rows);next(r for r in rows if r['Config']['Labels']['com.docker.compose.service']=='workbench')['HostConfig'][field]=value
             with self.subTest(field=field),self.assertRaises(ValueError):assess(self.config,rows,self.networks)
     def test_listener_image_mount_and_network_drift_rejected(self):
-        for change in ('public','database-port','image','owner-secret','docker-socket','tool-volume','egress','network-missing','host-root','secret-writable','required-mount-missing','network-role'):
+        for change in ('public','database-port','image','owner-secret','docker-socket','tool-volume','egress','network-missing','host-root','secret-writable','required-mount-missing','network-role','relay-tmpfs'):
             rows=deepcopy(self.rows);by={r['Config']['Labels']['com.docker.compose.service']:r for r in rows};networks=deepcopy(self.networks)
             if change=='public':by['local-entry']['HostConfig']['PortBindings']['8444/tcp'][0]['HostIp']='0.0.0.0'
             if change=='database-port':by['identity-db']['HostConfig']['PortBindings']={'5432/tcp':[]}
             if change=='image':by['workbench']['Image']='sha256:'+'b'*64
             if change in {'owner-secret','docker-socket'}:by['workbench']['Mounts']=[dict(Type='bind',Destination='/run/secrets/owner_dsn' if change=='owner-secret' else '/var/run/docker.sock')]
             if change=='tool-volume':by['hermes']['Mounts']=[dict(Type='volume',Destination='/data')]
+            if change=='relay-tmpfs':by['local-entry']['HostConfig']['Tmpfs']={'/tmp':'rw,noexec,nosuid,size=8m'}
             if change=='host-root':by['workbench']['Mounts'].append(dict(Type='bind',Destination='/host',RW=True))
             if change=='secret-writable':next(m for m in by['workbench']['Mounts'] if m['Destination']=='/run/secrets/app_dsn')['RW']=True
             if change=='required-mount-missing':by['workbench']['Mounts'].pop()

@@ -17,7 +17,7 @@ def capture_facts(observation,artifact):
     """These two claims concern the receipt, never the truth of page content."""
     parent=identifier(observation['id'])
     common=dict(evidence_id=str(artifact['id']),evidence_digest=artifact['digest'],entity_id=None,
-        event_time=iso(observation['observed_at']))
+        event_time=iso(observation['received_at']))
     return [dict(common,id=str(uuid5(parent,VERSION+'/integrity')),type='artifact',data=dict(integrity='match',custody='unknown')),
         dict(common,id=str(uuid5(parent,VERSION+'/coverage')),type='coverage',data=dict(state='missing'))]
 

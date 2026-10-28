@@ -1,5 +1,5 @@
 """Real scoped captures and frozen multi-tab sources; provider replies are generated."""
-from datetime import datetime,timezone
+from datetime import datetime,timedelta,timezone
 import json
 from types import SimpleNamespace
 from uuid import uuid4
@@ -46,7 +46,7 @@ def test_partial_tabs_prepare_idempotent_receipt_facts_without_text_export(tenan
         with pytest.raises(AccessDenied):hermes.check_tabs(cases,conn,p,tenant.token,case['id'],ids,document)
 
 
-@pytest.mark.parametrize('change',['disconnect','new_capture','stale'])
+@pytest.mark.parametrize('change',['disconnect','new_capture','stale','future'])
 def test_frozen_snapshot_cannot_survive_scope_or_freshness_change(tenant,cases,case,context,change):
     item,_=capture(tenant,cases,case,context)
     ids=[str(item[1].id)];prepared=browser_hermes.prepare(cases,tenant.token,case['id'],ids)
@@ -54,7 +54,8 @@ def test_frozen_snapshot_cannot_survive_scope_or_freshness_change(tenant,cases,c
     if change=='disconnect':item[0].disconnect_browser(item[1].token)
     elif change=='new_capture':capture(tenant,cases,case,context,sequence=2,existing=item)
     else:
-        with owner_connection(tenant.db) as conn:conn.execute("UPDATE gabriel_identity.browser_observations SET observed_at=clock_timestamp()-interval '121 seconds' WHERE lease_id=%s",(item[1].id,))
+        offset=timedelta(seconds=4 if change=='future' else -121)
+        with owner_connection(tenant.db) as conn:conn.execute("UPDATE gabriel_identity.browser_observations SET observed_at=clock_timestamp()+%s WHERE lease_id=%s",(offset,item[1].id))
     with connection(cases._dsn) as conn:
         p=cases._human(conn,tenant.token)
         with pytest.raises(AccessDenied):hermes.check_tabs(cases,conn,p,tenant.token,case['id'],ids,document)
@@ -78,7 +79,13 @@ def test_two_partial_tabs_run_native_hermes_and_personal_specialists_then_replay
     assert result['scope']=='selected_tabs_and_bound_typed_facts'
     assert result['delegated_roles']==['telemetry_health','dfir_evidence']
     assert 'Generated dashboard' not in json.dumps(supervision['posts'])
-    assert hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)==result
+    replay=hermes.start(cases,supervision['vault'],analyst.token,case['id'],request,prepared['facts_evidence_id'],approved=True,lease_ids=ids)
+    for key in ('run_id','state','delegated_roles','plan_answer_evidence_id','report_answer_evidence_id'):
+        assert replay[key]==result[key]
+    for original,repeated in zip(result['agents'],replay['agents']):
+        assert repeated['result']['job_id']==original['result']['job_id']
+        assert [s['answer_evidence_id'] for s in repeated['result']['steps']]==[s['answer_evidence_id'] for s in original['result']['steps']]
+        assert all(s['historical'] for s in repeated['result']['steps'])
     assert len(supervision['posts'])==6
 
 
@@ -90,3 +97,15 @@ def test_second_tab_change_during_provider_call_stops_without_child_dispatch(ten
     supervision['hermes_client'].hermes_callback=lambda:capture(analyst,cases,case,context,2,2,two)
     with pytest.raises(AccessDenied):hermes.start(cases,supervision['vault'],analyst.token,case['id'],uuid4(),prepared['facts_evidence_id'],approved=True,lease_ids=ids)
     assert len(supervision['posts'])==1
+
+
+def test_receipt_assertion_time_does_not_inherit_client_clock_skew():
+    from gabriel.identity.cases import iso
+    from gabriel.identity.specialist_analysis import validate_document
+    received=datetime.now(timezone.utc);case_id=uuid4()
+    observation=dict(id=uuid4(),received_at=received,observed_at=received+timedelta(seconds=3))
+    artifact=dict(id=uuid4(),digest='a'*64)
+    facts=browser_hermes.capture_facts(observation,artifact)
+    assert all(f['event_time']==iso(received) for f in facts)
+    document=dict(version='specialist-facts-v1',case_id=str(case_id),as_of=iso(received),facts=facts)
+    assert validate_document(document,case_id)==document
