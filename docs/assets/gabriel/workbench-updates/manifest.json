@@ -1,0 +1,62 @@
+{
+  "source_sha": "dc0869d88e60d774c79c94375f707b310ef30c79",
+  "images": [
+    {
+      "file": "ui-investigation-dashboard.png",
+      "title": "Bounded investigation queue and navigation",
+      "kind": "actual_generated_data",
+      "sha256": "c930b0d1a7671e0db3b201dc55efdeb77d5d3847bf24c6225a452024aa0c5eb8",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "ui-case-overview.png",
+      "title": "Evidence summary and next investigation steps",
+      "kind": "actual_generated_data",
+      "sha256": "dbc6816119478fdaf2a1d25f9d4300abe759546dbba54c3d81615e669db98a61",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "ui-mobile-overview.png",
+      "title": "Case overview on mobile",
+      "kind": "actual_generated_data",
+      "sha256": "353ce1a5c53fc6d89c9f5159314a2da390222083230e43bd02a70362e62f9821",
+      "width": 390,
+      "height": 1000
+    },
+    {
+      "file": "ui-source-health.png",
+      "title": "Connection state and unverified page visibility",
+      "kind": "actual_generated_data",
+      "sha256": "96acdf39c90f5eb93c1b302069e7816ad7eaa093bffcaf713c1ca1f290e4ea72",
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "file": "ui-hermes-workflow.png",
+      "title": "Actual Hermes workflow and qualification state",
+      "kind": "actual_generated_data",
+      "sha256": "159801a1fa38d494b2aef5f5998f95370bd8a9f0392db3477dd831697bddc0a6",
+      "width": 1440,
+      "height": 1000
+    }
+  ],
+  "synthetic_data": true,
+  "model_calls": 0,
+  "production_admission": false,
+  "hermes_integrated": true,
+  "hermes_requirement": "required_runtime_not_production_admitted",
+  "environment": "Isolated Chromium screenshot lab, sandbox disabled inside non-root private Docker container",
+  "actual_screens": "Rendered current workbench against ephemeral PostgreSQL and actual local parser service",
+  "design_previews": "None in this subset; all five screens are current generated-data workbench captures",
+  "capture_workflow_run": "https://github.com/emporiumtrading/redamon/actions/runs/40769903592",
+  "capture_artifact_id": 12851402782,
+  "capture_artifact_zip_sha256": "b71e0fc22bb1c96a4d90651d361bbecfcd404a73ee6f7be0db294a44bdc5ac17",
+  "pull_request_head": "de4a66a7bcd931d84a35d50b7bcd356df0f45073",
+  "screenshot_source_files_sha256": {
+    "gabriel/identity/workbench.py": "bf88c5d13dafc10c129c4b1c443a95294b83ed351e477b2d5186aa2cc1a9733c",
+    "testing/gabriel_gallery/capture.py": "5f30f3be3fc7a816aa754b8012138db45f6abc9e8a6cc85e0555bcb7494c6368"
+  },
+  "visual_review": "All five actual UI screens reviewed; desktop1440px and mobile390px captures;320px overflow assertion passed."
+}
