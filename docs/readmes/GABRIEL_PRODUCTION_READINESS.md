@@ -36,6 +36,8 @@ Concrete remaining evidence: authorized/licensed artifacts with verified hashes 
 
 ## Integrated deployment acceptance
 
+An explicit [local visible-page structure draft](GABRIEL_VISIBLE_STRUCTURE.md) can retain source-linked headings, table cells and label/value pairs without vendor-specific markers. It performs no inference, assigns no field meanings and does not admit incident facts or background Hermes work. Its generated-page and content-permission checks require their own recorded Docker results.
+
 The workbench can freeze one to eight selected tab captures into [bounded Hermes receipt investigations](GABRIEL_SELECTED_TAB_HERMES.md). Partial captures supply capture-integrity and missing-coverage facts only; their page text stays local. These facts support visibility/custody review, not autonomous interpretation of dashboard incidents. Real console semantic extraction, admitted navigation and the background gateway-to-Hermes investigation loop still need implementation and acceptance. Current authority, freshness and selected sources are rechecked after provider I/O; changed scope or sources prevent publishing an obsolete result.
 
 The [runtime acceptance collector](GABRIEL_RUNTIME_ACCEPTANCE.md) checks an actual installation's source/image identities, service health, network/mount isolation, resource limits, Hermes binding and trusted HTTPS denial of unauthenticated access. Installation CI retains these sanitized reports. A passed collector does not establish native browser/device behavior, measured workload/recovery performance or human operational/security acceptance.

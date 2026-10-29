@@ -1,5 +1,10 @@
 const byId = id => document.getElementById(id);
 let observedAt = null;
+let structureObservedAt = null;
+function clearPreviews() {
+  byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null;
+  byId("structure-text").value = ""; byId("structure-approved").checked = false; structureObservedAt = null;
+}
 let paired = false;
 let requestGeneration = 0;
 const field = (id) => byId(id).value;
@@ -13,8 +18,8 @@ async function run(operation, extra = {}) {
     }
     if (["stop","pause","select"].includes(operation)) paired = false;
     if (["stop","pause","select"].includes(operation)) byId("ai-approved").checked = false;
-    if (["stop","pause","select","navigation-plan","navigation-run"].includes(operation)) {
-      byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null;
+    if (["stop","stop-tab","pause","select","navigation-plan","navigation-run","monitor-start","monitor-stop","channel-select","preview","preview-structure"].includes(operation)) {
+      clearPreviews();
       byId("navigation-approved").checked = false;
     }
     const value = await chrome.runtime.sendMessage({operation, ...extra});
@@ -50,21 +55,28 @@ async function run(operation, extra = {}) {
       byId("browser").value = result.context.browser;
       byId("account").value = result.context.account_label;
     }
-    if (result.content) { byId("preview-text").value = result.content; observedAt = result.observed_at; byId("approved").checked = false; }
+    if (result.content && operation === "preview-structure") {
+      byId("structure-text").value = JSON.stringify(JSON.parse(result.content), null, 2);
+      structureObservedAt = result.observed_at; byId("structure-approved").checked = false;
+    } else if (result.content) { byId("preview-text").value = result.content; observedAt = result.observed_at; byId("approved").checked = false; }
     if (result.plan) byId("navigation-sections").textContent = result.plan.destinations.join(" → ") + "; expires " + result.plan.expires_at;
     if (["stop","select"].includes(operation)) byId("navigation-sections").textContent = "";
-    if (operation === "share" || operation === "stop") { byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null; }
+    if (["share","share-structure","stop","stop-tab"].includes(operation)) clearPreviews();
     byId("message").textContent = result.message || (operation === "preview" ? "Partial preview ready. Review before sharing." : "Page selected. Give this context to your Gabriel operator.");
-    byId("result").textContent = result.receipt ? "Observation " + result.receipt.observation_id + "; evidence " + result.receipt.evidence_id : result.expires_at ? "Pairing expires: " + result.expires_at + (result.organization_id ? "; Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id : "") : "";
+    byId("result").textContent = result.receipt ? "Observation " + result.receipt.observation_id + "; evidence " + result.receipt.evidence_id + (result.review?.draft_evidence_id ? "; structural draft " + result.review.draft_evidence_id : "") : result.expires_at ? "Pairing expires: " + result.expires_at + (result.organization_id ? "; Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id : "") : "";
   } catch (error) { if (revision === requestGeneration) byId("message").textContent = error.message; }
 }
 byId("select").onclick = () => run("select", {browser: field("browser"), account: field("account")});
 byId("pair").onclick = () => { const ticket = field("ticket"); byId("ticket").value = ""; return run("pair", {endpoint: field("endpoint"), ticket}); };
 byId("preview").onclick = () => run("preview");
+byId("preview-structure").onclick = () => run("preview-structure");
+byId("share-structure").onclick = () => run("share-structure", {content: field("structure-text"), observed_at: structureObservedAt, approved: byId("structure-approved").checked});
+byId("structure-text").oninput = () => { byId("structure-approved").checked = false; };
+byId("preview-text").oninput = () => { byId("approved").checked = false; };
 byId("share").onclick = () => run("share", {content: field("preview-text"), observed_at: observedAt, approved: byId("approved").checked});
 for (const operation of ["status", "receipts", "pause", "resume", "stop"]) byId(operation).onclick = () => run(operation);
 byId("channels").onchange = () => {
-  byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false;
+  clearPreviews(); byId("ticket").value = "";
   byId("navigation-approved").checked = false; byId("monitor-approved").checked = false; byId("ai-approved").checked = false;
   run("channel-select", {channel_id: field("channels")});
 };
@@ -82,7 +94,10 @@ byId("permission").onclick = async () => {
     byId("message").textContent = accepted ? "Permission granted only for this Gabriel origin. Pairing is still required." : "Permission declined.";
   } catch { byId("message").textContent = "Endpoint permission was not granted."; }
 };
-document.addEventListener("visibilitychange", () => { if (document.hidden) { byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false; byId("navigation-approved").checked = false; } });
+document.addEventListener("visibilitychange", () => { if (document.hidden) {
+  requestGeneration++; clearPreviews(); byId("ticket").value = ""; byId("navigation-approved").checked = false;
+  chrome.runtime.sendMessage({operation: "discard-previews"}).catch(() => {});
+} });
 setInterval(() => { if (paired && !document.hidden) run("status"); }, 20000);
 document.body.dataset.gabrielReady = "true";
 run("state");

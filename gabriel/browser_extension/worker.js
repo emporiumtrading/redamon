@@ -76,6 +76,7 @@ async function dispatch(message) {
   }
   if (message.operation==="channel-select") {
     if (!current.some(r=>r.id===message.channel_id)) throw new Error("Unknown selected tab.");
+    for (const engine of channels.values()) engine.discardPreviews();
     await chrome.storage.session.set({selectedChannel:message.channel_id});
     return dispatch({operation:"state"});
   }

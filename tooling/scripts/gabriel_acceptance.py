@@ -17,7 +17,7 @@ APP=SERVICES-{'identity-db'}
 RUNTIME_FILES=('service.py','schema.sql','schema_v31.sql','installation.py','workbench.py',
     'model_worker.py','model_budget.py','model_routes.py','model_transport.py','personal_providers.py',
     'specialist_agents.py','specialist_qualification.py','hermes_supervisor.py','hermes_bridge.py',
-    'hermes_qualification.py','browser_hermes.py','release_qualification.py','reviewed_memory.py',
+    'hermes_qualification.py','browser_semantics.py','browser_hermes.py','release_qualification.py','reviewed_memory.py',
     'memory.py','coordinator.py','browser_sessions.py','browser_observations.py','browser_events.py','browser_specialists.py')
 
 NETWORKS={'identity-db':{'private'},'workbench':{'private','toolbus'},'hermes':{'toolbus'},
