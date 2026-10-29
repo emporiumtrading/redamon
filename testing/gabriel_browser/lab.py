@@ -28,6 +28,7 @@ import websocket
 from gabriel.identity.browser_gateway import prepare
 from gabriel.identity.browser_observations import BrowserObservationService
 from gabriel.identity.browser_navigation import BrowserNavigationService
+from gabriel.identity.browser_sessions import approved_context
 from gabriel.identity.checkpoints import read_document,write_document
 from gabriel.identity.cli import read_secret
 from gabriel.identity.evidence_store import EvidenceKeys,LocalEvidenceStore
@@ -200,6 +201,7 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
         scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
         assert scope['extension_version']=='0.4.0'
         assert scope['page_url']==console_origin+'/security'
+        expected_context=approved_context(scope)
         endpoint='https://localhost:'+str(port)
         assert cdp.evaluate(popup,'chrome.permissions.contains({origins:['+json.dumps(endpoint+'/*')+']})')
         case=navigation.create_case(human,'Generated navigation '+scenario+' case')
@@ -229,7 +231,7 @@ def navigation_journey(cdp,family,service,human,tls,root,env,console_target,cons
                     expected_scope='Organization '+str(lease['organization_id'])+'; Case '+str(case['id'])+'; Task '+str(task['id'])
                     return (lease['state']=='active' and lease['authorization_current'] and lease['heartbeat_fresh']
                         and str(lease['case_id'])==str(case['id']) and str(lease['task_id'])==str(task['id'])
-                        and all(str(lease[key])==str(value) for key,value in scope.items())
+                        and all(str(lease[key])==str(value) for key,value in expected_context.items())
                         and text(cdp,popup,'scope')==expected_scope)
                 # Periodic status can replace the pair notice before the next DOM poll.
                 wait_for(current_pairing)
