@@ -107,11 +107,17 @@ def _workbench(cdp,family,service,human,case_id,draft_id,tls,root,env,h):
             output=h['output']
             source_sha=(output/'source-sha.txt').read_text().strip()
             assert len(source_sha)==40 and all(c in '0123456789abcdef' for c in source_sha)
-            shot=base64.b64decode(cdp.send('Page.captureScreenshot',dict(format='png',captureBeyondViewport=False),session)['data'])
-            screenshot=family+'-generated-structure-draft.png'
-            (output/screenshot).write_bytes(shot)
+            screenshots={}
+            for width in (1280,390):
+                cdp.send('Emulation.setDeviceMetricsOverride',dict(width=width,height=900,deviceScaleFactor=1,mobile=False),session)
+                assert cdp.evaluate(session,'document.documentElement.scrollWidth<=innerWidth'), (width,'structure page overflow')
+                shot=base64.b64decode(cdp.send('Page.captureScreenshot',dict(format='png',captureBeyondViewport=False),session)['data'])
+                screenshot=family+'-generated-structure-draft'+('' if width==1280 else '-390')+'.png'
+                (output/screenshot).write_bytes(shot)
+                screenshots[str(width)]=dict(screenshot=screenshot,screenshot_sha256=sha256(shot).hexdigest())
+            cdp.send('Emulation.clearDeviceMetricsOverride',session=session)
             evidence=dict(kind='actual_generated_data_authenticated_content_view',source_sha=source_sha,
-                screenshot=screenshot,screenshot_sha256=sha256(shot).hexdigest(),draft_evidence_id=draft_id,
+                screenshots=screenshots,draft_evidence_id=draft_id,
                 draft_sha256=sha256(service.read_evidence(human,draft_id).reveal()).hexdigest(),
                 source=rendered['source'],model_calls=0,production_admission=False,native_device_acceptance=False)
             (output/(family+'-generated-structure-draft.json')).write_text(json.dumps(evidence,sort_keys=True,indent=2)+'\n')
@@ -234,6 +240,32 @@ def journey(cdp,family,service,human,tls,root,env,console_origin,extension_origi
                     preview=_wire(cdp,popup,dict(operation='preview-structure'))
                     assert preview['ok']
                     preview_content=preview['result']['content']
+                    if index==1:
+                        edited=json.loads(preview_content)
+                        edited['tables'][0]['rows'][0]['cells'][0]['text']='Invented replacement'
+                        denied=_wire(cdp,popup,dict(operation='share-structure',content=json.dumps(edited),observed_at=preview['result']['observed_at'],approved=True))
+                        assert not denied['ok']
+                        assert not navigation.list_browser_observations(human,enrolled['lease_id'])['observations']
+                        redacted=json.loads(preview_content)
+                        removed=redacted['pairs'].pop(0)
+                        assert removed['value']['text']=='Generated sensor - unverified'
+                        preview_content=json.dumps(redacted)
+                        checks+=['retained_structural_field_edit_denied','whole_block_redaction_before_sharing']
+                    if index==2:
+                        assert _wire(cdp,popup,dict(operation='preview'))['ok']
+                        denied=_wire(cdp,popup,dict(operation='share-structure',content=preview_content,observed_at=preview['result']['observed_at'],approved=True))
+                        assert not denied['ok']
+                        preview=_wire(cdp,popup,dict(operation='preview-structure'))
+                        assert preview['ok']
+                        assert _wire(cdp,popup,dict(operation='pause'))['ok']
+                        assert _wire(cdp,popup,dict(operation='resume'))['ok']
+                        denied=_wire(cdp,popup,dict(operation='share-structure',content=preview['result']['content'],observed_at=preview['result']['observed_at'],approved=True))
+                        assert not denied['ok']
+                        assert not navigation.list_browser_observations(human,enrolled['lease_id'])['observations']
+                        preview=_wire(cdp,popup,dict(operation='preview-structure'))
+                        assert preview['ok']
+                        preview_content=preview['result']['content']
+                        checks+=['capture_mode_change_invalidates_structural_preview','pause_resume_requires_new_structural_preview']
                     result=_wire(cdp,popup,dict(operation='share-structure',content=preview_content,observed_at=preview['result']['observed_at'],approved=True))
                     assert result['ok'],result
                     receipt=result['result']['receipt'];review=result['result']['review']
@@ -243,6 +275,7 @@ def journey(cdp,family,service,human,tls,root,env,console_origin,extension_origi
                 assert len(observations)==1 and observations[0]['state']=='captured'
                 raw=navigation.read_evidence(human,receipt['evidence_id']).reveal()
                 assert json.loads(raw)==json.loads(preview_content)
+                if index==1:assert b'Generated sensor - unverified' not in raw
                 draft_raw=navigation.read_evidence(human,draft_id).reveal()
                 draft=json.loads(draft_raw)
                 assert draft['structure']==json.loads(raw)
@@ -270,4 +303,4 @@ def journey(cdp,family,service,human,tls,root,env,console_origin,extension_origi
     assert after_calls==before_calls
     return checks+['three_unmarked_rebranded_reordered_tables','exact_source_cells_and_capture_digest',
         'visible_row_count_is_not_event_count','separate_structured_capture_consent','encrypted_local_structural_draft',
-        'historical_draft_after_stop','authenticated_explicit_workbench_content','zero_new_model_dispatches']
+        'historical_draft_after_stop','authenticated_explicit_workbench_content','structure_content_responsive_390_and_1280','zero_new_model_dispatches']
