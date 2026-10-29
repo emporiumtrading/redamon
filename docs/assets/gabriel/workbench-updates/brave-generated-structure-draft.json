@@ -1,0 +1,32 @@
+{
+  "draft_evidence_id": "469ace54-f6e0-47f7-a13f-6715fa65b94d",
+  "draft_sha256": "8ea3015d20d5c5f7ba964169731f212f9a8b349b2b62c805fa0b4a8bad7f7ba5",
+  "kind": "actual_generated_data_authenticated_content_view",
+  "model_calls": 0,
+  "native_device_acceptance": false,
+  "production_admission": false,
+  "screenshots": {
+    "1280": {
+      "screenshot": "brave-generated-structure-draft.png",
+      "screenshot_sha256": "5ce7f4d9ce5c2a65f89d942ee848bd5fd82b65e8979dde7aac9fe0c25079fc66"
+    },
+    "390": {
+      "screenshot": "brave-generated-structure-draft-390.png",
+      "screenshot_sha256": "bfeb322d97324a52df1ae9a2800321e1ed53d6f72c51aab3bea4ed0d362e537b"
+    },
+    "390-fields": {
+      "screenshot": "brave-generated-structure-draft-390-fields.png",
+      "screenshot_sha256": "cac691a67956534e89991f51c08722ca055d1fcce876df94de6ff16e5861fa64"
+    }
+  },
+  "source": {
+    "capture_received_at": "2026-10-29T17:44:01.364009+00:00",
+    "capture_request_digest": "aa88b8317f11fcef83effda95b7de522daa1ccfb453ccee2e95f64a95c9e88e6",
+    "client_observed_at": "2026-10-29T17:44:01.061000+00:00",
+    "evidence_digest": "dcd078f1b57859e5dd9d7c186c378811e3e22b5dbc7cce642925a4440f26fd8d",
+    "evidence_id": "01437368-f0e1-4a64-9a07-10290f089605",
+    "observation_id": "d1e101c4-8533-4903-b00b-4a94f4052089",
+    "receipt_sha256": "ad0a82adb22140f463af7d7efecfb809667a7b7405b226f38d4f53eb2e9f408a"
+  },
+  "source_sha": "4a47455786937b5b7f8d69e47946eeeb0552db27"
+}

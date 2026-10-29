@@ -1,0 +1,32 @@
+{
+  "draft_evidence_id": "faa88f71-9ab6-4fae-aab7-15860638577c",
+  "draft_sha256": "f15be65bdf9ed49f6f00f49256a42403251ca253dce650292f89beab0a032297",
+  "kind": "actual_generated_data_authenticated_content_view",
+  "model_calls": 0,
+  "native_device_acceptance": false,
+  "production_admission": false,
+  "screenshots": {
+    "1280": {
+      "screenshot": "chrome-generated-structure-draft.png",
+      "screenshot_sha256": "00e67fd6bdda79e32cb8a6dfbbd59e48f1ffe5009b96a7c42d9efc9ee909903f"
+    },
+    "390": {
+      "screenshot": "chrome-generated-structure-draft-390.png",
+      "screenshot_sha256": "ba5153e4e73e254783bd9b556c1b7063946466b91c536cf4ce734604814e77bd"
+    },
+    "390-fields": {
+      "screenshot": "chrome-generated-structure-draft-390-fields.png",
+      "screenshot_sha256": "cac691a67956534e89991f51c08722ca055d1fcce876df94de6ff16e5861fa64"
+    }
+  },
+  "source": {
+    "capture_received_at": "2026-10-29T17:41:14.687582+00:00",
+    "capture_request_digest": "836b2b7ac94a42139fb12f660d71d358553a76ff86f7f436ac4d25d7bc7a02c2",
+    "client_observed_at": "2026-10-29T17:41:14.388000+00:00",
+    "evidence_digest": "dcd078f1b57859e5dd9d7c186c378811e3e22b5dbc7cce642925a4440f26fd8d",
+    "evidence_id": "7f868bc5-66c1-4d48-ae1a-9b8775f6e665",
+    "observation_id": "e09599f3-dccd-4da4-a30f-4b955c4165ff",
+    "receipt_sha256": "c2706654976929e343375aca2f545d08633c31a295c64e1aa98f426148cb0bac"
+  },
+  "source_sha": "4a47455786937b5b7f8d69e47946eeeb0552db27"
+}

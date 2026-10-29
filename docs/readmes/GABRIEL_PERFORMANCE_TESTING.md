@@ -1,6 +1,6 @@
 # Gabriel performance testing
 
-The owner plans to provide TryHackMe SOC Simulator access after production readiness. That exercise evaluates Gabriel's performance; it is not model training or a source of learning memory. No TryHackMe access, active monitoring service or completed simulator result is established by this document.
+The owner has selected TryHackMe SOC Simulator for performance evaluation and plans to provide access. A controlled pre-production visibility rehearsal can establish what the installed browser path observes; it does not admit unqualified model configurations or establish production readiness. The scored investigation round requires separately admitted model configurations and a working interpretation/tool path. That exercise evaluates Gabriel's performance; it is not model training or a source of learning memory. No TryHackMe access, active monitoring service or completed simulator result is established by this document.
 
 Create a dedicated test organization and a new case with purpose **Performance test — learning disabled**. The CLI equivalent is `case_cli create --case-purpose performance_test` with the normal private identity and key configuration. Choose the purpose before acquiring test evidence. Purpose cannot be changed later. Existing investigation cases retain their normal reviewed-memory behavior after migration.
 
@@ -10,7 +10,7 @@ Case isolation cannot detect someone manually copying test text into a new opera
 
 ## Before the first exercise
 
-- Complete the production release gates separately. The simulator does not replace independent model qualification, native OS acceptance or security/operational review.
+- Record completed and open release gates before the exercise. A pre-production visibility rehearsal leaves production admission disabled; model dispatch still requires separately admitted configurations. The simulator does not replace independent model qualification, native OS acceptance or security/operational review.
 - Record the exact Gabriel source and image IDs, extension version, model/provider route and all configuration hashes, tool/skill versions, spending limits and memory-disabled case IDs. Freeze that baseline before revealing the test cases. Record the returned provider/model identity for each call; a hosted provider can limit reproducibility even when Gabriel’s configuration is unchanged.
 - Confirm the owner's authorized platform account, available scenarios, selected tabs/pages and permitted read/navigation actions after access is provided. Keep login, credentials, MFA and account changes human-controlled. Do not assume access, platform permissions or a working adapter.
 - Keep scenario answer keys, grading panels, walkthroughs and analyst labels outside Gabriel's browser scope and inference context. An independent evaluator retains the scoring key.
@@ -29,3 +29,15 @@ During an active scored round, freeze Gabriel's build, prompts, tools, model con
 Use synthetic engineering regressions for a discovered product defect without copying platform content or answers. Report a replay of a previously seen scenario as a regression retest. Use new, unseen evaluation scenarios for a fresh performance claim. Compare results per build and scenario set; do not mix versions into one headline score. These are software updates based on measured behavior, not AI training on TryHackMe.
 
 Monitoring starts only after access, scope and the observation mechanism are available. Gabriel's scoped runtime collection and a separately configured outcome-review process must be demonstrated; a chat instruction or this plan does not start continuous observation. Any scheduled ChatGPT review is limited to its supported cadence and cannot substitute for real-time runtime telemetry.
+
+## Planned TryHackMe baseline
+
+TryHackMe's official [SOC SIM description](https://help.tryhackme.com/en/articles/10508054-soc-sim) describes simulated logs, a dynamic queue of true/false-positive alerts, investigation tooling and performance reporting. Its [operator guide](https://help.tryhackme.com/en/articles/10559037-how-to-use-tryhackme-soc-sim) describes assigning alerts and submitting classifications/reports. Scenario availability and account access must be checked when the owner provides access; no simulator round has started.
+
+1. Freeze checked implementation/image/extension identities and create a fresh performance-test case. Retain exact model configurations, budget, scenario/time limits and an independent scoring rubric in a private pre-run record.
+2. Demonstrate installation, pairing, approved tab scope, capture freshness, field visibility, receipt provenance and Stop/revocation on the actual browser. The current structure feature records fields and unknowns; it does not establish their security meaning or autonomous incident interpretation. Record inaccessible iframe/canvas/remote-desktop views as visibility gaps. Do not bypass capture guards to obtain a scored result.
+3. Start a scored investigation round only when the separately admitted interpretation/specialist path is available. Keep hints, walkthroughs, grading panels and answer keys outside Gabriel's approved tabs and prompts. Retain original evidence-linked classification, abstention, proposed escalation and report before the evaluator reveals labels.
+4. Have the engineer review final classification, escalation and report before submission. Score correct and missed attacks, false escalations, evidence support, time, navigation completion, human assistance and token cost. Publish denominators and incomplete outcomes alongside the simulator result. Platform AI feedback supplements independent analyst review.
+5. Preserve unchanged first-round results. Fix defects in a separate build and fresh performance-test case; label repeats as regression retests and use unseen scenarios for subsequent performance claims. Never copy simulator content or answer keys into learning memory or the public repository.
+
+This prepares a controlled exercise. Independent model quality qualification, actual native OS/browser acceptance and operational/security review retain their own evidence and admission decisions.

@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "kind": "actual_generated_data_authenticated_content_view",
+  "implementation_commit": "518f7ae1570b27d93bd5de932ed3713ee193d2a1",
+  "tested_merge_commit": "4a47455786937b5b7f8d69e47946eeeb0552db27",
+  "workflow_run_id": 40923223065,
+  "artifact_id": 12920435660,
+  "artifact_zip_sha256": "dcab0a9c2c4b508541e788775e3aa029b18388eb3e19b38b8f0d934dcf732112",
+  "checks_per_browser": 110,
+  "model_calls": 0,
+  "production_admission": false,
+  "native_device_acceptance": false,
+  "captures": [
+    {
+      "browser": "chrome",
+      "viewport": "1280",
+      "file": "chrome-generated-structure-draft.png",
+      "sha256": "00e67fd6bdda79e32cb8a6dfbbd59e48f1ffe5009b96a7c42d9efc9ee909903f"
+    },
+    {
+      "browser": "chrome",
+      "viewport": "390",
+      "file": "chrome-generated-structure-draft-390.png",
+      "sha256": "ba5153e4e73e254783bd9b556c1b7063946466b91c536cf4ce734604814e77bd"
+    },
+    {
+      "browser": "chrome",
+      "viewport": "390-fields",
+      "file": "chrome-generated-structure-draft-390-fields.png",
+      "sha256": "cac691a67956534e89991f51c08722ca055d1fcce876df94de6ff16e5861fa64"
+    },
+    {
+      "browser": "brave",
+      "viewport": "1280",
+      "file": "brave-generated-structure-draft.png",
+      "sha256": "5ce7f4d9ce5c2a65f89d942ee848bd5fd82b65e8979dde7aac9fe0c25079fc66"
+    },
+    {
+      "browser": "brave",
+      "viewport": "390",
+      "file": "brave-generated-structure-draft-390.png",
+      "sha256": "bfeb322d97324a52df1ae9a2800321e1ed53d6f72c51aab3bea4ed0d362e537b"
+    },
+    {
+      "browser": "brave",
+      "viewport": "390-fields",
+      "file": "brave-generated-structure-draft-390-fields.png",
+      "sha256": "cac691a67956534e89991f51c08722ca055d1fcce876df94de6ff16e5861fa64"
+    }
+  ]
+}
