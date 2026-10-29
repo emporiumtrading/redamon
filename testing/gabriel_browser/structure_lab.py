@@ -55,6 +55,13 @@ def _wire(cdp,popup,value):
     return cdp.evaluate(popup,'chrome.runtime.sendMessage('+json.dumps(value)+')')
 
 
+def _close_popup(cdp,origin,wait_for):
+    if any(item.get('url')==origin+'/popup.html' for item in cdp.targets()):
+        # Native popup targets can reject DevTools close; use the browser's close path.
+        subprocess.run(['xdotool','key','--clearmodifiers','Escape'],check=True,timeout=5)
+    wait_for(lambda:not any(item.get('url')==origin+'/popup.html' for item in cdp.targets()))
+
+
 def _relation(structure):
     assert len(structure['tables'])==1
     table=structure['tables'][0]
@@ -150,8 +157,7 @@ def journey(cdp,family,service,human,tls,root,env,console_origin,extension_origi
         before_calls=conn.execute('SELECT count(*) AS n FROM gabriel_identity.model_dispatch_claims').fetchone()['n']
     for index,path in enumerate(VARIANTS):
         h['mark'](family+':visible-structure-'+str(index+1))
-        for old in cdp.targets():
-            if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
+        _close_popup(cdp,extension_origin,h['wait_for'])
         tab=cdp.send('Target.createTarget',{'url':console_origin+path})['targetId']
         session=cdp.attach(tab)
         h['wait_for'](lambda:cdp.evaluate(session,'document.readyState')=='complete' and cdp.evaluate(session,'location.pathname')==path)
@@ -309,6 +315,7 @@ def journey(cdp,family,service,human,tls,root,env,console_origin,extension_origi
                 process.terminate();process.wait(timeout=5)
                 log.flush()
                 assert human not in logfile.read_text() and ticket not in logfile.read_text()
+                _close_popup(cdp,extension_origin,h['wait_for'])
                 if any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
     assert relations==[dict(Time='2026-01-02T03:04:05Z',Severity='High',State='Open')]*3
     _workbench(cdp,family,navigation,human,*last,tls,root,env,h)
