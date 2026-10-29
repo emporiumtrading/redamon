@@ -8,9 +8,11 @@ The interface uses Gabriel's own halo and winged-shield emblem, midnight-blue su
 
 ## Inside Gabriel
 
-![Gabriel investigation queue](docs/assets/gabriel/screenshots/investigations.png)
+![Gabriel investigation dashboard](docs/assets/gabriel/workbench-updates/ui-investigation-dashboard.png)
 
-[View six actual desktop and mobile screens](docs/assets/gabriel/screenshots/README.md). Captured with generated demo data; displayed features and limitations reflect the tested source.
+[View the updated dashboard, case overview, source health, Hermes and mobile screens](docs/assets/gabriel/workbench-updates/README.md). These five current workbench captures include verified source and screenshot hashes.
+
+[View six earlier desktop and mobile screens](docs/assets/gabriel/screenshots/README.md). Captured with generated demo data; displayed features and limitations reflect the tested source.
 
 [Explore investigation tools, analyst actions and the Hermes workflow concepts](docs/assets/gabriel/actions/README.md). Includes five actual generated-data screens and three clearly labeled design previews.
 

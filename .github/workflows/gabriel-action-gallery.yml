@@ -1,7 +1,7 @@
 name: Gabriel actual UI and action workflow gallery
 on:
   pull_request:
-    paths: ['testing/gabriel_gallery/**', '.github/workflows/gabriel-action-gallery.yml']
+    paths: ['gabriel/identity/workbench.py', 'testing/gabriel_identity/test_workbench_dashboard.py', 'testing/gabriel_gallery/**', '.github/workflows/gabriel-action-gallery.yml']
 permissions:
   contents: read
 jobs:
@@ -25,7 +25,8 @@ jobs:
           compose=(docker compose -p gabriel-gallery -f compose.gabriel-identity.yml -f compose.gabriel-tool-tests.yml)
           trap 'docker rm -f gallery-capture >/dev/null 2>&1 || true; "${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
           docker build --target runtime -f gabriel/identity/Dockerfile -t gabriel-gallery-core .
-          "${compose[@]}" --profile test build investigation-tools
+          "${compose[@]}" --profile test build identity-tests investigation-tools
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_workbench_dashboard.py --strict --parallel 1
           "${compose[@]}" up -d --wait identity-db investigation-tools
           docker build --build-arg "LAB_UID=$(id -u)" -f testing/gabriel_gallery/Dockerfile -t gabriel-gallery-browser .
           mkdir -m 700 "$RUNNER_TEMP/gabriel-action-gallery"

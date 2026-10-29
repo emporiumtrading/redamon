@@ -746,8 +746,9 @@ def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected
             assert spending['limits']['day_microusd']==250000 and not spending['limits']['enabled']
             assert spending['usage']['held_slots']==0 and not spending['transport_enabled']
             cdp.send('Page.navigate',{'url':target+'/cases/'+str(case['id'])},session)
-            loaded("Boolean(document.querySelector('a[href*=evidence]'))")
-            link=cdp.evaluate(session,"document.querySelector('a[href*=evidence]').href")
+            evidence_link='a[href^="/cases/'+str(case['id'])+'/evidence/"]'
+            loaded('Boolean(document.querySelector('+json.dumps(evidence_link)+'))')
+            link=cdp.evaluate(session,'document.querySelector('+json.dumps(evidence_link)+').href')
             cdp.send('Page.navigate',{'url':link},session)
             loaded("Boolean(document.querySelector('form[action$=content]'))")
             mark(family+':workbench-evidence')
