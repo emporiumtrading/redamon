@@ -86,7 +86,15 @@ def test_hermes_plans_delegates_two_independent_agents_reports_and_replays(tenan
         assert len(jobs)==2 and {str(j['supervisor_run_id']) for j in jobs}=={result['run_id']}
         reservations=conn.execute('SELECT DISTINCT investigation_id FROM gabriel_identity.model_reservations WHERE organization_id=%s',(p.organization_id,)).fetchall()
         assert len(reservations)==1
-    assert begin(cases,case,holder,supervision,request)['state']=='hermes_completed_requires_review'
+    replay=begin(cases,case,holder,supervision,request)
+    assert replay['state']=='hermes_completed_requires_review'
+    for key in ('run_id','state','delegated_roles','plan_answer_evidence_id','report_answer_evidence_id'):
+        assert replay[key]==result[key]
+    assert len(replay['agents'])==len(result['agents'])==2
+    for original,repeated in zip(result['agents'],replay['agents']):
+        assert repeated['result']['job_id']==original['result']['job_id']
+        assert [s['answer_evidence_id'] for s in repeated['result']['steps']]==[s['answer_evidence_id'] for s in original['result']['steps']]
+        assert all(s['historical'] for s in repeated['result']['steps'])
     assert len(supervision['posts'])==6
     for key in ['plan_answer_evidence_id','report_answer_evidence_id']:
         assert json.loads(cases.read_evidence(supervision['token'],result[key]).reveal())['result']['decision']['disposition']=='abstain'

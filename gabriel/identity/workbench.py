@@ -77,6 +77,15 @@ def budget_amount(value):
     return int(whole)*1000000+int(fraction.ljust(6,'0'))
 
 
+def selected_hermes_leases(value):
+    if value=='local':return []
+    if not isinstance(value,str):raise AccessDenied('invalid_hermes_tab_selection')
+    leases=value.split(',')
+    if not 1<=len(leases)<=8 or len(set(leases))!=len(leases) or any(re.fullmatch(ID,v) is None for v in leases):
+        raise AccessDenied('invalid_hermes_tab_selection')
+    return leases
+
+
 def table(columns,rows):
     return '<div class="table-scroll" role="region" aria-label="'+e(' / '.join(columns))+'" tabindex="0"><table><thead><tr>'+''.join('<th scope="col">'+e(c)+'</th>' for c in columns)+'</tr></thead><tbody>'+''.join(
         '<tr>'+''.join('<td>'+value+'</td>' for value in row)+'</tr>' for row in rows)+'</tbody></table></div>'
@@ -151,9 +160,16 @@ class Workbench:
             raise AccessDenied('invalid_workbench_form')
         raw=environ['wsgi.input'].read(int(length))
         if len(raw)!=int(length): raise AccessDenied('invalid_workbench_form')
-        pairs=parse_qsl(raw.decode('utf-8'),keep_blank_values=True,strict_parsing=True,encoding='utf-8',errors='strict',max_num_fields=8)
-        if len(dict(pairs))!=len(pairs): raise AccessDenied('duplicate_form_field')
-        fields=dict(pairs)
+        hermes_form=bool(re.fullmatch('/cases/('+ID+')/hermes',environ.get('PATH_INFO','')))
+        pairs=parse_qsl(raw.decode('utf-8'),keep_blank_values=True,strict_parsing=True,encoding='utf-8',errors='strict',max_num_fields=18 if hermes_form else 8)
+        fields={};selected=[]
+        for key,value in pairs:
+            if hermes_form and key=='selected_leases':selected.append(value)
+            elif key in fields:raise AccessDenied('duplicate_form_field')
+            else:fields[key]=value
+        if selected:
+            fields['selected_leases']=','.join(selected)
+            selected_hermes_leases(fields['selected_leases'])
         if not hmac.compare_digest(fields.get('csrf',''),self._csrf): raise AccessDenied('csrf_required')
         return fields
 
@@ -245,16 +261,26 @@ class Workbench:
                     if set(fields)!={'csrf'}:raise AccessDenied('invalid_hermes_form')
                     result=hermes.stop(self.service,self._token,run_id) if operation=='stop' else hermes.resume(self.service,self._provider_vault,self._token,run_id)
                 else:
-                    required={'csrf','request_id','input_evidence_id','model','specialist_model','key_scope','selected_leases','operation'}
-                    if set(fields)-{'approved'}!=required:raise AccessDenied('invalid_hermes_form')
-                    leases=[] if fields['selected_leases']=='local' else fields['selected_leases'].split(',')
+                    required={'csrf','request_id','input_evidence_id','model','specialist_model','key_scope','operation'}
+                    if set(fields)-{'approved','selected_leases'}!=required:raise AccessDenied('invalid_hermes_form')
+                    leases=selected_hermes_leases(fields.get('selected_leases','local'))
+                    if fields['operation'] not in {'preflight','start'} or fields['operation']=='start' and fields.get('approved')!='yes':
+                        raise AccessDenied('hermes_ai_export_consent_required')
+                    input_evidence_id=fields['input_evidence_id']
+                    if input_evidence_id=='selected_tabs':
+                        if not leases:raise AccessDenied('hermes_selected_tabs_required')
+                        from gabriel.identity import browser_hermes
+                        prepared=browser_hermes.prepare(self.service,self._token,case_id,leases)
+                        input_evidence_id=prepared['facts_evidence_id']
+                        body+='<p>Prepared a source-bound snapshot of capture integrity and visibility gaps. Coverage remains partial; this does not parse dashboard incidents.</p>'
+                        if prepared.get('limitation'):body+='<p>'+e(prepared['limitation'])+'</p>'
                     options=dict(model=fields['model'],specialist_model=fields['specialist_model'],key_scope=fields['key_scope'],lease_ids=leases)
                     if fields['operation']=='preflight':
-                        result=hermes.preflight(self.service,self._provider_vault,self._token,case_id,fields['input_evidence_id'],**options)
+                        result=hermes.preflight(self.service,self._provider_vault,self._token,case_id,input_evidence_id,**options)
                         body+='<h2>Investigation readiness</h2>'+table(['Check','Status'],[(e(c['check'].replace('_',' ')),e(c['status'].replace('_',' '))) for c in result['checks']])
                         body+='<p>'+('Ready for the approved scope.' if result['ready'] else 'Investigation is blocked until every required check passes.')+' No inference was performed by this preflight.</p>'
                     elif fields['operation']=='start' and fields.get('approved')=='yes':
-                        result=hermes.start(self.service,self._provider_vault,self._token,case_id,fields['request_id'],fields['input_evidence_id'],approved=True,**options)
+                        result=hermes.start(self.service,self._provider_vault,self._token,case_id,fields['request_id'],input_evidence_id,approved=True,**options)
                     else:raise AccessDenied('hermes_ai_export_consent_required')
                 body+='<p id="hermes-result">'+e(result.get('state','Stopped.' if result.get('stopped') else 'Preflight complete.'))+'</p>'
                 for label,key in [('Hermes assignment plan','plan_answer_evidence_id'),('Hermes analyst report','report_answer_evidence_id')]:
@@ -273,12 +299,12 @@ class Workbench:
             if sources:body+=table(['Selected browser session','Connection','Visibility'],[(e(x['id']),e(x['health'].replace('_',' ')),e(x['page_visibility'])) for x in sources])
             if snapshot['case']['state']=='open':
                 inputs=''.join('<option value="'+e(r['id'])+'">'+e(r['id'])+'</option>' for r in snapshot['evidence'] if r['state']=='ready' and r['storage_state']=='active')
+                if owned:inputs='<option value="selected_tabs">Selected tabs: capture integrity and visibility gaps (no dashboard incident parsing)</option>'+inputs
                 if inputs:
-                    tab_options='<option value="local">Local typed evidence only</option>'+''.join('<option value="'+e(v)+'">Selected session '+e(str(i+1))+'</option>' for i,v in enumerate(owned))
-                    if 2<=len(owned)<=8:tab_options+='<option value="'+e(','.join(owned))+'">All '+e(len(owned))+' selected sessions in this case</option>'
-                    common='<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Typed evidence with source links<select name="input_evidence_id">'+inputs+'</select></label><label>Investigation scope<select name="selected_leases">'+tab_options+'</select></label><label>Hermes model<select name="model"><option>'+e(hermes.DEFAULT_MODEL)+'</option></select></label><label>Specialist model<select name="specialist_model">'+''.join('<option'+(' selected' if m==hermes.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in hermes.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label>'
+                    tab_options='<option value="local" selected>Local typed evidence only</option>'+''.join('<option value="'+e(v)+'">Selected session '+e(str(i+1))+'</option>' for i,v in enumerate(owned))
+                    common='<input type="hidden" name="request_id" value="'+str(uuid4())+'"><label>Investigation input<select name="input_evidence_id">'+inputs+'</select></label><label>Investigation scope — choose one to eight sessions for automatic snapshots; optional for local typed evidence<select name="selected_leases" multiple size="5">'+tab_options+'</select></label><label>Hermes model<select name="model"><option>'+e(hermes.DEFAULT_MODEL)+'</option></select></label><label>Specialist model<select name="specialist_model">'+''.join('<option'+(' selected' if m==hermes.DEFAULT_MODEL else '')+'>'+e(m)+'</option>' for m in hermes.model_routes.ROUTES)+'</select></label><label>Key source<select name="key_scope"><option value="personal">My personal key</option>'+('<option value="organization">Organization key</option>' if principal.role in {'owner','admin'} else '')+'</select></label>'
                     body+=self._form(base,'Check readiness',common+'<input type="hidden" name="operation" value="preflight">')
-                    body+=self._form(base,'Start Hermes investigation',common+'<input type="hidden" name="operation" value="start"><label><input type="checkbox" name="approved" value="yes" required>I approve sending the displayed minimized scope and eligible reviewed typed historical references to Hermes and the relevant specialists through my selected key and spending limits. Free-text and performance-test memory are excluded.</label>')
+                    body+=self._form(base,'Start Hermes investigation',common+'<input type="hidden" name="operation" value="start"><label><input type="checkbox" name="approved" value="yes" required>I approve sending the displayed minimized scope and eligible reviewed typed historical references to Hermes and the relevant specialists through my selected key and spending limits. Automatic selected-tab snapshots contain capture integrity and visibility gaps, without dashboard incident parsing. Free-text and performance-test memory are excluded.</label>')
             for record in hermes.history(self.service,self._token,case_id):
                 body+='<section><h2>Hermes investigation</h2><p>'+e(record['created_at'])+'</p>'+self._form(base+'/'+record['id']+'/resume','Inspect or resume investigation','')+self._form(base+'/'+record['id']+'/stop','Stop investigation','')+'</section>'
             return '200 OK',self._page('Hermes investigation supervisor',body,principal),[]
