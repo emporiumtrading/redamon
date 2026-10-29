@@ -3,9 +3,11 @@ import base64
 from hashlib import sha256
 from html import escape
 import json
+import os
 import re
 from pathlib import Path
 import socket
+import signal
 import subprocess
 import sys
 from uuid import uuid4
@@ -76,7 +78,7 @@ def _workbench(cdp,family,service,human,case_id,draft_id,tls,root,env,h):
     logfile=root/'structure-workbench.log'
     with logfile.open('w+') as log:
         process=subprocess.Popen([sys.executable,'-m','gabriel.identity.workbench_cli','serve','--configuration',str(directory/'workbench.json'),
-            '--certificate',str(tls['server.pem']),'--key',str(tls['server.key']),'--bind','127.0.0.1:'+str(port)],env=env,stdout=log,stderr=log)
+            '--certificate',str(tls['server.pem']),'--key',str(tls['server.key']),'--bind','127.0.0.1:'+str(port)],env=env,stdout=log,stderr=log,start_new_session=True)
         tab=None
         try:
             def ready():
@@ -115,6 +117,13 @@ def _workbench(cdp,family,service,human,case_id,draft_id,tls,root,env,h):
                 screenshot=family+'-generated-structure-draft'+('' if width==1280 else '-390')+'.png'
                 (output/screenshot).write_bytes(shot)
                 screenshots[str(width)]=dict(screenshot=screenshot,screenshot_sha256=sha256(shot).hexdigest())
+                if width==390:
+                    assert cdp.evaluate(session,"(()=>{const heading=[...document.querySelectorAll('h2')].find(node=>node.textContent==='Quoted table t1');if(!heading)return false;heading.scrollIntoView({block:'start'});return true;})()")
+                    assert cdp.evaluate(session,'document.documentElement.scrollWidth<=innerWidth')
+                    shot=base64.b64decode(cdp.send('Page.captureScreenshot',dict(format='png',captureBeyondViewport=False),session)['data'])
+                    screenshot=family+'-generated-structure-draft-390-fields.png'
+                    (output/screenshot).write_bytes(shot)
+                    screenshots['390-fields']=dict(screenshot=screenshot,screenshot_sha256=sha256(shot).hexdigest())
             cdp.send('Emulation.clearDeviceMetricsOverride',session=session)
             evidence=dict(kind='actual_generated_data_authenticated_content_view',source_sha=source_sha,
                 screenshots=screenshots,draft_evidence_id=draft_id,
@@ -123,7 +132,12 @@ def _workbench(cdp,family,service,human,case_id,draft_id,tls,root,env,h):
             (output/(family+'-generated-structure-draft.json')).write_text(json.dumps(evidence,sort_keys=True,indent=2)+'\n')
         finally:
             if tab and any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
-            process.terminate();process.wait(timeout=5)
+            process.terminate()
+            try:process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # This disposable session includes Gunicorn workers waiting on keep-alive sockets.
+                os.killpg(process.pid,signal.SIGKILL)
+                process.wait(timeout=5)
             log.flush()
             assert human not in logfile.read_text() and ticket not in logfile.read_text()
 
