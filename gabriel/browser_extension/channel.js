@@ -1,12 +1,16 @@
 import {inspectPage} from "./collector.js";
 import {inspectNavigationIdentity, validatePlan, approvedURL, readOnlyURL, inspectConsole} from "./navigator.js";
 import {inspectEventSection} from "./events.js";
+import {inspectStructure} from "./semantics.js";
 
 export function createChannel(storage, tabId) {
 let busy = false;
 let generation = 0;
 let expectedMove = null;
 let stopping = null;
+let previewMode = null;
+let previewAt = null;
+function discardPreviews() { previewMode = null; previewAt = null; }
 const inflight = new Set();
 
 function stillCurrent(revision) {
@@ -44,6 +48,41 @@ async function current(selected, collect = false) {
   return results[0].result;
 }
 
+async function currentStructure(selected) {
+  await current(selected);
+  const results = await chrome.scripting.executeScript({target: {tabId: selected.tab_id, documentIds: [selected.document_id]}, func: inspectStructure, args: [selected.account_label]});
+  if (results.length !== 1 || results[0].frameId !== 0 || results[0].documentId !== selected.document_id || results[0].result?.page_url !== selected.page_url)
+    throw new Error("Structured preview document changed. Fresh pairing is required.");
+  return results[0].result;
+}
+
+function canonical(value) {
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  if (value && typeof value === "object") return "{" + Object.keys(value).sort().map(key => JSON.stringify(key) + ":" + canonical(value[key])).join(",") + "}";
+  return JSON.stringify(value);
+}
+
+function structureProjection(content, currentContent) {
+  let proposed, actual;
+  try { proposed = JSON.parse(content); actual = JSON.parse(currentContent); }
+  catch { throw new Error("Structure JSON is invalid. Remove whole blocks only, or capture a new preview."); }
+  if (!proposed || typeof proposed !== "object" || Array.isArray(proposed) ||
+      canonical(Object.keys(proposed).sort()) !== canonical(Object.keys(actual).sort()) ||
+      !["version", "account", "gaps"].every(key => canonical(proposed[key]) === canonical(actual[key])))
+    throw new Error("Keep the structure version, selected account and coverage gaps unchanged.");
+  let retained = 0;
+  for (const group of ["headings", "tables", "pairs"]) {
+    if (!Array.isArray(proposed[group])) throw new Error("Only complete structural blocks may be removed.");
+    const ids = proposed[group].map(row => row?.id);
+    if (ids.some(id => typeof id !== "string") || new Set(ids).size !== ids.length ||
+        canonical(actual[group].filter(row => ids.includes(row.id))) !== canonical(proposed[group]))
+      throw new Error("Visible structure changed or a retained block was edited. Preview again; remove whole blocks to redact.");
+    retained += proposed[group].length;
+  }
+  if (!retained) throw new Error("Retain at least one observed heading, table or label/value pair.");
+  return JSON.stringify(proposed);
+}
+
 async function request(session, operation, body) {
   const controller = new AbortController();
   // Revocation must survive concurrent Stop/Pause events that cancel ordinary work.
@@ -57,12 +96,13 @@ async function request(session, operation, body) {
     if (raw.length > 1500000) throw new Error("Gateway response exceeded its limit.");
     const value = JSON.parse(raw);
     if (!response.ok || value.status !== "ok") throw new Error(operation === "observe" ? "Capture outcome is unconfirmed. Inspect receipts before retrying." :
-      ["events-review", "specialists-review", "text-review", "ai-review"].includes(operation) ? "Review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
+      ["events-review", "specialists-review", "text-review", "structure-review", "ai-review"].includes(operation) ? "Review outcome is unconfirmed. Inspect case reviews before retrying." : "Gateway denied access. Check scope, expiry and human session.");
     return value.result;
   } finally { clearTimeout(timer); inflight.delete(controller); }
 }
 
 async function stop() {
+  discardPreviews();
   generation++;
   expectedMove = null;
   for (const controller of inflight) controller.abort();
@@ -80,8 +120,10 @@ async function stop() {
 }
 
 async function handle(message) {
-  if (!message || typeof message !== "object" || !["state","select","pair","preview","share","status","receipts","pause","resume","stop","navigation-plan","navigation-run","monitor-start","monitor-stop"].includes(message.operation)) throw new Error("Unsupported operation.");
+  if (!message || typeof message !== "object" || !["state","select","pair","preview","share","status","receipts","pause","resume","stop","navigation-plan","navigation-run","monitor-start","monitor-stop","preview-structure","share-structure","discard-previews"].includes(message.operation)) throw new Error("Unsupported operation.");
   if (message.operation === "stop") return stop();
+  if (message.operation === "discard-previews") { discardPreviews(); return {message: "Local previews cleared."}; }
+  if (["preview","preview-structure","navigation-plan","navigation-run","monitor-start"].includes(message.operation)) discardPreviews();
   if (message.operation === "state") {
     const {selected, session, paused, navigation, tour, monitoring} = await storage.get(["selected","session","paused","navigation","tour","monitoring"]);
     return {context: selected, extension_origin: "chrome-extension://" + chrome.runtime.id, stored_pairing: !!session, paused: !!paused || !!navigation,
@@ -89,6 +131,7 @@ async function handle(message) {
       tour, monitoring: publicMonitoring(monitoring), message: navigation ? "Navigation outcome unresolved. Stop and pair again; no automatic repeat is permitted." : session ? "Stored pairing; check live scope before sharing." : "Disconnected. Nothing is shared."};
   }
   if (["pause","monitor-stop"].includes(message.operation)) {
+    discardPreviews();
     generation++;
     for (const controller of inflight) controller.abort();
     const {monitoring} = await storage.get("monitoring");
@@ -137,7 +180,7 @@ async function handle(message) {
     }
     if (!session || Date.parse(session.expires_at) <= Date.now()) throw new Error("Pairing is missing or expired. Obtain fresh approval.");
     if (navigation) throw new Error("Navigation outcome unresolved. Stop and pair again before continuing.");
-    if (paused && ["preview","share","navigation-plan","navigation-run"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
+    if (paused && ["preview","share","preview-structure","share-structure","navigation-plan","navigation-run"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
     if (message.operation === "monitor-start") {
       if (message.approved !== true || !session.sharing_approved || !session.scheduled_review_enabled || pending || paused || navigation)
         throw new Error("Approve scheduled sharing with a current, unpaused pairing and resolved receipts first.");
@@ -267,22 +310,56 @@ async function handle(message) {
     if (message.operation === "preview") {
       if (pending) throw new Error("Previous capture outcome is unconfirmed. Inspect receipts first.");
       const view = await current(selected, true);
-      return {content: view.content, observed_at: new Date().toISOString(), gaps: view.gaps};
+      stillCurrent(revision);
+      previewMode = "text"; previewAt = new Date().toISOString();
+      return {content: view.content, observed_at: previewAt, gaps: view.gaps};
     }
+    if (message.operation === "preview-structure") {
+      if (pending) throw new Error("Previous capture outcome is unconfirmed. Inspect receipts first.");
+      const view = await currentStructure(selected);
+      stillCurrent(revision);
+      previewMode = "structure"; previewAt = new Date().toISOString();
+      return {content: view.content, observed_at: previewAt, gaps: view.gaps, message: "Partial structured preview ready. Remove sensitive whole blocks and approve this separate sharing mode."};
+    }
+    const structural = message.operation === "share-structure";
+    if (previewMode !== (structural ? "structure" : "text") || message.observed_at !== previewAt)
+      throw new Error("Capture a fresh preview in this sharing mode and approve it before sharing.");
     if (!session.sharing_approved || pending || typeof message.content !== "string" || !message.content.length || new TextEncoder().encode(message.content).length > 65536 || message.approved !== true)
       throw new Error("Explicit sharing approval, reviewed text and a resolved previous capture are required.");
     const observed = Date.parse(message.observed_at);
     if (!Number.isFinite(observed) || Date.now() - observed > 55000 || observed > Date.now() + 5000) throw new Error("Preview is stale. Capture a new preview.");
+    let content = message.content;
+    if (structural) content = structureProjection(content, (await currentStructure(selected)).content);
+    else {
+      let parsed;
+      try { parsed = JSON.parse(content); } catch { /* Ordinary reviewed text need not be JSON. */ }
+      if (parsed?.version === "browser-visible-structure-v1") throw new Error("Use the separate structure preview and sharing approval for structured content.");
+    }
+    discardPreviews();
     const payload = {schema_version: 1, operation: "browser.observe", request_id: crypto.randomUUID(), sequence: session.sequence + 1,
-      context: wireContext(selected), observed_at: message.observed_at, visibility: "partial", client_minimized: true, content: message.content};
+      context: wireContext(selected), observed_at: message.observed_at, visibility: "partial", client_minimized: true, content};
     // Only a non-sensitive cursor persists; an uncertain write never triggers automatic recapture.
     await persist({pending: {request_id: payload.request_id, sequence: payload.sequence}}, revision);
     await current(selected);
+    if (structural) structureProjection(content, (await currentStructure(selected)).content);
     stillCurrent(revision);
     const receipt = await request(session, "observe", payload);
     if (revision !== generation) throw new Error("Sharing stopped during capture; inspect the server receipt.");
     session.sequence++;
     await persist({session}, revision);
+    if (structural) {
+      // An uncertain review is not retried automatically, even after capture succeeds.
+      await persist({pending: {structure_review: receipt.observation_id}}, revision);
+      structureProjection(content, (await currentStructure(selected)).content);
+      stillCurrent(revision);
+      const review = await request(session, "structure-review", {context: wireContext(selected), observation_id: receipt.observation_id});
+      stillCurrent(revision);
+      structureProjection(content, (await currentStructure(selected)).content);
+      stillCurrent(revision);
+      await storage.remove("pending");
+      stillCurrent(revision);
+      return {message: "Encrypted structural evidence and a local untrusted draft were recorded. Review the draft in your workbench; no model or navigation was used.", receipt, review};
+    }
     await storage.remove("pending");
     return {message: "Encrypted evidence receipt confirmed.", receipt};
   } catch (error) {
@@ -455,5 +532,5 @@ async function tick() {
     await storage.set({monitoring: {...monitoring, enabled: false, state: "interrupted", error: error.message}});
   }
 }
-return {handle, stop, onUpdated, tick};
+return {handle, stop, onUpdated, tick, discardPreviews};
 }
