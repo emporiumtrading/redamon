@@ -75,6 +75,7 @@ def main():
         assert config['services']['workbench']['tmpfs']==['/tmp:rw,noexec,nosuid,nodev,size=64m']
         assert 'owner_dsn' not in {s['source'] for s in config['services']['workbench']['secrets']}
         app.start_db()
+        (directory/'installation-network.json').write_text(json.dumps(app.check_network(),indent=2))
         identity=app.operator('initialize',dict(organization='Generated installation lab',username='owner',password=secret))
         assert set(identity)=={'organization_id','user_id','username'}
         try: app.operator('initialize',dict(organization='Duplicate fixture',username='owner',password=secret))
@@ -175,3 +176,4 @@ print('PASS: restored encrypted evidence decrypted using the original evidence k
 
 
 if __name__=='__main__': main()
+

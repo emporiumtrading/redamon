@@ -37,6 +37,18 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+  network-check:
+    image: ${GABRIEL_INSTALL_IMAGE}
+    profiles: [operator]
+    user: '10001:10001'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 16
+    mem_limit: 64m
+    cpus: 0.25
+    networks: [private]
+    entrypoint: [python]
   operator:
     <<: *app
     profiles: [operator]
@@ -148,3 +160,4 @@ secrets:
     file: ${GABRIEL_INSTALL_ROOT}/tls/server.key
   tls_ca:
     file: ${GABRIEL_INSTALL_ROOT}/tls/ca.pem
+
