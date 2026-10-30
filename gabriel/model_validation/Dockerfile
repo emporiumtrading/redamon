@@ -1,5 +1,6 @@
 FROM python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211 AS runtime
-RUN ["apk", "del", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
+RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-data"]
+RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/__init__.py /app/gabriel/

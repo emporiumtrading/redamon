@@ -81,7 +81,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir cryptography==50.0.2
 COPY gabriel/__init__.py /app/gabriel/
 COPY gabriel/identity/__init__.py gabriel/identity/checkpoints.py gabriel/identity/checkpoint_cli.py /app/gabriel/identity/
-RUN ["apk", "del", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
+RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-data"]
+RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.checkpoint_cli"]
 
@@ -119,6 +120,7 @@ USER 0:0
 # Production installs dependencies at build time; bundled build tools add attack surface.
 RUN python -m pip uninstall --yes setuptools wheel pip \
     && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
-RUN ["apk", "del", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
+RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-data"]
+RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
 RUN ["python", "-c", "import shutil,ssl; assert ssl.create_default_context().cert_store_stats()['x509_ca'] > 0; assert all(shutil.which(n) is None for n in ('busybox','wget','ssl_client','gcc','cc')); import psycopg,argon2,cryptography,gunicorn,yara,dpkt"]
 USER 10001:10001
