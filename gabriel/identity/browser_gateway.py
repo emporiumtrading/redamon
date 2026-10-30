@@ -20,7 +20,7 @@ from gabriel.identity.cli import read_secret
 from gabriel.identity.service import AccessDenied,IdentityError,IdentityUnavailable,_digest,connection
 
 MAX_BODY = 262144
-OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review','specialists-review','text-review','structure-review','ai-review'}
+OPERATIONS = {'claim','heartbeat','observe','status','receipts','disconnect','navigation-plan','navigation-prepare','navigation-complete','events-review','specialists-review','text-review','structure-review','ai-review','controls-plan','controls-prepare','controls-complete'}
 
 
 def endpoint(value):
@@ -47,7 +47,7 @@ def ticket_digest(value):
     return sha256(('gabriel-browser-claim-v1|'+value).encode()).hexdigest()
 
 
-def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False,monitor_seconds=None,auto_discover=False,ai_model=None):
+def prepare(service,human_token,task_id,case_id,context,target,origin,directory,*,share_observations=False,monitor_seconds=None,auto_discover=False,ai_model=None,control_plan=None):
     """Private operator enrollment, never exposed as a network operation."""
     target,origin=endpoint(target),extension_origin(origin)
     context=approved_context(context)
@@ -56,6 +56,11 @@ def prepare(service,human_token,task_id,case_id,context,target,origin,directory,
         require_model(ai_model)
         if monitor_seconds is None or not share_observations:raise ValueError('browser_ai_scheduled_consent_required')
         with connection(service._dsn) as conn:service._admin(conn,human_token)
+    if control_plan is not None:
+        from gabriel.identity.browser_controls import validate
+        validate(control_plan,context)
+        if not share_observations or monitor_seconds is not None or auto_discover or ai_model is not None:
+            raise ValueError('controls_require_explicit_unscheduled_sharing')
     directory=Path(directory)
     if not directory.is_absolute() or '..' in directory.parts:
         raise ValueError('private_directory_required')
@@ -74,6 +79,9 @@ def prepare(service,human_token,task_id,case_id,context,target,origin,directory,
             'lease_id':str(grant.id),'expires_at':str(grant.expires_at)}
         if ai_model is not None:configuration['ai_model']=ai_model
         write_document(directory/'gateway.json',configuration)
+        if control_plan is not None:
+            from gabriel.identity.browser_controls import publish
+            publish(directory,control_plan,configuration)
     except (OSError,ValueError):
         service.revoke_browser_lease(human_token,grant.id)
         raise
@@ -82,7 +90,7 @@ def prepare(service,human_token,task_id,case_id,context,target,origin,directory,
 
 
 class BrowserGateway:
-    def __init__(self,service,human_token,peer_token,configuration):
+    def __init__(self,service,human_token,peer_token,configuration,*,control_plan=None):
         if not isinstance(service,BrowserObservationService):
             raise ValueError('observation_service_required')
         self.service=service
@@ -101,6 +109,9 @@ class BrowserGateway:
         self._lock=Lock()
         self._window=time.monotonic()
         self._calls=0
+        from gabriel.identity.browser_controls import Controls
+        self.controls=Controls(control_plan,self.context) if control_plan is not None else None
+        if self.controls and not isinstance(service,BrowserNavigationService):raise ValueError('navigation_service_required')
         self.ai_model=configuration.get('ai_model')
         if self.ai_model is not None:
             from gabriel.identity.browser_ai import require_model
@@ -157,7 +168,9 @@ class BrowserGateway:
                     raise AccessDenied('claim_unavailable')
                 if approved_context(body['context'])!=self.context or not hmac.compare_digest(ticket_digest(body['ticket']),self._ticket):
                     raise AccessDenied('claim_scope_mismatch')
-                self._bound(pending=True)
+                candidate=self._bound(pending=True)
+                if self.controls and (not candidate['intake_enabled'] or candidate['discovery_enabled'] or candidate['scheduled_review_enabled'] or self.ai_model is not None):
+                    raise AccessDenied('controls_require_explicit_unscheduled_scope')
                 paired=self.service.connect_browser(self._peer,self.context)
                 lease=self._bound()
                 if lease['discovery_enabled']:
@@ -165,6 +178,10 @@ class BrowserGateway:
                     from gabriel.identity.browser_navigation import DISCOVERED_PAGES
                     if not isinstance(self.service,BrowserNavigationService): raise AccessDenied('navigation_service_required')
                     self.service.grant_navigation(self._human,self._peer,uuid5(lease['id'],DISCOVERED_PAGES),DISCOVERED_PAGES,[self.context['page_url']],max_moves=1000)
+                if self.controls:
+                    if lease['discovery_enabled'] or lease['scheduled_review_enabled'] or self.ai_model is not None:
+                        raise AccessDenied('controls_require_explicit_unscheduled_scope')
+                    self.controls.activate(self)
                 self._claimed=True
                 return dict(paired,token=self._peer,context=self.context,organization_id=str(lease['organization_id']),
                     case_id=str(lease['case_id']),task_id=str(lease['task_id']),ai_review_enabled=self.ai_model is not None)
@@ -175,7 +192,11 @@ class BrowserGateway:
                 self.service.disconnect_browser(self._peer)
                 self._claimed=False
                 return {'disconnected':True}
+            if operation.startswith('controls-'):
+                if self.controls is None:raise AccessDenied('control_plan_not_approved')
+                return self.controls.dispatch(self,operation,body)
             if operation in {'navigation-plan','navigation-prepare','navigation-complete'}:
+                if self.controls:raise AccessDenied('controls_require_typed_dispatch')
                 if not isinstance(self.service,BrowserNavigationService):
                     raise AccessDenied('navigation_service_required')
                 if operation=='navigation-plan':
@@ -214,7 +235,7 @@ class BrowserGateway:
                 ('Access-Control-Allow-Methods','POST, OPTIONS')])
         status='403 Forbidden'
         operation=environ.get('PATH_INFO','').removeprefix('/v1/browser/')
-        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','events-review','specialists-review','text-review','structure-review','ai-review'} else 'denied'}
+        result={'status':'denied','outcome':'not_confirmed' if operation in {'observe','navigation-complete','controls-prepare','controls-complete','events-review','specialists-review','text-review','structure-review','ai-review'} else 'denied'}
         try:
             if (environ.get('wsgi.url_scheme')!='https' or environ.get('HTTP_HOST')!=urlsplit(self.target).netloc
                     or origin!=self.origin or environ.get('QUERY_STRING') or environ.get('HTTP_FORWARDED')
@@ -262,7 +283,8 @@ def load_gateway(path):
     from gabriel.identity.evidence_store import EvidenceKeys,LocalEvidenceStore
     store=LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT'],EvidenceKeys.from_file(os.environ['GABRIEL_EVIDENCE_KEYRING_FILE']))
     service=BrowserNavigationService(read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE']),store)
-    app=BrowserGateway(service,human,peer['token'],configuration)
+    from gabriel.identity.browser_controls import load as load_controls
+    app=BrowserGateway(service,human,peer['token'],configuration,control_plan=load_controls(path.parent/'controls.json',configuration))
     app._bound(pending=True)
     # Worker/process restart cannot reuse a bootstrap or resurrect its original claim authority.
     parent=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
@@ -328,3 +350,4 @@ def serve(configuration,certificate,key,bind='127.0.0.1:8443',*,group=False):
             for name,value in options.items(): self.cfg.set(name,value)
         def load(self): return load_gateway_group(configuration) if group else load_gateway(configuration)
     Application().run()
+

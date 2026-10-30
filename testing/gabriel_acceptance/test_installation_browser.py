@@ -28,6 +28,43 @@ class BrowserInstallation(unittest.TestCase):
         self.app.browser_image_supported=MagicMock(return_value=True)
         self.app.operator=MagicMock(return_value={'revocation_confirmed':True})
 
+    def test_controls_file_requires_private_file_and_parent(self):
+        path=self.root/'reviewed-controls.json'
+        path.write_text('{"generated":"plan"}')
+        path.chmod(0o644)
+        with self.assertRaisesRegex(ValueError,'unsafe_configuration_file'):installer.read_controls(path)
+        path.chmod(0o600)
+        self.assertEqual(installer.read_controls(path),{'generated':'plan'})
+        self.root.chmod(0o755)
+        with self.assertRaisesRegex(ValueError,'private_directory'):installer.read_controls(path)
+        self.root.chmod(0o700)
+
+    def test_reviewed_controls_require_explicit_approval_before_any_private_operation(self):
+        self.app.config['image']='sha256:'+'a'*64
+        with self.assertRaisesRegex(ValueError,'explicit_controls'):
+            self.app.browser_open(str(uuid4()),{},'chrome-extension://'+'a'*32,control_plan={'generated':'plan'})
+        self.app.compose.assert_not_called();self.app.operator.assert_not_called()
+
+    def test_legacy_controls_image_is_denied_before_enrollment(self):
+        self.app.config['image']='sha256:'+'a'*64
+        with patch.object(installer,'run',return_value=b'{}'):
+            with self.assertRaisesRegex(ValueError,'controls_image_rebuild_required'):
+                self.app.browser_open(str(uuid4()),{},'chrome-extension://'+'a'*32,
+                    control_plan={'generated':'plan'},approve_controls=True,share_observations=True)
+        self.app.compose.assert_not_called();self.app.operator.assert_not_called()
+
+    def test_reviewed_plan_only_reaches_trusted_operator_and_not_host_state(self):
+        self.app.config['image']='sha256:'+'a'*64
+        self.app.browser_stop=MagicMock(return_value={'revocation_confirmed':True})
+        self.app.check_network=MagicMock()
+        self.app.operator.return_value=dict(ticket='generated-ticket',expires_at='generated')
+        plan={'generated':'private-reviewed-plan'}
+        with patch.object(installer,'run',return_value=b'{"org.gabriel.browser-controls":"v1"}'):
+            self.app.browser_open(str(uuid4()),{},'chrome-extension://'+'a'*32,
+                control_plan=plan,approve_controls=True,share_observations=True)
+        self.assertEqual(self.app.operator.call_args.args[1]['control_plan'],plan)
+        self.assertNotIn('private-reviewed-plan',(self.root/'browser.json').read_text())
+
     def configure_tls_renewal(self):
         self.app.config['image']='sha256:'+'a'*64
         self.app.browser_stop=MagicMock(return_value={'revocation_confirmed':True})
@@ -196,4 +233,5 @@ class BrowserInstallation(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
 

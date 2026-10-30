@@ -1,0 +1,42 @@
+name: Gabriel reviewed dashboard controls
+on:
+  pull_request:
+    paths: ['gabriel/identity/**', 'gabriel/browser_extension/**', 'testing/gabriel_identity/test_browser_controls_integration.py', 'tooling/scripts/gabriel_install.py', '.github/workflows/gabriel-controls.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gabriel-controls-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  protocol:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Actual PostgreSQL control scope, custody, replay and revocation
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GABRIEL_IDENTITY_SECRET_DIR="$RUNNER_TEMP/controls-db"
+          export GABRIEL_PROVIDER_KEY_DIR="$RUNNER_TEMP/controls-provider"
+          export GABRIEL_EVIDENCE_KEY_DIR="$RUNNER_TEMP/controls-evidence"
+          python3 tooling/scripts/gabriel_identity_prepare.py "$GABRIEL_IDENTITY_SECRET_DIR"
+          python3 tooling/scripts/gabriel_provider_keys.py "$GABRIEL_PROVIDER_KEY_DIR"
+          python3 tooling/scripts/gabriel_evidence_keys.py "$GABRIEL_EVIDENCE_KEY_DIR"
+          compose=(docker compose -p gabriel-controls-check -f compose.gabriel-identity.yml)
+          trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
+          "${compose[@]}" --profile test build identity-tests
+          "${compose[@]}" up -d --wait identity-db
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests \
+            tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_browser_controls_integration.py --strict --parallel 1 || {
+              "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests \
+                -m pytest -x -q --tb=short testing/gabriel_identity/test_browser_controls_integration.py
+              exit 1
+            }

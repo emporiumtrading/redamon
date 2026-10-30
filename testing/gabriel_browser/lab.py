@@ -38,6 +38,7 @@ from gabriel.identity.model_budget import ModelBudgetService
 from testing.gabriel_identity.tls_lab import certificates
 from tooling.scripts.gabriel_extension_package import package
 from testing.gabriel_browser.structure_lab import page as structure_page,journey as structure_journey
+from testing.gabriel_browser.controls_lab import page as controls_page,journey as controls_journey
 
 SOURCE=Path('/repo/gabriel/browser_extension')
 stage='initialization'
@@ -114,6 +115,9 @@ class ConsoleServer(ThreadingMixIn,WSGIServer):
 def console_app(environ,start_response):
     path=environ.get('PATH_INFO','/')
     CONSOLE_REQUESTS.append((environ['REQUEST_METHOD'],path))
+    controls=controls_page(path,environ.get('QUERY_STRING',''))
+    if controls is not None:
+        start_response('200 OK',[('Content-Type','text/html'),('Content-Length',str(len(controls))),('Cache-Control','no-store')]);return [controls]
     structured_page=structure_page(path)
     if structured_page is not None:
         start_response('200 OK',[('Content-Type','text/html'),('Content-Length',str(len(structured_page))),('Cache-Control','no-store')])
@@ -914,6 +918,9 @@ def run_browser(family,executable,output):
             assert all(secret not in (root/'browser.log').read_text()+(root/'gateway.log').read_text() for secret in (human,peer,ticket))
             workbench_journey(cdp,family,service,human,case,tls,root,env,output,preview)
             gateway.terminate();gateway.wait(timeout=10);gateway=None
+            control_checks=controls_journey(cdp,family,service,human,tls,root,env,target,console,
+                'https://localhost:'+str(server.server_port),origin,gateway_port,
+                dict(click=click,text=text,wait_for=wait_for,native_popup=native_popup,mark=mark))
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
                 'https://localhost:'+str(server.server_port),origin,gateway_port)
             discovery_checks=discovery_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)
@@ -924,7 +931,7 @@ def run_browser(family,executable,output):
             executable_version=subprocess.run([executable,'--version'],check=True,capture_output=True,text=True,timeout=5).stdout.strip()
             assert ('1.97.59' if family=='brave' else '155.0.8059.84') in executable_version
             report={'status':'PASS','browser_family':family,'browser_product':version,'executable_version':executable_version,'binary_sha256':sha256(Path(executable).read_bytes()).hexdigest(),
-                'extension_version':'0.4.0','extension_origin':origin,'structure_checks':structure_checks,'ai_protocol_checks':ai_protocol_checks,'discovery_checks':discovery_checks,'monitoring_checks':monitoring_checks,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
+                'extension_version':'0.4.0','extension_origin':origin,'control_checks':control_checks,'structure_checks':structure_checks,'ai_protocol_checks':ai_protocol_checks,'discovery_checks':discovery_checks,'monitoring_checks':monitoring_checks,'navigation_checks':navigation_checks,'checks':['native_action','always_visible_stop','real_document_binding','endpoint_permission',
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','covered_text_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
@@ -974,3 +981,4 @@ def main():
 
 
 if __name__=='__main__': raise SystemExit(main())
+

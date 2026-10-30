@@ -155,7 +155,7 @@ class BrowserNavigationService(BrowserObservationService):
             _audit(conn,'browser.navigation_granted',p,row['id'])
             return dict(id=str(row['id']),max_moves=max_moves,expires_at=iso(row['expires_at']))
 
-    def prepare_navigation(self,human,peer,request_id,destination_url):
+    def prepare_navigation(self,human,peer,request_id,destination_url,*,allow_same_page=False):
         request_id=identifier(request_id)
         with connection(self._dsn) as conn:
             p,lease=self._actor(conn,human,peer)
@@ -178,12 +178,12 @@ class BrowserNavigationService(BrowserObservationService):
                 committed=conn.execute('SELECT 1 FROM gabriel_identity.browser_navigation_commits WHERE organization_id=%s AND intent_id=%s',
                     (p.organization_id,old['id'])).fetchone()
                 _audit(conn,'browser.navigation_intent_replayed',p,old['id'])
-                return public_intent(old,bool(committed))
+                return dict(public_intent(old,bool(committed)),replayed=True)
             available(task_record(conn,p.organization_id,lease['task_id']))
             if pending_navigation(conn,p.organization_id,lease['id']): raise AccessDenied('navigation_outcome_unresolved')
             if not lease['last_seen'] or not 0<=(at-lease['last_seen']).total_seconds()<=45:
                 raise AccessDenied('browser_heartbeat_gap_repair_required')
-            if destination_url==lease['page_url']: raise AccessDenied('navigation_already_at_destination')
+            if destination_url==lease['page_url'] and not allow_same_page: raise AccessDenied('navigation_already_at_destination')
             count=conn.execute('SELECT count(*) AS n FROM gabriel_identity.browser_navigation_intents WHERE organization_id=%s AND grant_id=%s',
                 (p.organization_id,grant['id'])).fetchone()['n']
             if count>=grant['max_moves']: raise AccessDenied('navigation_move_limit')
@@ -233,3 +233,4 @@ class BrowserNavigationService(BrowserObservationService):
             conn.execute("UPDATE gabriel_identity.browser_leases SET state='disconnected' WHERE organization_id=%s AND id=%s",(p.organization_id,lease['id']))
             _audit(conn,'browser.navigation_stopped',p,grant['id'])
             return dict(stopped=True)
+
