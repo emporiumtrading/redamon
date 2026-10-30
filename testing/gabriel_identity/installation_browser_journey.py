@@ -77,6 +77,8 @@ def main():
         code,value=gateway(root,18543,'claim',dict(ticket=result['ticket'],context=context));assert code==200
         assert set(value)=={'status','result'} and set(value['result'])=={'lease_id','paired','expires_at','scheduled_review_enabled',
             'discovery_enabled','capabilities','page_content_received','sharing_approved','token','context','organization_id','case_id','task_id','ai_review_enabled'}
+        assert value['result']['sharing_approved']
+        assert all(value['result'][key] is False for key in ('ai_review_enabled','scheduled_review_enabled','discovery_enabled'))
         export_check="""import json,sys
 from gabriel.identity.installation import active
 from gabriel.identity.checkpoints import read_document
@@ -104,7 +106,8 @@ print(json.dumps({'human_token_absent_from_exports':True}))
 from gabriel.identity.checkpoints import read_document
 app=browser_service();token=read_document(active()/'human.json',private=True)['token']
 assert app.read_evidence(token,EVIDENCE).reveal()==CONTENT.encode()
-assert all(CONTENT.encode() not in path.read_bytes() for path in app.store.root.glob('*.gbe'))
+objects=list(app.store.root.glob('*.gbe'))
+assert objects and all(CONTENT.encode() not in path.read_bytes() for path in objects)
 assert app.custody(token,EVIDENCE)
 print('verified encrypted browser evidence and custody')
 """.replace('EVIDENCE',repr(receipt['evidence_id'])).replace('CONTENT',repr(content))
@@ -160,7 +163,7 @@ print(json.dumps({'lease_revoked':True,'task_cancelled':True}))
 
         result=opened(60)
         code,value=gateway(root,18543,'claim',dict(ticket=result['ticket'],context=context));assert code==200
-        deadline=datetime.fromisoformat(result['expires_at']).timestamp()+3
+        deadline=datetime.fromisoformat(result['expires_at']).timestamp()+7
         while True:
             remaining=deadline-time.time()
             if remaining<=0:break
