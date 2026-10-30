@@ -60,6 +60,59 @@ services:
       GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
       GABRIEL_EVIDENCE_ROOT: /var/lib/gabriel-evidence
     secrets: [app_dsn, owner_dsn, provider_keyring, evidence_keyring]
+  browser-operator:
+    <<: *app
+    profiles: [browser-operator]
+    entrypoint: [python, -m, gabriel.identity.installation]
+    secrets: [app_dsn, evidence_keyring]
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+      GABRIEL_EVIDENCE_ROOT: /var/lib/gabriel-evidence
+    volumes:
+      - evidence:/var/lib/gabriel-evidence
+      - workbench:/var/lib/gabriel-workbench
+      - browser:/var/lib/gabriel-browser
+  browser-gateway:
+    <<: *app
+    profiles: [browser]
+    entrypoint: [python, -m, gabriel.identity.installation, browser-serve]
+    environment:
+      GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
+      GABRIEL_EVIDENCE_KEYRING_FILE: /run/secrets/evidence_keyring
+      GABRIEL_EVIDENCE_ROOT: /var/lib/gabriel-evidence
+    secrets: [app_dsn, evidence_keyring, tls_certificate, tls_key, tls_ca]
+    volumes:
+      - evidence:/var/lib/gabriel-evidence
+      - browser:/var/lib/gabriel-browser
+    healthcheck:
+      test: [CMD, python, -m, gabriel.identity.installation, browser-health]
+      interval: 2s
+      timeout: 4s
+      retries: 10
+  browser-entry:
+    image: ${GABRIEL_INSTALL_IMAGE}
+    profiles: [browser]
+    user: '10001:10001'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    networks: [private, entry]
+    environment:
+      GABRIEL_BROWSER_EXPIRES_AT: ${GABRIEL_BROWSER_EXPIRES_AT:-2000-01-01T00:00:00+00:00}
+    entrypoint: [python, -m, gabriel.identity.installation, browser-relay]
+    ports: ['127.0.0.1:${GABRIEL_BROWSER_PORT:-8443}:8443']
+    depends_on:
+      browser-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1',8443),timeout=2).close()"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
   workbench:
     <<: *app
     networks: [private, toolbus]
@@ -141,6 +194,7 @@ volumes:
   database:
   evidence:
   workbench:
+  browser:
 secrets:
   db_password:
     file: ${GABRIEL_INSTALL_ROOT:?External installation directory required}/database/db_password

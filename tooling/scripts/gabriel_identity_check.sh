@@ -50,7 +50,7 @@ assert c['services']['case-data']['volumes'][0]['source']=='evidence_data'
 print('PASS: private network; separate evidence/provider keys and encrypted evidence volume')
 PY
 "${compose[@]}" --profile test build identity identity-tests investigation-tools hermes
-docker build --build-arg "IDENTITY_BASE=${GABRIEL_IDENTITY_BASE:-python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd}" -f gabriel/identity/Dockerfile --target checkpoint-signer -t gabriel-checkpoint-signer:dev .
+docker build --build-arg "IDENTITY_BASE=${GABRIEL_IDENTITY_BASE:-python@sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2}" -f gabriel/identity/Dockerfile --target checkpoint-signer -t gabriel-checkpoint-signer:dev .
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
     --entrypoint python gabriel-checkpoint-signer:dev -c \
     "import importlib.util; from gabriel.identity.checkpoints import new_keypair,seal,verify; assert importlib.util.find_spec('psycopg') is None; assert importlib.util.find_spec('gabriel.identity.service') is None; print('PASS: offline signer excludes database drivers and application services')"
@@ -98,3 +98,4 @@ cp -a "$work_dir/object-backup" "$work_dir/restored-objects"
 "${compose[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" \
     -v "$report_dir:/evidence" identity-tests --report /evidence/identity-tests.json
 printf '%s\n' 'PASS: identity integration and PostgreSQL restart checks complete; disposable database cleaned on exit.'
+

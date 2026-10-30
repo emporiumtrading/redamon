@@ -11,7 +11,7 @@ import re
 import stat
 import subprocess
 import sys
-from uuid import uuid4
+from uuid import UUID,uuid4
 
 from gabriel_identity_prepare import prepare as database_secrets
 from gabriel_provider_keys import prepare as keyring
@@ -152,7 +152,8 @@ class Installation:
         return report
 
     def operator(self,command,payload=None):
-        raw=self.compose('run','--rm','--no-deps','-T','operator',command,
+        service='browser-operator' if command in {'browser-open','browser-stop'} else 'operator'
+        raw=self.compose('run','--rm','--no-deps','-T',service,command,
             payload=json.dumps(payload).encode() if payload is not None else None)
         value=json.loads(raw)
         if value.get('status')!='ok': raise ValueError('operator_operation_denied')
@@ -160,31 +161,84 @@ class Installation:
 
     def start_db(self): self.compose('up','-d','--wait','identity-db')
 
-    def stop(self):
+    def browser_image_supported(self):
+        image=json.loads(run(['docker','image','inspect',self.config['image']]))[0]
+        return (image.get('Config',{}).get('Labels') or {}).get('org.gabriel.browser-installation')=='v1'
+
+    def browser_state(self):
+        from datetime import datetime
+        value=read(self.root/'browser.json')
+        if (set(value)!={'port','lease_id','task_id','case_id','endpoint','expires_at'}
+                or type(value['port']) is not int or not 1024<=value['port']<=65535
+                or value['port']==self.config['port'] or value['endpoint']!='https://localhost:'+str(value['port'])
+                or any(str(UUID(value[n]))!=value[n] for n in ('lease_id','task_id','case_id'))
+                or datetime.fromisoformat(value['expires_at']).tzinfo is None):
+            raise ValueError('invalid_browser_installation_state')
+        return value
+
+    def browser_stop(self):
+        # Close the published listener first, even when PostgreSQL or human authority is gone.
+        self.compose('rm','-sf','browser-entry','browser-gateway')
+        if (self.root/'browser.json').exists():(self.root/'browser.json').unlink()
+        if not self.browser_image_supported():
+            return {'listener_stopped':True,'revocation_confirmed':False,'browser_image_supported':False}
+        try:
+            self.start_db()
+            result=self.operator('browser-stop')
+        except (DockerOperationError,ValueError):result={'revocation_confirmed':False}
+        return dict(listener_stopped=True,**result)
+
+    def browser_open(self,case_id,context,origin,*,port=8443,duration=300,max_steps=20,share_observations=False):
+        if type(port) is not int or not 1024<=port<=65535 or port==self.config['port']:
+            raise ValueError('distinct_loopback_browser_port_required')
+        previous=self.browser_stop()
+        if not self.browser_image_supported():raise ValueError('rebuild_required_for_browser_installation')
+        if not previous['revocation_confirmed']:raise ValueError('browser_revocation_unconfirmed; retry browser-stop before enrollment')
         self.start_db()
+        self.check_network()
+        result=self.operator('browser-open',dict(case_id=case_id,context=context,extension_origin=origin,
+            port=port,duration=duration,max_steps=max_steps,share_observations=share_observations))
+        state={k:v for k,v in result.items() if k!='ticket'}
+        try:
+            write(self.root/'browser.json',dict(state,port=port))
+            self.env.update(GABRIEL_BROWSER_PORT=str(port),GABRIEL_BROWSER_EXPIRES_AT=result['expires_at'])
+            self.compose('up','-d','--wait','--force-recreate','browser-gateway','browser-entry')
+        except Exception:
+            try:self.browser_stop()
+            except Exception:pass
+            raise
+        return dict(result,listener_loopback_only=True,sharing_approved=share_observations,previous_browser_stop=previous)
+
+    def stop(self):
         self.compose('stop','local-entry','workbench')
-        self.operator('revoke')
-        self.compose('stop','hermes','investigation-tools','identity-db')
+        browser=self.browser_stop()
+        try:
+            self.start_db()
+            self.operator('revoke')
+        finally:self.compose('stop','hermes','investigation-tools','identity-db')
+        return browser
 
     def open(self,password,*,ai_egress=False,username=None):
         if type(ai_egress) is not bool:raise ValueError('invalid_ai_egress_option')
+        self.compose('stop','local-entry','workbench')
+        browser=self.browser_stop()
         self.command=['docker','compose','--project-name',self.config['project'],'--file',str(COMPOSE)]
         if ai_egress:self.command.extend(['--file',str(REPO/'compose.gabriel-specialist-ai.yml')])
         self.start_db()
         self.check_network()
-        self.compose('stop','local-entry','workbench')
         payload=dict(password=password,port=self.config['port'])
         if username is not None:payload['username']=username
         ticket=self.operator('open',payload)
         self.compose('build','hermes')
         self.compose('up','-d','--wait','--force-recreate','workbench','local-entry')
-        return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',ai_egress=ai_egress,**ticket)
+        return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',ai_egress=ai_egress,browser_stop=browser,**ticket)
 
     def backup(self,destination):
         if destination.exists(): raise ValueError('new_backup_directory_required')
         destination.mkdir(mode=0o700)
-        self.start_db()
         self.compose('stop','local-entry','workbench')
+        browser=self.browser_stop()
+        self.start_db()
         self.operator('revoke')
         receipt=self.operator('receipt')
         with (destination/'database.dump').open('xb') as stream:
@@ -195,10 +249,12 @@ class Installation:
             identity=receipt,files={name:digest(destination/name) for name in ('database.dump','evidence.tar.gz')},
             key_fingerprints={name:digest(self.root/name/'keyring.json') for name in ('provider','evidence')})
         write(destination/'backup.json',manifest)
-        return {'backup_complete':True,'workbench_stopped':True,'keys_included':False}
+        return {'backup_complete':True,'workbench_stopped':True,'keys_included':False,'browser_stop':browser}
 
 
     def rebuild(self,backup,image=None):
+        self.compose('stop','local-entry','workbench')
+        self.browser_stop()
         if len(list(self.root.glob('rebuild-*.json')))>=32:
             raise ValueError('rebuild_history_limit_requires_operator_review')
         candidate=build_image(image)
@@ -298,7 +354,7 @@ def password(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','diagnose'))
+    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','diagnose','browser-open','browser-stop'))
     parser.add_argument('directory')
     parser.add_argument('--port',type=int,default=8444)
     parser.add_argument('--image')
@@ -308,6 +364,13 @@ def main():
     parser.add_argument('--backup')
     parser.add_argument('--keys-from')
     parser.add_argument('--ai-egress',action='store_true',help='Allow the opened workbench to reach its fixed AI provider; requires qualified configuration and own key')
+    parser.add_argument('--case-id')
+    parser.add_argument('--context-file')
+    parser.add_argument('--extension-origin')
+    parser.add_argument('--gateway-port',type=int,default=8443)
+    parser.add_argument('--duration',type=int,default=300)
+    parser.add_argument('--max-steps',type=int,default=20)
+    parser.add_argument('--approve-observation-sharing',action='store_true')
     args=parser.parse_args()
     os.umask(0o077)
     try:
@@ -327,12 +390,22 @@ def main():
                 elif args.command=='diagnose':
                     installation.start_db()
                     result=dict(network=installation.check_network(),production_admitted=False)
-                elif args.command=='open': result=installation.open(password(args),ai_egress=args.ai_egress,username=args.username)
+                elif args.command=='open':
+                    installation.compose('stop','local-entry','workbench')
+                    installation.browser_stop()
+                    result=installation.open(password(args),ai_egress=args.ai_egress,username=args.username)
+                elif args.command=='browser-open':
+                    context_path=external(args.context_file)
+                    private(context_path.parent)
+                    result=installation.browser_open(args.case_id,read(context_path),args.extension_origin,
+                        port=args.gateway_port,duration=args.duration,max_steps=args.max_steps,
+                        share_observations=args.approve_observation_sharing)
+                elif args.command=='browser-stop':result=installation.browser_stop()
                 elif args.command=='status':
                     raw=installation.compose('ps','--all','--format','json').decode().strip()
                     rows=json.loads(raw) if raw.startswith('[') else [json.loads(line) for line in raw.splitlines()]
                     result=dict(services=rows,production_admitted=False)
-                elif args.command=='stop': installation.stop();result={'stopped':True,'volumes_retained':True}
+                elif args.command=='stop': result=dict(stopped=True,volumes_retained=True,browser_stop=installation.stop())
                 elif args.command=='backup': result=installation.backup(external(args.backup))
                 elif args.command=='rebuild': result=installation.rebuild(external(args.backup),args.image)
                 else: result=installation.restore(external(args.backup),external(args.keys_from))

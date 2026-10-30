@@ -13,6 +13,8 @@ import tarfile
 import select
 import socket
 import socketserver
+import signal
+import subprocess
 from threading import BoundedSemaphore
 import time
 from uuid import UUID,uuid4
@@ -25,6 +27,7 @@ from gabriel.identity.service import AuthenticationDenied,IdentityError,connecti
 from gabriel.identity.workbench import prepare_workbench,serve_workbench
 
 ROOT=Path('/var/lib/gabriel-workbench')
+BROWSER_ROOT=Path('/var/lib/gabriel-browser')
 PHASE='command'
 
 
@@ -117,6 +120,123 @@ def open_workbench(payload):
     return {'ticket':read_document(directory/'claim.json',private=True)['ticket'],'session_seconds':600}
 
 
+def browser_active():
+    receipt=read_document(BROWSER_ROOT/'active.json',private=True)
+    if set(receipt)!={'session'} or str(UUID(receipt['session']))!=receipt['session']:
+        raise ValueError('invalid_browser_session')
+    return BROWSER_ROOT/receipt['session']
+
+
+def browser_service():
+    from gabriel.identity.browser_navigation import BrowserNavigationService
+    return BrowserNavigationService(read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE']),
+        LocalEvidenceStore(os.environ['GABRIEL_EVIDENCE_ROOT'],EvidenceKeys.from_file(os.environ['GABRIEL_EVIDENCE_KEYRING_FILE'])))
+
+
+def open_browser(payload):
+    from gabriel.identity.browser_gateway import prepare,extension_origin
+    from gabriel.identity.browser_sessions import approved_context
+    required={'case_id','context','extension_origin','port','duration','max_steps','share_observations'}
+    if (set(payload)!=required or type(payload['port']) is not int or not 1024<=payload['port']<=65535
+            or type(payload['duration']) is not int or not 60<=payload['duration']<=300
+            or type(payload['max_steps']) is not int or not 1<=payload['max_steps']<=1000
+            or type(payload['share_observations']) is not bool):
+        raise ValueError('invalid_browser_open_request')
+    context=approved_context(payload['context'])
+    origin=extension_origin(payload['extension_origin'])
+    case_id=str(UUID(payload['case_id']))
+    app=browser_service()
+    if (BROWSER_ROOT/'active.json').exists():raise ValueError('browser_stop_required')
+    token=read_document(active()/'human.json',private=True)['token']
+    # The local operator command is explicit authorization; a saved token alone grants nothing.
+    app.get_case(token,case_id)
+    if sum(1 for p in BROWSER_ROOT.iterdir() if p.is_dir())>=128:raise ValueError('browser_directory_limit')
+    task=app.create_browser_task(token,'Approved installation browser tab',payload['duration'],payload['max_steps'])
+    directory=BROWSER_ROOT/str(uuid4())
+    result=None
+    try:
+        result=prepare(app,token,str(task['id']),case_id,context,'https://localhost:'+str(payload['port']),origin,directory,
+            share_observations=payload['share_observations'])
+        write_document(directory/'task.json',{'task_id':str(task['id'])})
+        publish(BROWSER_ROOT/'active.json',{'session':directory.name})
+    except Exception:
+        if result is not None:
+            try:app.revoke_browser_lease(token,result['lease_id'])
+            except IdentityError:pass
+        from gabriel.identity.tasks import TaskService
+        try:TaskService(app._dsn).end_task(token,task['id'],'cancelled')
+        except IdentityError:pass
+        raise
+    return dict(lease_id=result['lease_id'],task_id=str(task['id']),case_id=case_id,endpoint=result['endpoint'],
+        expires_at=result['expires_at'],ticket=read_document(directory/'claim.json',private=True)['ticket'])
+
+
+def stop_browser():
+    if not (BROWSER_ROOT/'active.json').exists():return {'revocation_confirmed':True,'lease_present':False}
+    directory=browser_active()
+    config=read_document(directory/'gateway.json',private=True)
+    tokens=[read_document(directory/'human.json',private=True)['token']]
+    try:
+        current=read_document(active()/'human.json',private=True)['token']
+        if current not in tokens:tokens.append(current)
+    except (OSError,ValueError):pass
+    from gabriel.identity.tasks import TaskService
+    task=read_document(directory/'task.json',private=True)['task_id']
+    app=browser_service()
+    tasks=TaskService(app._dsn)
+    confirmed=True
+    for operation in (lambda token:app.revoke_browser_lease(token,config['lease_id']),
+            lambda token:tasks.end_task(token,task,'cancelled')):
+        complete=False
+        for token in tokens:
+            try:operation(token);complete=True;break
+            except IdentityError:pass
+        confirmed=confirmed and complete
+    # Retain uncertain cleanup so a later explicit Stop can retry both operations honestly.
+    if confirmed:(BROWSER_ROOT/'active.json').unlink()
+    return {'revocation_confirmed':confirmed,'lease_present':True}
+
+
+def remaining_browser_seconds(value):
+    expiry=datetime.fromisoformat(value)
+    if expiry.tzinfo is None:raise ValueError('browser_expiry_timezone_required')
+    remaining=(expiry-datetime.now(timezone.utc)).total_seconds()
+    if not 0<remaining<=300:raise ValueError('browser_lifetime_unavailable')
+    return remaining
+
+
+def serve_browser():
+    config=browser_active()/'gateway.json'
+    remaining=remaining_browser_seconds(read_document(config,private=True)['expires_at'])
+    child=subprocess.Popen([sys.executable,'-m','gabriel.identity.gateway_cli','serve','--configuration',str(config),
+        '--certificate','/run/secrets/tls_certificate','--key','/run/secrets/tls_key','--bind','0.0.0.0:8443'],start_new_session=True)
+    def terminate(signum,frame):raise SystemExit(0)
+    previous=signal.signal(signal.SIGTERM,terminate)
+    try:
+        try:
+            if child.wait(timeout=remaining)!=0:raise ValueError('browser_gateway_failed')
+        except subprocess.TimeoutExpired:pass
+    finally:
+        if child.poll() is None:
+            os.killpg(child.pid,signal.SIGTERM)
+            try:child.wait(timeout=5)
+            except subprocess.TimeoutExpired:os.killpg(child.pid,signal.SIGKILL);child.wait()
+        signal.signal(signal.SIGTERM,previous)
+
+
+def browser_health():
+    from urllib.parse import urlsplit
+    config=read_document(browser_active()/'gateway.json',private=True)
+    client=http.client.HTTPSConnection('127.0.0.1',8443,context=ssl.create_default_context(cafile='/run/secrets/tls_ca'),timeout=3)
+    try:
+        client.request('GET','/v1/browser/status',headers={'Host':urlsplit(config['endpoint']).netloc})
+        response=client.getresponse()
+        if response.status!=403:raise ValueError('unauthenticated_browser_access_not_denied')
+        response.read()
+    finally:client.close()
+    return {'https':True,'browser_authority_acceptance':False}
+
+
 def health():
     directory=active()
     config=read_document(directory/'workbench.json',private=True)
@@ -154,13 +274,14 @@ def restore_objects(stream):
     return {'restored_objects':len(objects)}
 
 
-def relay():
+def relay(*,browser=False):
     """Opaque bounded TLS forwarding to one fixed service; no credentials or target selection."""
     slots=BoundedSemaphore(4)
+    deadline=time.monotonic()+remaining_browser_seconds(os.environ['GABRIEL_BROWSER_EXPIRES_AT']) if browser else None
     class Handler(socketserver.BaseRequestHandler):
         def handle(self):
             try:
-                with socket.create_connection(('workbench',8444),timeout=3) as upstream:
+                with socket.create_connection(('browser-gateway',8443) if browser else ('workbench',8444),timeout=3) as upstream:
                     self.request.settimeout(3)
                     pair={self.request:upstream,upstream:self.request}
                     remaining=4*1024*1024
@@ -185,17 +306,28 @@ def relay():
         def process_request_thread(self,request,address):
             try: super().process_request_thread(request,address)
             finally: slots.release()
-    with Server(('0.0.0.0',8444),Handler) as server: server.serve_forever()
+    with Server(('0.0.0.0',8443 if browser else 8444),Handler) as server:
+        if deadline is None:server.serve_forever()
+        else:
+            server.timeout=0.5
+            while time.monotonic()<deadline:server.handle_request()
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('tls','initialize','open','serve','health','receipt','restore-receipt','revoke','restore-objects','relay'))
+    parser.add_argument('command',choices=('tls','initialize','open','serve','health','receipt','restore-receipt','revoke','restore-objects','relay',
+        'browser-open','browser-stop','browser-serve','browser-relay','browser-health'))
     parser.add_argument('--directory')
     args=parser.parse_args()
     try:
         if args.command=='tls': result=tls(args.directory)
         elif args.command=='relay': relay();return 0
+        elif args.command=='browser-relay':relay(browser=True);return 0
+        elif args.command=='browser-stop':result=stop_browser()
+        elif args.command=='browser-health':result=browser_health()
+        elif args.command=='browser-serve':
+            serve_browser()
+            return 0
         elif args.command=='serve':
             serve_workbench(str(active()/'workbench.json'),'/run/secrets/tls_certificate','/run/secrets/tls_key','0.0.0.0:8444')
             return 0
@@ -214,6 +346,7 @@ def main():
             payload=json.loads(raw,object_pairs_hook=_unique)
             if args.command=='initialize': result=initialize(payload)
             elif args.command=='open': result=open_workbench(payload)
+            elif args.command=='browser-open':result=open_browser(payload)
             else:
                 if set(payload)!={'organization_id','user_id','username'}: raise ValueError('invalid_receipt')
                 migrate(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']))

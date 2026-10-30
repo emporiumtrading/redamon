@@ -1,5 +1,6 @@
-ARG IDENTITY_BASE=python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd
+ARG IDENTITY_BASE=python@sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2
 FROM ${IDENTITY_BASE} AS runtime
+LABEL org.gabriel.browser-installation="v1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
@@ -24,6 +25,7 @@ COPY gabriel/identity/browser_semantics.py gabriel/identity/browser_hermes.py ga
 COPY gabriel/identity/release_qualification.py /app/gabriel/identity/
 COPY gabriel/identity/installation.py /app/gabriel/identity/
 RUN mkdir -p /var/lib/gabriel-workbench && chown 10001:10001 /var/lib/gabriel-workbench && chmod 700 /var/lib/gabriel-workbench
+RUN mkdir -p /var/lib/gabriel-browser && chown 10001:10001 /var/lib/gabriel-browser && chmod 700 /var/lib/gabriel-browser
 COPY gabriel/identity/workbench.py gabriel/identity/workbench_cli.py /app/gabriel/identity/
 COPY gabriel/identity/analyst_views.py /app/gabriel/identity/
 COPY gabriel/identity/case_workflow.py gabriel/identity/schema_v13.sql /app/gabriel/identity/

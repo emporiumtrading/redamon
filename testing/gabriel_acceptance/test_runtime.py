@@ -1,5 +1,6 @@
 """Run in the installation image; generated Docker inspect fault injection only."""
 from copy import deepcopy
+from datetime import datetime,timedelta,timezone
 import json
 import hashlib
 from pathlib import Path
@@ -22,6 +23,49 @@ class RuntimeAcceptance(unittest.TestCase):
                     PortBindings={'8444/tcp':[dict(HostIp='127.0.0.1',HostPort='18444')]} if service=='local-entry' else {}),
                 NetworkSettings=dict(Networks={'generated-project_'+n:{} for n in NETWORKS[service]})))
         self.networks={'generated-project_'+n:dict(Internal=n!='entry',Labels={'com.docker.compose.project':'generated-project'}) for n in ('private','toolbus','entry')}
+    def browser_fixture(self):
+        config=dict(self.config,browser_port=18443,browser_expires_at=(datetime.now(timezone.utc)+timedelta(seconds=120)).isoformat(),
+            browser_image_environment=['PATH=/usr/local/bin:/usr/bin','PYTHONUNBUFFERED=1'])
+        rows=deepcopy(self.rows)
+        for service in ('browser-gateway','browser-entry'):
+            row=deepcopy(next(r for r in rows if r['Config']['Labels']['com.docker.compose.service']==('workbench' if service=='browser-gateway' else 'local-entry')))
+            row['Config']['Labels']['com.docker.compose.service']=service
+            row['Config']['Entrypoint']=['python','-m','gabriel.identity.installation','browser-serve' if service=='browser-gateway' else 'browser-relay']
+            row['Config']['Cmd']=None
+            env=({'GABRIEL_IDENTITY_DSN_FILE':'/run/secrets/app_dsn','GABRIEL_EVIDENCE_KEYRING_FILE':'/run/secrets/evidence_keyring',
+                'GABRIEL_EVIDENCE_ROOT':'/var/lib/gabriel-evidence'} if service=='browser-gateway' else {'GABRIEL_BROWSER_EXPIRES_AT':config['browser_expires_at']})
+            row['Config']['Env']=config['browser_image_environment']+[k+'='+v for k,v in env.items()]
+            row['Mounts']=[dict(Destination=k,Type=v[0],RW=v[1],**(dict(Source='/generated-install/'+BIND_FILES[k]) if v[0]=='bind' else dict(Name='generated-project_'+VOLUME_NAMES[k]))) for k,v in MOUNTS.get(service,{}).items()]
+            row['HostConfig']['PortBindings']={'8443/tcp':[dict(HostIp='127.0.0.1',HostPort='18443')]} if service=='browser-entry' else {}
+            row['NetworkSettings']['Networks']={'generated-project_'+n:{} for n in NETWORKS[service]}
+            rows.append(row)
+        return config,rows
+
+    def test_optional_browser_pair_is_strictly_attested_and_never_silently_ignored(self):
+        config,rows=self.browser_fixture()
+        self.assertEqual(len(assess(config,rows,self.networks)['services']),7)
+        for invalid in (rows[:-1],rows[:-2],rows+[deepcopy(rows[-1])]):
+            with self.assertRaises(ValueError):assess(config,invalid,self.networks)
+        with self.assertRaises(ValueError):assess(self.config,rows,self.networks)
+
+    def test_browser_environment_execution_overrides_duplicates_and_topology_fail_closed(self):
+        config,fixture=self.browser_fixture()
+        for change in ('public','provider-secret','workbench-volume','egress','entrypoint','command','restart','expired',
+                'PYTHONPATH','PYTHONHOME','LD_PRELOAD','PATH','duplicate','lease-expiry'):
+            rows=deepcopy(fixture);cfg=dict(config)
+            gateway=rows[-2];relay=rows[-1]
+            if change=='public':relay['HostConfig']['PortBindings']['8443/tcp'][0]['HostIp']='0.0.0.0'
+            if change=='provider-secret':gateway['Mounts'].append(dict(Destination='/run/secrets/provider_keyring',Type='bind',RW=False,Source='/generated-install/provider/keyring.json'))
+            if change=='workbench-volume':gateway['Mounts'].append(dict(Destination='/var/lib/gabriel-workbench',Type='volume',RW=True,Name='generated-project_workbench'))
+            if change=='egress':gateway['NetworkSettings']['Networks']['generated-project_entry']={}
+            if change=='entrypoint':gateway['Config']['Entrypoint']=['sh','-c','unreviewed']
+            if change=='command':relay['Config']['Cmd']=['unreviewed']
+            if change=='restart':gateway['HostConfig']['RestartPolicy']={'Name':'always'}
+            if change=='expired':cfg['browser_expires_at']=(datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat()
+            if change in {'PYTHONPATH','PYTHONHOME','LD_PRELOAD','PATH'}:gateway['Config']['Env'].append(change+'=/generated/unreviewed')
+            if change=='duplicate':gateway['Config']['Env'].append('PYTHONUNBUFFERED=1')
+            if change=='lease-expiry':relay['Config']['Env'][-1]='GABRIEL_BROWSER_EXPIRES_AT=2099-01-01T00:00:00+00:00'
+            with self.subTest(change=change),self.assertRaises(ValueError):assess(cfg,rows,self.networks)
     def test_runtime_evidence_never_admits_browser_or_release(self):
         result=assess(self.config,self.rows,self.networks)
         self.assertTrue(result['runtime_checks_passed'])

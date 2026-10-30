@@ -4,6 +4,8 @@ This installs the existing defensive case workbench and encrypted evidence servi
 
 ## Requirements and setup
 
+The current runtime defaults pin Python 3.11.18 on Alpine 3.24 to multiarch index `sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2`. Registry resolution [40985396254](https://github.com/emporiumtrading/redamon/actions/runs/40985396254) verified the index bytes and both x86/ARM child manifests before selection; retained metadata artifact ZIP SHA-256 is `fe94fe60cde2104682af7ce07bf3399c2d28ebe2586a4faef5dd0e46b93afea0`. This includes the upstream Python tarfile patch for CVE-2026-114583. Core, component/tool-test, checkpoint-signer and model-validation defaults use the same pin. Rebuild, scan and test the final image; registry metadata alone establishes neither application compatibility nor release acceptance.
+
 Use a checked-out source revision, Python 3.9 or later on a POSIX host, Docker Engine/Desktop with Compose v2, and an operator-owned directory outside the source checkout. The controller uses POSIX ownership and file locking; native Windows execution is not supported by this increment. Linux x86/ARM CI coverage is recorded in the PR; macOS/Windows Docker Desktop and the 18 GB target host still require acceptance. Commands below use `$HOME/gabriel-private-test` as a new directory; do not put it inside Git or a shared/synced folder. Docker volumes retain database, encrypted evidence and private workbench session files. Do not run inherited offensive-stack installation commands.
 
 ```bash
@@ -73,6 +75,23 @@ Failure leaves the interface stopped and retains the backup and rebuild intent f
 
 Rebuilding includes the AI application bridge, but does not qualify a model, enable provider egress in the private workbench or start a browser gateway. Read the [AI phase guide](GABRIEL_BROWSER_AI_DETECTION.md) before activation.
 
+
+## Optional finite browser gateway
+
+After opening your workbench, create or select an open case and note its case UUID. Load the reviewed Gabriel extension in your dedicated Chrome/Brave profile, sign into the intended console yourself, select its current tab, and save the displayed non-secret context JSON in your private installation directory. Use the exact extension origin displayed by that installed extension. Never extract or copy the general Gabriel human token.
+
+```bash
+python3 tooling/scripts/gabriel_install.py browser-open "$HOME/gabriel-private-test" --case-id CASE_UUID --context-file "$HOME/gabriel-private-test/context.json" --extension-origin chrome-extension://EXTENSION_ID --gateway-port 8443 --duration 300 --max-steps 20 --approve-observation-sharing
+python3 tooling/scripts/gabriel_install.py browser-stop "$HOME/gabriel-private-test"
+```
+
+`browser-open` is explicit private operator authorization using the still-valid original installation session. It creates a dedicated browser task and a lease bound to that exact case, tab/document, declared account and extension origin. A saved expired or revoked human session is rejected. Durations are 60–300 seconds and are clipped by original human/task authority; no renewal, scheduled collection, navigation, AI activation or provider egress is enabled by this command. Omit the sharing flag for pairing only. The browser port must differ from the workbench port. The installation image must support this feature; older installations need the backed-up rebuild workflow first.
+
+The command prints the existing short-lived single-use pairing ticket and loopback HTTPS endpoint. Enter that ticket in the extension promptly; it expires at most sixty seconds after gateway startup and never beyond the lease. Keep it out of URLs, logs, screenshots and support reports. The human token stays inside trusted private containers. Native browser context selection and the endpoint permission prompt remain human actions. This slice retains ticket entry; it does not provide an all-in-workbench pairing wizard.
+
+Only one gateway is active per installation. Gateway bootstraps use a separate private volume; the gateway receives neither provider keys nor the workbench volume. A separate unprivileged relay without secrets publishes opaque TLS only on IPv4 loopback. Both processes exit at the original lease deadline, without restart or credential renewal. Expired/stopped containers must be removed with `browser-stop` before collecting a clean runtime report; active reports strictly attest all seven services and actual gateway source bytes. New enrollment, workbench reopen/account switch, full Stop, backup and rebuild close the gateway listener before database or credential operations.
+
+`browser-stop` reports listener shutdown separately from database revocation. If the database or required human authority is unavailable, cleanup remains unconfirmed and its private receipt is retained. New browser enrollment is blocked until a later explicit Stop confirms both lease revocation and task cancellation. Restore database connectivity and, if necessary, open a currently authorized owner session before retrying. UI **Disconnect workbench** only closes that UI cookie; it is not installation Stop or human logout. Private bootstrap storage is bounded to 128 directories; review and cleanup are operator work, never silent deletion. Actual native OS, certificate trust, real-console compatibility and human acceptance remain separate release gates.
 
 ## Member accounts and specialist AI connectivity
 
