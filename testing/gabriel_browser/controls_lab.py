@@ -31,6 +31,7 @@ def page(path,query):
 <button type="submit">Search events</button></form><p id="edit-result">Search not entered</p>
 <button id="next" type="button" onclick="window.actions++;document.getElementById('page-result').textContent='Page 2'">Next page</button><p id="page-result">Page 1</p>
 <label for="password">Password</label><input id="password" type="password" value="GENERATED_CREDENTIAL_EXCLUDED">
+<textarea id="unlabelled">GENERATED_CONFIDENTIAL_NOTES_EXCLUDED</textarea>
 <button id="delete" type="button" onclick="window.unsafeActions++">Delete incident</button>
 <script>window.actions=0;window.unsafeActions=0;window.submitHandlerCalled=0;</script></body></html>''').encode()
 
@@ -56,7 +57,7 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
     unassigned=cdp.send('Target.createTarget',{'url':origin+'/controls/unassigned'})['targetId']
     other=cdp.attach(unassigned)
     wait_for(lambda:cdp.evaluate(other,'document.readyState')=='complete')
-    for scenario in ('success','approval','ambiguous','password','post','hidden_field','postcondition','stop_race'):
+    for scenario in ('success','approval','ambiguous','password','post','hidden_field','postcondition','covered_postcondition','stale_postcondition','stop_race'):
         mark(family+':controls-'+scenario)
         cdp.send('Page.navigate',{'url':origin+'/controls/start'},console)
         wait_for(lambda:cdp.evaluate(console,'document.title')=='Generated Controls Dashboard' and cdp.evaluate(console,'document.readyState')=='complete')
@@ -67,8 +68,9 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
         click(cdp,popup,'controls-inventory')
         wait_for(lambda:'coverage' in (text(cdp,popup,'controls-details') or ''))
         inventory=json.loads(text(cdp,popup,'controls-details'))
-        assert all(row['id'] not in {'password','delete'} for row in inventory['controls'])
+        assert all(row['id'] not in {'password','delete','unlabelled'} for row in inventory['controls'])
         assert 'GENERATED_CREDENTIAL_EXCLUDED' not in json.dumps(inventory)
+        assert 'GENERATED_CONFIDENTIAL_NOTES_EXCLUDED' not in json.dumps(inventory)
         reviewed=policy(origin)
         if scenario in {'password','post','hidden_field'}:
             reviewed['steps']=[reviewed['steps'][3 if scenario=='password' else 5]]
@@ -83,6 +85,21 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
         if scenario=='postcondition':
             reviewed['steps']=[reviewed['steps'][0]]
             reviewed['steps'][0]['expect']['text']='This result never appears'
+        if scenario=='stale_postcondition':
+            reviewed['steps']=[reviewed['steps'][4]]
+            reviewed['steps'][0]['source_url']=reviewed['steps'][0]['destination_url']=origin+'/controls/start'
+            cdp.evaluate(console,'''document.getElementById('page-result').textContent='Page 2';
+                document.getElementById('next').onclick=()=>{window.actions++;
+                    setTimeout(()=>document.getElementById('page-result').textContent='Loading',1000)};true''')
+        if scenario=='covered_postcondition':
+            reviewed['steps']=[reviewed['steps'][0]]
+            cdp.evaluate(console,'''document.getElementById('sections').addEventListener('click',()=>{
+                const box=document.getElementById('menu').getBoundingClientRect();
+                const overlay=document.createElement('div');overlay.textContent='Loading';
+                Object.assign(overlay.style,{position:'fixed',zIndex:'9999',background:'white',
+                    left:box.left+'px',top:box.top+'px',width:box.width+'px',height:box.height+'px'});
+                document.body.append(overlay);
+            });true''')
         if scenario=='ambiguous':
             cdp.evaluate(console,'document.getElementById("sections").after(document.getElementById("sections").cloneNode(true));true')
         case=service.create_case(human,'Generated controls '+scenario,purpose='performance_test')
@@ -135,7 +152,7 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
                     else:
                         wait_for(lambda:service.get_browser_lease(human,enrolled['lease_id'])['state']=='disconnected',20)
                         assert not service.list_browser_observations(human,enrolled['lease_id'])['observations']
-                        assert cdp.evaluate(console,'window.actions')==(1 if scenario=='postcondition' else 0)
+                        assert cdp.evaluate(console,'window.actions')==(1 if scenario in {'postcondition','covered_postcondition'} else 0)
                 assert cdp.evaluate(console,'window.submitHandlerCalled')==0
                 assert cdp.evaluate(console,'window.unsafeActions')==0
                 assert cdp.evaluate(other,'window.actions')==0 and cdp.evaluate(other,'location.href')==origin+'/controls/unassigned'
@@ -147,4 +164,4 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
     return ['menu_disclosure','menu_link_subpage','native_filter','text_search_field','button_pagination','reviewed_get_form',
         'exact_postconditions','encrypted_six_step_observations','credential_exclusion','unassigned_tab_isolation',
         'no_submit_event_handler','explicit_approval','ambiguous_target_denied','password_drift_denied','post_form_denied','hidden_form_fields_denied',
-        'postcondition_failure_stops','stop_after_prepare_no_dispatch','no_automatic_replay','private_token_exclusion']
+        'postcondition_failure_stops','covered_postcondition_stops','stale_postcondition_denied','stop_after_prepare_no_dispatch','no_automatic_replay','private_token_exclusion']

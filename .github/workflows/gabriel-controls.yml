@@ -35,4 +35,8 @@ jobs:
           "${compose[@]}" --profile test build identity-tests
           "${compose[@]}" up -d --wait identity-db
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests \
-            tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_browser_controls_integration.py --strict --parallel 1
+            tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_browser_controls_integration.py --strict --parallel 1 || {
+              "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests \
+                -m pytest -x -q --tb=short testing/gabriel_identity/test_browser_controls_integration.py
+              exit 1
+            }

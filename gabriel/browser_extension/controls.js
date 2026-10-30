@@ -28,6 +28,7 @@ export function controlDOM(mode, step=null) {
     }
     if (node.getAttribute("aria-label")) return clean(node.getAttribute("aria-label"));
     if (node.labels?.length) return clean(Array.from(node.labels).map(label=>label.textContent).join(" "));
+    if (["INPUT","TEXTAREA","SELECT"].includes(node.tagName)) return "";
     return clean(node.tagName==="FORM" ? node.getAttribute("name") : node.textContent);
   }
   function visible(node,hit=true) {
@@ -59,7 +60,7 @@ export function controlDOM(mode, step=null) {
   }
   function postcondition(expected) {
     const nodes=Array.from(document.querySelectorAll('[id]')).filter(node=>node.id===expected.id);
-    return nodes.length===1 && visible(nodes[0],false) && clean(nodes[0].textContent)===expected.text;
+    return nodes.length===1 && visible(nodes[0]) && clean(nodes[0].textContent)===expected.text;
   }
   if(document.readyState!=="complete" || document.querySelectorAll('body *').length>10000)
     throw new Error("The current view is incomplete or too complex.");
@@ -77,7 +78,11 @@ export function controlDOM(mode, step=null) {
   if(!step || location.href!==(mode==="verify" ? step.destination_url : step.source_url)) throw new Error("Control page changed.");
   if(mode==="verify") return {confirmed:postcondition(step.expect),page_url:location.href};
   const node=target(step.target);
-  if(mode==="inspect") return {page_url:location.href,target:step.target};
+  if(mode==="inspect") {
+    if(step.source_url===step.destination_url && postcondition(step.expect))
+      throw new Error("The expected result already exists. Review a fresh control plan.");
+    return {page_url:location.href,target:step.target};
+  }
   if(mode!=="execute") throw new Error("Unsupported control operation.");
   if(step.kind==="menu") {
     if(node.tagName==="SUMMARY") {
