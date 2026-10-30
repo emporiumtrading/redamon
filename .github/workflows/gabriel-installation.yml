@@ -36,7 +36,7 @@ jobs:
       - name: Offline acceptance fault injection
         run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -v "$GITHUB_WORKSPACE:/source:ro" --entrypoint python gabriel-installation-check /source/testing/gabriel_acceptance/test_runtime.py
       - name: Offline installer network failure and credential boundaries
-        run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges -v "$GITHUB_WORKSPACE:/source:ro" --entrypoint python gabriel-installation-check /source/testing/gabriel_acceptance/test_installation_network.py
+        run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=8m --cap-drop ALL --security-opt no-new-privileges -v "$GITHUB_WORKSPACE:/source:ro" --entrypoint python gabriel-installation-check /source/testing/gabriel_acceptance/test_installation_network.py
       - name: Deny healthy database with deliberately blocked private peer traffic
         run: |
           image_id="$(docker image inspect gabriel-installation-check --format '{{.Id}}')"

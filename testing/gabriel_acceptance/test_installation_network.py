@@ -123,5 +123,27 @@ class NetworkCheckTests(unittest.TestCase):
         app.operator.assert_called_once_with('revoke')
         app.check_network.assert_not_called()
 
+    def test_migration_failure_after_network_success_is_not_a_network_denial(self):
+        with tempfile.TemporaryDirectory() as root,patch.object(installer,'Installation') as constructor,patch.object(installer,'password',return_value='generated-test-password'),patch.object(sys,'argv',['install','initialize',root]),contextlib.redirect_stdout(io.StringIO()) as output:
+            constructor.return_value.check_network.return_value=report()
+            constructor.return_value.operator.side_effect=ValueError('installation denied at migration (IdentityUnavailable)')
+            self.assertEqual(installer.main(),1)
+            constructor.return_value.operator.assert_called_once_with('initialize',dict(organization='Gabriel private lab',username='owner',password='generated-test-password'))
+        self.assertEqual(json.loads(output.getvalue())['code'],'installation_command_failed; existing state retained for inspection')
+        self.assertNotIn('generated-test-password',output.getvalue())
+
+    def test_nonfresh_restore_is_rejected_before_start_or_probe(self):
+        app=self.app();app.config.update(image='sha256:'+'a'*64,source='a'*40)
+        app.start_db=MagicMock();app.check_network=MagicMock()
+        app.compose.return_value=b'existing-container'
+        manifest=dict(schema_version=1,purpose='gabriel-quiesced-test-backup-v1',image=app.config['image'],source=app.config['source'],identity={},
+            files={'database.dump':'digest','evidence.tar.gz':'digest'},key_fingerprints={'provider':'digest','evidence':'digest'})
+        with tempfile.TemporaryDirectory() as directory,patch.object(installer,'private'),patch.object(installer,'read',return_value=manifest),patch.object(installer,'digest',return_value='digest'):
+            backup=Path(directory)
+            for name in manifest['files']: (backup/name).write_bytes(b'fixture')
+            with self.assertRaisesRegex(ValueError,'fresh_restore_target_required'): app.restore(backup,backup)
+        app.start_db.assert_not_called()
+        app.check_network.assert_not_called()
+
 
 if __name__=='__main__': unittest.main()
