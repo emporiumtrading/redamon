@@ -4,6 +4,8 @@ This installs the existing defensive case workbench and encrypted evidence servi
 
 ## Requirements and setup
 
+The current runtime defaults pin Python 3.11.18 on Alpine 3.24 to multiarch index `sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2`. Registry resolution [40985396254](https://github.com/emporiumtrading/redamon/actions/runs/40985396254) verified the index bytes and both x86/ARM child manifests before selection; retained metadata artifact ZIP SHA-256 is `fe94fe60cde2104682af7ce07bf3399c2d28ebe2586a4faef5dd0e46b93afea0`. This includes the upstream Python tarfile patch for CVE-2026-114583. Core, component/tool-test, checkpoint-signer and model-validation defaults use the same pin. Rebuild, scan and test the final image; registry metadata alone establishes neither application compatibility nor release acceptance.
+
 Use a checked-out source revision, Python 3.9 or later on a POSIX host, Docker Engine/Desktop with Compose v2, and an operator-owned directory outside the source checkout. The controller uses POSIX ownership and file locking; native Windows execution is not supported by this increment. Linux x86/ARM CI coverage is recorded in the PR; macOS/Windows Docker Desktop and the 18 GB target host still require acceptance. Commands below use `$HOME/gabriel-private-test` as a new directory; do not put it inside Git or a shared/synced folder. Docker volumes retain database, encrypted evidence and private workbench session files. Do not run inherited offensive-stack installation commands.
 
 ```bash

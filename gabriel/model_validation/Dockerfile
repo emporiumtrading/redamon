@@ -1,4 +1,4 @@
-FROM python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd AS runtime
+FROM python@sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2 AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/__init__.py /app/gabriel/
@@ -18,3 +18,4 @@ COPY testing/gabriel_identity/test_model_validation.py /repo/testing/gabriel_ide
 COPY testing/gabriel_model_lab/candidate_corpus_v1.json /repo/testing/gabriel_model_lab/
 USER 10001:10001
 ENTRYPOINT ["python","tooling/scripts/pytest_isolated.py","unit","testing/gabriel_identity","--strict","--parallel","1"]
+

@@ -10,9 +10,12 @@ from unittest.mock import MagicMock,patch
 from uuid import uuid4
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tooling/scripts'))
+sys.path.insert(0,'/app')
 import gabriel_install as installer
 from gabriel.identity import installation
 from gabriel.identity.service import IdentityUnavailable
+
+assert Path(installation.__file__).resolve().is_relative_to(Path('/app/gabriel'))
 
 
 class BrowserInstallation(unittest.TestCase):
