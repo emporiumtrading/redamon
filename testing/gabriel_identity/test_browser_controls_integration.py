@@ -7,7 +7,7 @@ from gabriel.identity.browser_controls import VERSION,validate,load
 from gabriel.identity.browser_gateway import prepare,BrowserGateway
 from gabriel.identity.browser_navigation import BrowserNavigationService
 from gabriel.identity.checkpoints import read_document
-from gabriel.identity.service import AccessDenied,AuthenticationDenied
+from gabriel.identity.service import AccessDenied,AuthenticationDenied,InvalidIdentityInput
 from testing.gabriel_identity.test_identity_integration import database,tenant,owner_connection
 from testing.gabriel_identity.test_cases_integration import cases,case
 from testing.gabriel_identity.test_browser_sessions_integration import context as base_context
@@ -85,7 +85,7 @@ def test_lost_prepare_is_never_redispatched_or_restarted(controls,context):
 def test_unreviewed_or_wrong_tab_steps_are_denied(controls,context,change):
     current=call(controls,'controls-plan',dict(context=context))
     body=dict(context=context,step=0,plan_digest=current['plan_digest'])
-    if change=='context':body['context']=dict(context,tab_id=str(int(context['tab_id'])+1))
+    if change=='context':body['context']=dict(context,tab_id=context['tab_id']+1)
     elif change=='digest':body['plan_digest']='0'*64
     elif change=='order':body['step']=1
     else:body['destination_url']='https://outside.invalid/delete'
@@ -147,3 +147,9 @@ def test_expired_control_intent_cannot_complete_or_repeat(controls,context,tenan
     with pytest.raises(AccessDenied):
         call(controls,'controls-complete',dict(context=context,intent_id=prepared['intent']['id'],step=0,plan_digest=current['plan_digest']))
     with pytest.raises(AccessDenied):call(controls,'controls-prepare',dict(context=context,step=0,plan_digest=current['plan_digest']))
+
+
+def test_control_context_rejects_malformed_tab_type(controls,context):
+    current=call(controls,'controls-plan',dict(context=context))
+    with pytest.raises(InvalidIdentityInput):
+        call(controls,'controls-prepare',dict(context=dict(context,tab_id='not-a-browser-tab'),step=0,plan_digest=current['plan_digest']))
