@@ -14,15 +14,18 @@ from gabriel.identity.service import IdentityError
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('command',choices=('prepare','serve','serve-group','navigation-grant','ai-readiness'))
-    for option in ('token-file','task-id','case-id','context-file','endpoint','extension-origin','directory','configuration','certificate','key','navigation-file'):
+    for option in ('token-file','task-id','case-id','context-file','endpoint','extension-origin','directory','configuration','certificate','key','navigation-file','controls-file'):
         parser.add_argument('--'+option)
     parser.add_argument('--bind',default='127.0.0.1:8443')
     parser.add_argument('--approve-observation-sharing',action='store_true')
     parser.add_argument('--monitor-seconds',type=int,help='Explicit scheduled-sharing lifetime, 60–3600 seconds; requires approved observation sharing')
     parser.add_argument('--auto-discover-pages',action='store_true',help='Approve bounded read-only same-origin link discovery for the scheduled lease')
     parser.add_argument('--ai-model',help='Approve minimized browser-signal AI triage using an exact production-admitted model configuration')
+    parser.add_argument('--approve-browser-controls',action='store_true')
     args=parser.parse_args()
     try:
+        if bool(args.controls_file)!=args.approve_browser_controls:raise ValueError('explicit_controls_approval_required')
+        if args.controls_file and args.command!='prepare':raise ValueError('controls_only_for_fresh_prepare')
         if args.command=='ai-readiness':
             from gabriel.identity.browser_ai import configuration,VERSION
             from gabriel.identity.model_routes import ROUTES,PRODUCTION_CONFIGURATIONS
@@ -54,7 +57,8 @@ def main():
             result=service.grant_navigation(human,peer,plan['request_id'],plan['contract_version'],plan['destinations'],max_moves=plan['max_moves'])
         else:
             result=prepare(service,read_secret(args.token_file,128),args.task_id,args.case_id,read_document(args.context_file),
-                args.endpoint,args.extension_origin,args.directory,share_observations=args.approve_observation_sharing,monitor_seconds=args.monitor_seconds,auto_discover=args.auto_discover_pages,ai_model=args.ai_model)
+                args.endpoint,args.extension_origin,args.directory,share_observations=args.approve_observation_sharing,monitor_seconds=args.monitor_seconds,auto_discover=args.auto_discover_pages,ai_model=args.ai_model,
+                control_plan=read_document(args.controls_file) if args.controls_file and args.approve_browser_controls else None)
         print(json.dumps({'status':'ok','result':result}))
         return 0
     except (IdentityError,OSError,ValueError,TypeError,KeyError):
@@ -63,3 +67,4 @@ def main():
 
 
 if __name__=='__main__': raise SystemExit(main())
+
