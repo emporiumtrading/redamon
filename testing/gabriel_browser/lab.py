@@ -919,7 +919,8 @@ def run_browser(family,executable,output):
             workbench_journey(cdp,family,service,human,case,tls,root,env,output,preview)
             gateway.terminate();gateway.wait(timeout=10);gateway=None
             control_checks=controls_journey(cdp,family,service,human,tls,root,env,target,console,
-                'https://localhost:'+str(server.server_port),origin,gateway_port)
+                'https://localhost:'+str(server.server_port),origin,gateway_port,
+                dict(click=click,text=text,wait_for=wait_for,native_popup=native_popup,mark=mark))
             navigation_checks=navigation_journey(cdp,family,service,human,tls,root,env,target,console,
                 'https://localhost:'+str(server.server_port),origin,gateway_port)
             discovery_checks=discovery_journey(cdp,family,service,human,tls,root,env,'https://localhost:'+str(server.server_port),origin,gateway_port)

@@ -52,21 +52,25 @@ def policy(origin):
         step('submit','form','search','Search events',second,result,'landmark','Search results for generated',fields={'q':'generated'})])
 
 
-def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,extension_origin,port):
-    from testing.gabriel_browser.lab import click,text,wait_for,native_popup,mark
+def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,extension_origin,port,helpers):
+    click,text,wait_for,native_popup,mark=(helpers[key] for key in ('click','text','wait_for','native_popup','mark'))
     service=BrowserNavigationService(service._dsn,service.store)
     checks=[]
-    unassigned=cdp.send('Target.createTarget',{'url':origin+'/controls/unassigned'})['targetId']
+    unassigned=cdp.send('Target.createTarget',{'url':origin+'/controls/unassigned','background':True})['targetId']
     other=cdp.attach(unassigned)
     wait_for(lambda:cdp.evaluate(other,'document.readyState')=='complete')
     for scenario in ('success','approval','ambiguous','password','post','hidden_field','invalid_form','invalid_fill','postcondition','covered_postcondition','stale_postcondition','stop_race'):
         mark(family+':controls-'+scenario)
         cdp.send('Page.navigate',{'url':origin+'/controls/start'},console)
         wait_for(lambda:cdp.evaluate(console,'document.title')=='Generated Controls Dashboard' and cdp.evaluate(console,'document.readyState')=='complete')
+        for old in cdp.targets():
+            if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
+        cdp.send('Target.activateTarget',{'targetId':console_target})
         popup=native_popup(cdp,console_target,extension_origin)
         cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
         click(cdp,popup,'select')
         scope=json.loads(wait_for(lambda:cdp.evaluate(popup,'document.getElementById("context").value') or None))
+        assert scope['page_url']==origin+'/controls/start'
         click(cdp,popup,'controls-inventory')
         wait_for(lambda:'coverage' in (text(cdp,popup,'controls-details') or ''))
         inventory=json.loads(text(cdp,popup,'controls-details'))
