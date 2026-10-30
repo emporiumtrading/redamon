@@ -1,4 +1,4 @@
-name: Gabriel minimal base acceptance
+name: Gabriel updated runtime acceptance
 on:
   pull_request:
     paths: ['gabriel/identity/Dockerfile', 'compose.gabriel-identity.yml', 'tooling/scripts/gabriel_identity_check.sh', 'tooling/scripts/gabriel_image_scan.sh', '.github/workflows/gabriel-base-candidate.yml']
@@ -23,8 +23,9 @@ jobs:
       - name: Pin the evaluated minimal base to its actual registry digest
         run: |
           mkdir -m 700 "$RUNNER_TEMP/gabriel-base"
-          docker pull python:3.11-alpine
-          base=$(docker image inspect python:3.11-alpine --format '{{index .RepoDigests 0}}')
+          docker pull python:3.15.2-slim-trixie
+          docker run --rm --network none --entrypoint python python:3.15.2-slim-trixie -c 'import sys; assert sys.version_info[:3] == (3,15,2); print(sys.version)' > "$RUNNER_TEMP/gabriel-base/python-version.txt"
+          base=$(docker image inspect python:3.15.2-slim-trixie --format '{{index .RepoDigests 0}}')
           printf '%s\n' "$base" > "$RUNNER_TEMP/gabriel-base/base-image.txt"
           printf 'GABRIEL_IDENTITY_BASE=%s\n' "$base" >> "$GITHUB_ENV"
       - name: Build the exact non-root candidate image
