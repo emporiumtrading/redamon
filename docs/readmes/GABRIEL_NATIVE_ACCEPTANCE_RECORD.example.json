@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "purpose": "gabriel-native-mac-browser-acceptance",
+  "status": "pending",
+  "production_admitted": false,
+  "candidate_source": "b35d50b70c46e556435b0727e162f2972989714c",
+  "tested_merge": "7cb9f6c72075b10573966991760f7c4e877b8fd9",
+  "tree": "5575e13ceeac30f644173cea0d91135e372587ec",
+  "native_host": {
+    "macos_version": null,
+    "model": null,
+    "ram_gib": null,
+    "architecture": null,
+    "host_python": null,
+    "docker_desktop_version": null,
+    "docker_engine_version": null,
+    "compose_version": null,
+    "allocated_vm_memory_gib": null,
+    "memory_pressure": null
+  },
+  "installation": {
+    "image_id": null,
+    "hermes_image_id": null,
+    "database_image_id": null,
+    "image_security_report_sha256": null,
+    "ca_fingerprint_sha256": null,
+    "ca_trust_scope": null,
+    "extension_package_sha256": null,
+    "baseline_runtime_report_sha256": null
+  },
+  "browsers": {
+    "chrome": {
+      "version": null,
+      "extension_id": null,
+      "active_runtime_report_sha256": null,
+      "tester": null,
+      "started_at": null,
+      "finished_at": null,
+      "checks": [
+        {
+          "id": "native_tls_and_single_use_pairing",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "selected_tab_privacy",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "encrypted_observation_receipt",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "scope_change_denial",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "pause_and_stop",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "listener_and_revocation",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "original_lease_expiry",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "session_account_switch",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "partial_or_stale_display",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "restart_backup_fresh_restore",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        }
+      ]
+    },
+    "brave": {
+      "version": null,
+      "extension_id": null,
+      "active_runtime_report_sha256": null,
+      "tester": null,
+      "started_at": null,
+      "finished_at": null,
+      "checks": [
+        {
+          "id": "native_tls_and_single_use_pairing",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "selected_tab_privacy",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "encrypted_observation_receipt",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "scope_change_denial",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "pause_and_stop",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "listener_and_revocation",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "original_lease_expiry",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "session_account_switch",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "partial_or_stale_display",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        },
+        {
+          "id": "restart_backup_fresh_restore",
+          "status": "pending",
+          "action": null,
+          "expected": null,
+          "observed": null,
+          "evidence_file": null,
+          "evidence_sha256": null,
+          "observed_at": null
+        }
+      ]
+    }
+  },
+  "original_failures": [],
+  "defects": [],
+  "independent_review": {
+    "reviewer": null,
+    "role": null,
+    "date": null,
+    "decision": null,
+    "rationale": null
+  },
+  "tryhackme_started": false,
+  "model_effectiveness_accepted": false
+}
