@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "purpose": "gabriel-native-acceptance-candidate-evidence",
+  "candidate_source": "b35d50b70c46e556435b0727e162f2972989714c",
+  "tested_merge": "7cb9f6c72075b10573966991760f7c4e877b8fd9",
+  "identical_tree": "5575e13ceeac30f644173cea0d91135e372587ec",
+  "base": {
+    "purpose": "gabriel-official-runtime-patch-resolution-v1",
+    "tag": "docker.io/library/python:3.15.2-alpine3.24",
+    "immutable_base": "python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211",
+    "index_digest": "sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211",
+    "platforms": {
+      "amd64": {
+        "manifest_digest": "sha256:cfb80265c43979455f899ae3fce69b83d51758684b6bc24798ec9b60c67d81d2",
+        "config_digest": "sha256:e83649b99941df35f8b05aa02cebf3f003fd26ea823e3674de65a7f32662f16d"
+      },
+      "arm64": {
+        "manifest_digest": "sha256:37a90eb2e2b1c92cfd2e25a43a3e06a2861dfab889ff53288b260f07db69fa07",
+        "config_digest": "sha256:671276b99d267c2129e09b5ecec72e2f688c0c7dfe1b5ec1fd334435cf538be6"
+      }
+    },
+    "application_tests_executed": false,
+    "provider_calls": 0,
+    "production_admitted": false
+  },
+  "core_scan_image": "sha256:71b616025cf9b3719f621346b2444a4f491cb510d992faa708d9049302baba0e",
+  "workflow_runs": [
+    {
+      "id": 41073193211,
+      "name": "Gabriel approved authored validation batch",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193211"
+    },
+    {
+      "id": 41073193604,
+      "name": "Gabriel sealed release qualification software",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193604"
+    },
+    {
+      "id": 41073193385,
+      "name": "Gabriel defensive runtime",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193385"
+    },
+    {
+      "id": 41073193645,
+      "name": "Gabriel proposed release compatibility packet",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193645"
+    },
+    {
+      "id": 41073193400,
+      "name": "Gabriel local visible-structure drafts",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193400"
+    },
+    {
+      "id": 41073193344,
+      "name": "Gabriel defensive image security",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193344"
+    },
+    {
+      "id": 41073193510,
+      "name": "Gabriel official runtime patch metadata",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193510"
+    },
+    {
+      "id": 41073193250,
+      "name": "Gabriel real console lab",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193250"
+    },
+    {
+      "id": 41073193358,
+      "name": "Gabriel specialist agents and personal keys",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193358"
+    },
+    {
+      "id": 41073193577,
+      "name": "Gabriel existing installation rebuild",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193577"
+    },
+    {
+      "id": 41073193593,
+      "name": "Gabriel open-source investigation tools and skills",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193593"
+    },
+    {
+      "id": 41073193374,
+      "name": "Gabriel reviewed AI memory context",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193374"
+    },
+    {
+      "id": 41073193353,
+      "name": "Gabriel packaged browser lab",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193353"
+    },
+    {
+      "id": 41073193427,
+      "name": "Gabriel performance-test learning isolation",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193427"
+    },
+    {
+      "id": 41073193372,
+      "name": "Gabriel private Docker installation",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193372"
+    },
+    {
+      "id": 41073193432,
+      "name": "Gabriel required Hermes supervision",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193432"
+    },
+    {
+      "id": 41073193314,
+      "name": "Gabriel bounded provider probe and ARM64 build",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193314"
+    },
+    {
+      "id": 41073193549,
+      "name": "Gabriel database identity",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193549"
+    },
+    {
+      "id": 41073193497,
+      "name": "Gabriel updated runtime acceptance",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/emporiumtrading/redamon/actions/runs/41073193497"
+    }
+  ],
+  "intentional_skips": [
+    {
+      "run": 41073193211,
+      "job": "live-validation",
+      "reason": "Paid validation not authorized on this branch"
+    },
+    {
+      "run": 41073193314,
+      "job": "live-generated-probe",
+      "reason": "Paid provider probe not authorized on this branch"
+    }
+  ],
+  "artifacts": [
+    {
+      "run": 41073193344,
+      "id": 12987085515,
+      "name": "core security",
+      "sha256": "acfbd8a0a70c69bf66058996d44cfcbb1947122d37010467a57a746a371a4a0d",
+      "verification": "Downloaded ZIP hash independently matched before workspace loss; parsed SBOM/scan/secrets."
+    },
+    {
+      "run": 41071707216,
+      "id": 12985092541,
+      "name": "official base registry metadata",
+      "sha256": "78a2b5929418b6ba482b761a59ba0805ef631a7d8fdd937bf48fdfad48a12c68",
+      "verification": "Downloaded ZIP, index bytes and both architecture manifest bytes independently hashed."
+    },
+    {
+      "run": 41073193372,
+      "id": 12985904220,
+      "name": "installation amd64",
+      "sha256": "38976a4954ae5835cd9465ff6da2660fa95978cb26223aa55283ea4fb9c7ca97",
+      "verification": "Downloaded ZIP hash, source, TLS renewal, seven services and 28-file hash equality verified."
+    },
+    {
+      "run": 41073193372,
+      "id": 12985864345,
+      "name": "installation arm64",
+      "sha256": "7a81cf7a956bb41563a0784e86013380ba161d65f5b4ff31bc6a81d61625b517",
+      "verification": "Downloaded ZIP hash, source, TLS renewal, seven services and 28-file hash equality verified."
+    },
+    {
+      "run": 41073193577,
+      "id": 12985064776,
+      "name": "rebuild amd64",
+      "sha256": "e2449630c0e3c2f4aeef9892349563be4b863756459e0937951810359fe9f868",
+      "verification": "Downloaded ZIP hash/source/results verified."
+    },
+    {
+      "run": 41073193577,
+      "id": 12985219194,
+      "name": "rebuild arm64",
+      "sha256": "dd3c8fbbb0ea4c7d8aeac375a9bf3d8f17ce13f52dd23344f0b0694335aa86c6",
+      "verification": "Downloaded ZIP hash/source/results verified."
+    },
+    {
+      "run": 41073193353,
+      "id": 12985243813,
+      "name": "Chrome/Brave generated browser evidence",
+      "sha256": "d196b71e062c65b5587b36bff452ff6c19a07b725f8c5675ba858c24c6d7b231",
+      "verification": "Downloaded ZIP hash/source verified; each browser's 110 named checks parsed. Screenshots not separately published."
+    },
+    {
+      "run": 40985616513,
+      "id": 12946837281,
+      "name": "historical nine-Medium core scan",
+      "sha256": "ca994eac3182e88d08706bea9822a5e020c859902e2c4cf7e501663c1b33f60f",
+      "verification": "Downloaded ZIP hash and nine Medium/one Negligible matches verified."
+    },
+    {
+      "run": 41073193314,
+      "id": 12988037287,
+      "name": "checked ARM64 Docker candidate",
+      "sha256": "84db11d77c47dcf51f93db8443595004287d7a323ca2825d0addc1b5848db565",
+      "verification": "GitHub-reported transport digest; export/round-trip checks passed in CI. Binary ZIP not independently downloaded."
+    },
+    {
+      "run": 41073193549,
+      "id": 12987374384,
+      "name": "checked AMD64 Docker candidate",
+      "sha256": "209b65c544a4a4853b9401a7014f0ec95b4cccb84d37718406f650c9b02a80a6",
+      "verification": "GitHub-reported transport digest; export/round-trip checks passed in CI. Binary ZIP not independently downloaded."
+    },
+    {
+      "run": 41073193497,
+      "id": 12989500057,
+      "name": "gabriel-minimal-base-ubuntu-24.04-arm",
+      "sha256": "f847e98b3bd11abf307e8a2161d2a3d78044032040fb589986c025198db54299",
+      "verification": "GitHub-reported ZIP digest; completed job log independently read: no vulnerability matches/source-secret matches, 1294 component +142 overlapping focused checks and installation/restore PASS. ZIP not locally downloaded."
+    },
+    {
+      "run": 41073193497,
+      "id": 12987319151,
+      "name": "gabriel-minimal-base-ubuntu-24.04",
+      "sha256": "0e952d53a48f6faac1a170cf2f92ea12e40f60ad7722889589f52bd342dbd5d3",
+      "verification": "GitHub-reported ZIP digest; completed job log independently read: no vulnerability matches/source-secret matches, 1294 component +142 overlapping focused checks and installation/restore PASS. ZIP not locally downloaded."
+    }
+  ],
+  "production_admitted": false,
+  "native_acceptance": "pending",
+  "independent_security_review": "pending",
+  "model_qualification": "pending",
+  "private_installer_navigation_enabled": false,
+  "tryhackme_started": false,
+  "provider_calls": 0
+}
