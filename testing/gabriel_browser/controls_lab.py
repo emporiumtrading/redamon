@@ -143,6 +143,8 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
                 cdp.evaluate(popup,'document.getElementById("endpoint").value='+json.dumps('https://localhost:'+str(port))+';document.getElementById("ticket").value='+json.dumps(ticket))
                 click(cdp,popup,'pair')
                 wait_for(lambda:service.get_browser_lease(human,enrolled['lease_id'])['state']=='active')
+                wait_for(lambda:'Paired.' in (text(cdp,popup,'message') or ''))
+                assert str(case['id']) in text(cdp,popup,'scope')
                 click(cdp,popup,'controls-plan')
                 wait_for(lambda:'Review every control' in (text(cdp,popup,'message') or ''))
                 if scenario=='approval':
@@ -174,6 +176,10 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
                         assert not service.list_browser_observations(human,enrolled['lease_id'])['observations']
                         assert cdp.evaluate(console,'window.actions')==(1 if scenario in {'postcondition','covered_postcondition'} else 0)
                 assert cdp.evaluate(console,'window.submitHandlerCalled')==0
+                if scenario in {'success','approval','stop_race'}:
+                    wait_for(lambda:'stopped' in (text(cdp,popup,'message') or '').lower())
+                else:
+                    wait_for(lambda:(text(cdp,popup,'message') or '') not in {'','Working…'})
                 assert cdp.evaluate(console,'window.unsafeActions')==0
                 assert cdp.evaluate(console,'window.invalidEvents')==0
                 if scenario=='invalid_fill':assert cdp.evaluate(console,'document.getElementById("q").value')==''
