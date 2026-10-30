@@ -58,7 +58,7 @@ def main():
         else:
             result=prepare(service,read_secret(args.token_file,128),args.task_id,args.case_id,read_document(args.context_file),
                 args.endpoint,args.extension_origin,args.directory,share_observations=args.approve_observation_sharing,monitor_seconds=args.monitor_seconds,auto_discover=args.auto_discover_pages,ai_model=args.ai_model,
-                control_plan=read_document(args.controls_file) if args.controls_file and args.approve_browser_controls else None)
+                control_plan=read_document(args.controls_file,private=True) if args.controls_file and args.approve_browser_controls else None)
         print(json.dumps({'status':'ok','result':result}))
         return 0
     except (IdentityError,OSError,ValueError,TypeError,KeyError):

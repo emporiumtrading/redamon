@@ -34,7 +34,8 @@ def page(path,query):
 <textarea id="unlabelled">GENERATED_CONFIDENTIAL_NOTES_EXCLUDED</textarea>
 <label>Notes<textarea id="wrapped">GENERATED_PRIVATE_NOTE_4961</textarea></label>
 <button id="delete" type="button" onclick="window.unsafeActions++">Delete incident</button>
-<script>window.actions=0;window.unsafeActions=0;window.submitHandlerCalled=0;</script></body></html>''').encode()
+<script>window.actions=0;window.unsafeActions=0;window.submitHandlerCalled=0;window.invalidEvents=0;
+document.addEventListener('invalid',()=>window.invalidEvents++,true);</script></body></html>''').encode()
 
 
 def policy(origin):
@@ -58,7 +59,7 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
     unassigned=cdp.send('Target.createTarget',{'url':origin+'/controls/unassigned'})['targetId']
     other=cdp.attach(unassigned)
     wait_for(lambda:cdp.evaluate(other,'document.readyState')=='complete')
-    for scenario in ('success','approval','ambiguous','password','post','hidden_field','postcondition','covered_postcondition','stale_postcondition','stop_race'):
+    for scenario in ('success','approval','ambiguous','password','post','hidden_field','invalid_form','invalid_fill','postcondition','covered_postcondition','stale_postcondition','stop_race'):
         mark(family+':controls-'+scenario)
         cdp.send('Page.navigate',{'url':origin+'/controls/start'},console)
         wait_for(lambda:cdp.evaluate(console,'document.title')=='Generated Controls Dashboard' and cdp.evaluate(console,'document.readyState')=='complete')
@@ -75,15 +76,17 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
         assert 'GENERATED_PRIVATE_NOTE_4961' not in json.dumps(inventory)
         assert next(row for row in inventory['controls'] if row['id']=='wrapped')['name']=='Notes'
         reviewed=policy(origin)
-        if scenario in {'password','post','hidden_field'}:
-            reviewed['steps']=[reviewed['steps'][3 if scenario=='password' else 5]]
+        if scenario in {'password','post','hidden_field','invalid_form','invalid_fill'}:
+            reviewed['steps']=[reviewed['steps'][3 if scenario in {'password','invalid_fill'} else 5]]
             reviewed['steps'][0]['source_url']=origin+'/controls/start'
-            if scenario=='password':
+            if scenario in {'password','invalid_fill'}:
                 reviewed['steps'][0]['destination_url']=origin+'/controls/start'
-                cdp.evaluate(console,'document.getElementById("q").type="password";true')
+                if scenario=='password':cdp.evaluate(console,'document.getElementById("q").type="password";true')
+                else:cdp.evaluate(console,'document.getElementById("q").pattern="accepted";true')
             else:
                 cdp.evaluate(console,'document.getElementById("q").value="generated";true')
                 if scenario=='post':cdp.evaluate(console,'document.getElementById("search").method="post";true')
+                elif scenario=='invalid_form':cdp.evaluate(console,'document.getElementById("q").pattern="accepted";true')
                 else:cdp.evaluate(console,'document.getElementById("search").insertAdjacentHTML("beforeend","<input type=hidden name=csrf value=GENERATED_HIDDEN_TOKEN>");true')
         if scenario=='postcondition':
             reviewed['steps']=[reviewed['steps'][0]]
@@ -158,6 +161,8 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
                         assert cdp.evaluate(console,'window.actions')==(1 if scenario in {'postcondition','covered_postcondition'} else 0)
                 assert cdp.evaluate(console,'window.submitHandlerCalled')==0
                 assert cdp.evaluate(console,'window.unsafeActions')==0
+                assert cdp.evaluate(console,'window.invalidEvents')==0
+                if scenario=='invalid_fill':assert cdp.evaluate(console,'document.getElementById("q").value')==''
                 assert cdp.evaluate(other,'window.actions')==0 and cdp.evaluate(other,'location.href')==origin+'/controls/unassigned'
                 logfile.flush();assert all(secret not in (root/('controls-'+scenario+'.log')).read_text() for secret in (human,peer,ticket))
                 checks.append(scenario)
@@ -167,4 +172,5 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
     return ['menu_disclosure','menu_link_subpage','native_filter','text_search_field','button_pagination','reviewed_get_form',
         'exact_postconditions','encrypted_six_step_observations','credential_exclusion','unassigned_tab_isolation',
         'no_submit_event_handler','explicit_approval','ambiguous_target_denied','password_drift_denied','post_form_denied','hidden_form_fields_denied',
-        'postcondition_failure_stops','covered_postcondition_stops','stale_postcondition_denied','stop_after_prepare_no_dispatch','no_automatic_replay','private_token_exclusion']
+        'invalid_form_no_events','invalid_fill_restored_without_events','postcondition_failure_stops','covered_postcondition_stops',
+        'stale_postcondition_denied','stop_after_prepare_no_dispatch','no_automatic_replay','private_token_exclusion']

@@ -28,6 +28,17 @@ class BrowserInstallation(unittest.TestCase):
         self.app.browser_image_supported=MagicMock(return_value=True)
         self.app.operator=MagicMock(return_value={'revocation_confirmed':True})
 
+    def test_controls_file_requires_private_file_and_parent(self):
+        path=self.root/'reviewed-controls.json'
+        path.write_text('{"generated":"plan"}')
+        path.chmod(0o644)
+        with self.assertRaisesRegex(ValueError,'unsafe_configuration_file'):installer.read_controls(path)
+        path.chmod(0o600)
+        self.assertEqual(installer.read_controls(path),{'generated':'plan'})
+        self.root.chmod(0o755)
+        with self.assertRaisesRegex(ValueError,'private_directory'):installer.read_controls(path)
+        self.root.chmod(0o700)
+
     def test_reviewed_controls_require_explicit_approval_before_any_private_operation(self):
         self.app.config['image']='sha256:'+'a'*64
         with self.assertRaisesRegex(ValueError,'explicit_controls'):

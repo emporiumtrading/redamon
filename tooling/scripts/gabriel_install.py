@@ -74,11 +74,12 @@ def private(path):
         raise ValueError('operator_owned_private_directory_required')
 
 
-def read(path):
+def read(path,*,private_file=False):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     with os.fdopen(fd,'rb') as stream:
         info=os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022: raise ValueError('unsafe_configuration_file')
+        if (not stat.S_ISREG(info.st_mode) or info.st_mode & (0o077 if private_file else 0o022)
+                or private_file and info.st_uid!=os.getuid()): raise ValueError('unsafe_configuration_file')
         data=stream.read(65537)
     if len(data)>65536: raise ValueError('configuration_limit')
     from gabriel_provider_keys import unique
@@ -90,6 +91,12 @@ def external(path):
     if path!=path.resolve() or path==REPO or REPO in path.parents or '\n' in str(path) or '$' in str(path):
         raise ValueError('absolute_external_directory_without_links_required')
     return path
+
+
+def read_controls(path):
+    path=external(path)
+    private(path.parent)
+    return read(path,private_file=True)
 
 
 def prepare_tls(directory,image):
@@ -445,7 +452,7 @@ def main():
                     result=installation.browser_open(args.case_id,read(context_path),args.extension_origin,
                         port=args.gateway_port,duration=args.duration,max_steps=args.max_steps,
                         share_observations=args.approve_observation_sharing,
-                        control_plan=read(external(args.controls_file)) if args.controls_file else None,approve_controls=args.approve_browser_controls)
+                        control_plan=read_controls(args.controls_file) if args.controls_file else None,approve_controls=args.approve_browser_controls)
                 elif args.command=='browser-stop':result=installation.browser_stop()
                 elif args.command=='renew-tls':result=installation.renew_tls()
                 elif args.command=='status':

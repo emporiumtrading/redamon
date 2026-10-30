@@ -84,9 +84,9 @@ export function controlDOM(mode, step=null) {
   if(!step || location.href!==(mode==="verify" ? step.destination_url : step.source_url)) throw new Error("Control page changed.");
   if(mode==="verify") return {confirmed:postcondition(step.expect),page_url:location.href};
   const node=target(step.target);
+  if(["inspect","execute"].includes(mode) && step.source_url===step.destination_url && postcondition(step.expect))
+    throw new Error("The expected result already exists. Review a fresh control plan.");
   if(mode==="inspect") {
-    if(step.source_url===step.destination_url && postcondition(step.expect))
-      throw new Error("The expected result already exists. Review a fresh control plan.");
     return {page_url:location.href,target:step.target};
   }
   if(mode!=="execute") throw new Error("Unsupported control operation.");
@@ -101,18 +101,25 @@ export function controlDOM(mode, step=null) {
     }
     node.click();
   } else if(step.kind==="filter" || step.kind==="fill") {
+    const original=node.value;
+    let prototype;
     if(node.tagName==="SELECT") {
       if(step.kind!=="filter" || node.multiple || !Array.from(node.options).some(o=>o.value===step.value && !o.disabled))
         throw new Error("Filter choice changed.");
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(node,step.value);
+      prototype=HTMLSelectElement.prototype;
     } else {
       if(step.kind!=="fill" || !['INPUT','TEXTAREA'].includes(node.tagName) || node.readOnly)
         throw new Error("This is not an editable search field.");
-      const prototype=node.tagName==='INPUT' ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
-      Object.getOwnPropertyDescriptor(prototype,'value').set.call(node,step.value);
+      prototype=node.tagName==='INPUT' ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+    }
+    const setter=Object.getOwnPropertyDescriptor(prototype,'value').set;
+    setter.call(node,step.value);
+    if(node.value!==step.value || !node.validity.valid) {
+      setter.call(node,original);
+      throw new Error("The reviewed field value was not accepted.");
     }
     node.dispatchEvent(new Event('input',{bubbles:true}));node.dispatchEvent(new Event('change',{bubbles:true}));
-    if(node.value!==step.value || !node.checkValidity()) throw new Error("The reviewed field value was not accepted.");
+    if(node.value!==step.value || !node.validity.valid) throw new Error("The reviewed field value was not accepted.");
   } else if(step.kind==="paginate") {
     if(node.tagName==='A') {
       if(node.href!==step.destination_url || node.hasAttribute('download') || node.target && node.target!=='_self')
@@ -123,7 +130,7 @@ export function controlDOM(mode, step=null) {
       throw new Error("Unsupported pagination control.");
     node.click();
   } else if(step.kind==="submit") {
-    if(node.tagName!=='FORM' || node.method.toLowerCase()!=='get' || node.target && node.target!=='_self' || !node.checkValidity())
+    if(node.tagName!=='FORM' || node.method.toLowerCase()!=='get' || node.target && node.target!=='_self')
       throw new Error("Only a reviewed valid GET search form can be submitted.");
     const action=new URL(node.action);const destination=new URL(step.destination_url);
     if(action.origin!==location.origin || action.origin!==destination.origin || action.pathname!==destination.pathname || action.search || action.hash || destination.hash)
@@ -136,6 +143,8 @@ export function controlDOM(mode, step=null) {
       fields[field.name]=field.value;
     }
     const query=Array.from(destination.searchParams);
+    if(Array.from(node.elements).some(field=>field.willValidate && !field.validity.valid))
+      throw new Error("The reviewed form is invalid.");
     if(Object.keys(fields).length!==Object.keys(step.fields).length || query.length!==Object.keys(fields).length ||
         query.some(([key,value])=>!(key in fields) || fields[key]!==value)) throw new Error("Search query is outside the reviewed policy.");
     // Navigate the validated GET URL without invoking arbitrary submit handlers.
