@@ -4,7 +4,7 @@ This installs the existing defensive case workbench and encrypted evidence servi
 
 ## Requirements and setup
 
-The current runtime defaults pin Python 3.11.18 on Alpine 3.24 to multiarch index `sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2`. Registry resolution [40985396254](https://github.com/emporiumtrading/redamon/actions/runs/40985396254) verified the index bytes and both x86/ARM child manifests before selection; retained metadata artifact ZIP SHA-256 is `fe94fe60cde2104682af7ce07bf3399c2d28ebe2586a4faef5dd0e46b93afea0`. This includes the upstream Python tarfile patch for CVE-2026-114583. Core, component/tool-test, checkpoint-signer and model-validation defaults use the same pin. Rebuild, scan and test the final image; registry metadata alone establishes neither application compatibility nor release acceptance.
+The remediation candidate pins Python 3.15.2 on Alpine 3.24 to multiarch index `sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211`. [Registry resolution 41071707216](https://github.com/emporiumtrading/redamon/actions/runs/41071707216) verified index and Linux x86/ARM child-manifest bytes. YARA compiles in a separate dependency stage; the core production image excludes the compiler, pip and BusyBox packages. Evidence backup uses Python's archive writer. Core, component/tool-test, checkpoint-signer and model-validation defaults use the same interpreter pin. Review [PR104](https://github.com/emporiumtrading/redamon/pull/104) for the final exact-source scan and compatibility results before selecting this candidate. Registry metadata is not application or release acceptance.
 
 Use a checked-out source revision, Python 3.9 or later on a POSIX host, Docker Engine/Desktop with Compose v2, and an operator-owned directory outside the source checkout. The controller uses POSIX ownership and file locking; native Windows execution is not supported by this increment. Linux x86/ARM CI coverage is recorded in the PR; macOS/Windows Docker Desktop and the 18 GB target host still require acceptance. Commands below use `$HOME/gabriel-private-test` as a new directory; do not put it inside Git or a shared/synced folder. Docker volumes retain database, encrypted evidence and private workbench session files. Do not run inherited offensive-stack installation commands.
 
@@ -93,6 +93,21 @@ Only one gateway is active per installation. Gateway bootstraps use a separate p
 
 `browser-stop` reports listener shutdown separately from database revocation. If the database or required human authority is unavailable, cleanup remains unconfirmed and its private receipt is retained. New browser enrollment is blocked until a later explicit Stop confirms both lease revocation and task cancellation. Restore database connectivity and, if necessary, open a currently authorized owner session before retrying. UI **Disconnect workbench** only closes that UI cookie; it is not installation Stop or human logout. Private bootstrap storage is bounded to 128 directories; review and cleanup are operator work, never silent deletion. Actual native OS, certificate trust, real-console compatibility and human acceptance remain separate release gates.
 
+## Explicit certificate renewal
+
+Python 3.15 performs stricter certificate validation. Certificates created by an older installation may lack required CA/key identifiers and fail verification after an interpreter upgrade. Fresh installations create the strict profile. For an existing installation, finish the backed-up rebuild, then explicitly renew before opening:
+
+```bash
+python3 tooling/scripts/gabriel_install.py renew-tls "$HOME/gabriel-private-test"
+python3 tooling/scripts/gabriel_install.py open "$HOME/gabriel-private-test"
+```
+
+Renewal requires an image advertising the strict TLS profile. It closes the workbench/browser listeners, confirms browser revocation, checks database connectivity and revokes the current human session before generating replacement certificates. Generation failure preserves the original directory. Publication failure attempts to restore it. Prior files remain in a private `tls-retired-*` directory; failed pending directories are retained for inspection. Review these private key-bearing directories under the operator retention policy; the command stops at sixteen retained generations rather than silently deleting them.
+
+Verify the new CA fingerprint and explicitly replace trust for this installation's CA in the native browser/OS certificate settings. The printed file SHA-256 identifies PEM file bytes; it is different from a certificate's DER fingerprint. Renewal does not reopen the interface, renew human authority or authorize production. Keep certificate checks enabled. Same-source backups retain database/evidence rather than TLS, so a fresh restore target uses its separately created CA and needs its own trust review.
+
+See [Mac, Chrome and Brave acceptance](GABRIEL_MAC_BROWSER_ACCEPTANCE.md) for the next native checks.
+
 ## Member accounts and specialist AI connectivity
 
 Owners/admins create analyst accounts through **Team members**. Open a named member's workbench using `open --username ANALYST_USERNAME`; the member's password is prompted. The installation still has one active workbench, so switching accounts revokes the previous session. `open --username ANALYST_USERNAME --ai-egress` explicitly attaches the workbench to the provider-capable overlay. The database stays private, and ordinary open remains private. This is separate from model qualification: the exact role configuration must still be admitted before inference. See [specialist agents](GABRIEL_SPECIALIST_AGENTS.md) for personal key setup and activation limits.
@@ -101,4 +116,5 @@ Owners/admins create analyst accounts through **Team members**. Open a named mem
 ## Required Hermes supervisor
 
 Hermes is a required private dependency when opening the workbench. `open` builds its separately pinned upstream image; allow additional download space and a 2 GiB service memory limit. It receives no model keys, database credentials, evidence mounts or outbound network. Its own model configuration and the specialist configurations remain pending production qualification. See [Hermes setup, preflight, model access and limits](GABRIEL_HERMES.md). Local tools remain usable while AI admission is pending.
+
 

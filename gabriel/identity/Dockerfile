@@ -1,10 +1,17 @@
-ARG IDENTITY_BASE=python@sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2
+ARG IDENTITY_BASE=python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211
+FROM ${IDENTITY_BASE} AS dependencies
+WORKDIR /build
+COPY gabriel/identity/requirements.txt /build/requirements.txt
+RUN apk add --no-cache build-base \
+    && pip wheel --no-cache-dir --wheel-dir /wheels -r /build/requirements.txt
+
 FROM ${IDENTITY_BASE} AS runtime
-LABEL org.gabriel.browser-installation="v1"
+LABEL org.gabriel.browser-installation="v1" org.gabriel.tls-profile="rfc5280-strict-v1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN --mount=type=bind,from=dependencies,source=/wheels,target=/wheels \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r /tmp/requirements.txt
 COPY gabriel/__init__.py gabriel/capabilities.py /app/gabriel/
 COPY gabriel/identity/__init__.py gabriel/identity/service.py gabriel/identity/machine.py gabriel/identity/tasks.py gabriel/identity/cli.py gabriel/identity/vault.py gabriel/identity/vault_cli.py gabriel/identity/retention.py gabriel/identity/actions.py gabriel/identity/cases.py gabriel/identity/evidence_store.py gabriel/identity/case_cli.py gabriel/identity/schema.sql gabriel/identity/schema_v2.sql gabriel/identity/schema_v3.sql gabriel/identity/schema_v4.sql gabriel/identity/schema_v5.sql gabriel/identity/schema_v6.sql gabriel/identity/schema_v7.sql gabriel/identity/schema_v8.sql /app/gabriel/identity/
 RUN mkdir -p /var/lib/gabriel-evidence /intake && chown 10001:10001 /var/lib/gabriel-evidence
@@ -74,6 +81,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir cryptography==50.0.2
 COPY gabriel/__init__.py /app/gabriel/
 COPY gabriel/identity/__init__.py gabriel/identity/checkpoints.py gabriel/identity/checkpoint_cli.py /app/gabriel/identity/
+RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-data"]
+RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.checkpoint_cli"]
 
@@ -111,4 +120,7 @@ USER 0:0
 # Production installs dependencies at build time; bundled build tools add attack surface.
 RUN python -m pip uninstall --yes setuptools wheel pip \
     && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
+RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-data"]
+RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
+RUN ["python", "-c", "import shutil,ssl; assert ssl.create_default_context().cert_store_stats()['x509_ca'] > 0; assert all(shutil.which(n) is None for n in ('busybox','wget','ssl_client','gcc','cc')); import psycopg,argon2,cryptography,gunicorn,yara,dpkt"]
 USER 10001:10001

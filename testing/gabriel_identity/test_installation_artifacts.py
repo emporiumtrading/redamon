@@ -1,5 +1,7 @@
 """Private installation certificates and fail-closed encrypted-object restoration."""
+from concurrent.futures import ThreadPoolExecutor
 import io
+import socket
 from pathlib import Path
 import ssl
 import tarfile
@@ -65,3 +67,25 @@ def test_duplicate_archive_objects_rejected_before_publication(tmp_path,monkeypa
     entry=('./'+'a'*32+'.gbe',b'x'*32,tarfile.REGTYPE)
     with pytest.raises(ValueError): restore_objects(archive([entry,entry]))
     assert not list(tmp_path.iterdir())
+
+
+
+def test_installation_certificate_accepts_strict_native_tls(tmp_path):
+    tls(tmp_path)
+    context=ssl.create_default_context(cafile=str(tmp_path/'ca.pem'))
+    context.verify_flags |= ssl.VERIFY_X509_STRICT
+    server_context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    server_context.load_cert_chain(str(tmp_path/'server.pem'),str(tmp_path/'server.key'))
+    with socket.socket() as listener, ThreadPoolExecutor(max_workers=1) as pool:
+        listener.settimeout(5)
+        listener.bind(('127.0.0.1',0))
+        listener.listen(1)
+        def respond():
+            raw,_=listener.accept()
+            with raw, server_context.wrap_socket(raw,server_side=True) as secure:
+                secure.sendall(b'generated-strict-tls')
+        result=pool.submit(respond)
+        with socket.create_connection(listener.getsockname(),timeout=5) as raw:
+            with context.wrap_socket(raw,server_hostname='localhost') as secure:
+                assert secure.recv(64)==b'generated-strict-tls'
+        result.result(timeout=5)

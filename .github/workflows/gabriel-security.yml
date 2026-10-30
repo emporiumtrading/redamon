@@ -37,7 +37,7 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,size=1g,mode=1777 -e XDG_CACHE_HOME=/tmp -e SYFT_CHECK_FOR_APP_UPDATE=false \
             -v "$RUNNER_TEMP/gabriel-security/core.tar:/image/core.tar:ro" \
             "$scanner" docker-archive:/image/core.tar -o syft-json > "$RUNNER_TEMP/gabriel-security/sbom.json"
-      - name: Scan the production SBOM and block high or critical findings
+      - name: Scan the production SBOM and block Medium or higher findings
         run: |
           scanner=$(sed -n '2p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
           mkdir -m 700 "$RUNNER_TEMP/gabriel-grype-cache"
@@ -46,7 +46,7 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 -e XDG_CACHE_HOME=/cache -e GRYPE_CHECK_FOR_APP_UPDATE=false \
             -v "$RUNNER_TEMP/gabriel-grype-cache:/cache" \
             -v "$RUNNER_TEMP/gabriel-security/sbom.json:/image/sbom.json:ro" \
-            "$scanner" sbom:/image/sbom.json -o json --fail-on high > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
+            "$scanner" sbom:/image/sbom.json -o json --fail-on medium > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
       - name: Scan defensive source for secrets with fully redacted output
         if: success() || failure()
         run: |

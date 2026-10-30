@@ -132,6 +132,26 @@ print(json.dumps({'case':str(case),'evidence':str(row['id'])}))
         cookie,csrf=connect(root,app,secret)
         assert request(root,18444,'/cases',cookie=old_cookie)[0]==403
         assert 'Generated persistent installation case' in request(root,18444,'/cases',cookie=cookie)[1]
+        original_trust=ssl.create_default_context(cafile=str(root/'tls/ca.pem'))
+        key_identity={name:(root/name/'keyring.json').read_bytes() for name in ('provider','evidence')}
+        old_cookie=cookie
+        renewal=app.renew_tls()
+        assert renewal['tls_renewed'] and renewal['workbench_stopped'] and renewal['requires_fresh_login']
+        assert renewal['certificate_trust_requires_review'] and not renewal['production_admitted']
+        assert renewal['previous_ca_file_sha256']!=renewal['ca_file_sha256']
+        assert app.operator('receipt')==identity
+        assert all((root/name/'keyring.json').read_bytes()==value for name,value in key_identity.items())
+        cookie,csrf=connect(root,app,secret)
+        assert request(root,18444,'/cases',cookie=old_cookie)[0]==403
+        old_client=http.client.HTTPSConnection('localhost',18444,context=original_trust,timeout=5)
+        try:
+            try:old_client.request('GET','/claim')
+            except ssl.SSLCertVerificationError:pass
+            else:raise AssertionError('retired CA still trusted replacement server')
+        finally:old_client.close()
+        (directory/'tls-renewal.json').write_text(json.dumps(dict(renewal,
+            original_identity_and_keys_retained=True,old_cookie_denied=True,
+            retired_ca_denied=True,fresh_trusted_https_login=True),indent=2))
         backup=directory/'backup';app.backup(backup)
         assert set(p.name for p in backup.iterdir())=={'database.dump','evidence.tar.gz','backup.json'}
         target=directory/'restored';prepare(target,18445,image)
@@ -176,4 +196,5 @@ print('PASS: restored encrypted evidence decrypted using the original evidence k
 
 
 if __name__=='__main__': main()
+
 

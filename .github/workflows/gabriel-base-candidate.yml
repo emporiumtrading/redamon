@@ -1,4 +1,4 @@
-name: Gabriel minimal base acceptance
+name: Gabriel updated runtime acceptance
 on:
   pull_request:
     paths: ['gabriel/identity/Dockerfile', 'compose.gabriel-identity.yml', 'tooling/scripts/gabriel_identity_check.sh', 'tooling/scripts/gabriel_image_scan.sh', '.github/workflows/gabriel-base-candidate.yml']
@@ -23,8 +23,10 @@ jobs:
       - name: Pin the evaluated minimal base to its actual registry digest
         run: |
           mkdir -m 700 "$RUNNER_TEMP/gabriel-base"
-          docker pull python:3.11-alpine
-          base=$(docker image inspect python:3.11-alpine --format '{{index .RepoDigests 0}}')
+          git rev-parse HEAD > "$RUNNER_TEMP/gabriel-base/source-sha.txt"
+          docker pull python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211
+          docker run --rm --network none --entrypoint python python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211 -c 'import sys; assert sys.version_info[:3] == (3,15,2); print(sys.version)' > "$RUNNER_TEMP/gabriel-base/python-version.txt"
+          base=$(docker image inspect python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211 --format '{{index .RepoDigests 0}}')
           printf '%s\n' "$base" > "$RUNNER_TEMP/gabriel-base/base-image.txt"
           printf 'GABRIEL_IDENTITY_BASE=%s\n' "$base" >> "$GITHUB_ENV"
       - name: Build the exact non-root candidate image
@@ -32,9 +34,15 @@ jobs:
         run: |
           docker build --build-arg "IDENTITY_BASE=$GABRIEL_IDENTITY_BASE" --target production -f gabriel/identity/Dockerfile -t gabriel-minimal-base .
           docker image inspect gabriel-minimal-base --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-base/image-id.txt"
-      - name: Scan the actual candidate with the unchanged high-severity threshold
+      - name: Scan the exact candidate and reject Medium or higher findings
         if: steps.build.outcome == 'success'
-        run: bash tooling/scripts/gabriel_image_scan.sh "$(cat "$RUNNER_TEMP/gabriel-base/image-id.txt")" "$RUNNER_TEMP/gabriel-base/security"
+        run: |
+          bash tooling/scripts/gabriel_image_scan.sh "$(cat "$RUNNER_TEMP/gabriel-base/image-id.txt")" "$RUNNER_TEMP/gabriel-base/security"
+          python3 - "$RUNNER_TEMP/gabriel-base/security/summary.json" <<'PY'
+          import json,sys
+          summary=json.load(open(sys.argv[1]))
+          assert all(summary['severity_counts'].get(level,0)==0 for level in ('Medium','High','Critical')),summary
+          PY
       - name: Full isolated component suite and actual PostgreSQL recovery on this base
         if: (success() || failure()) && steps.build.outcome == 'success'
         run: bash tooling/scripts/gabriel_identity_check.sh "$RUNNER_TEMP/gabriel-base/identity"
