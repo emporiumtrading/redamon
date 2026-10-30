@@ -59,7 +59,7 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
     unassigned=cdp.send('Target.createTarget',{'url':origin+'/controls/unassigned','background':True})['targetId']
     other=cdp.attach(unassigned)
     wait_for(lambda:cdp.evaluate(other,'document.readyState')=='complete')
-    for scenario in ('success','approval','ambiguous','password','post','hidden_field','invalid_form','invalid_fill','postcondition','covered_postcondition','stale_postcondition','stop_race'):
+    for scenario in ('success','approval','ambiguous','password','post','hidden_field','invalid_form','invalid_fill','disabled_filter','disabled_fieldset','postcondition','covered_postcondition','stale_postcondition','stop_race'):
         mark(family+':controls-'+scenario)
         cdp.send('Page.navigate',{'url':origin+'/controls/start'},console)
         wait_for(lambda:cdp.evaluate(console,'document.title')=='Generated Controls Dashboard' and cdp.evaluate(console,'document.readyState')=='complete')
@@ -80,6 +80,16 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
         assert 'GENERATED_PRIVATE_NOTE_4961' not in json.dumps(inventory)
         assert next(row for row in inventory['controls'] if row['id']=='wrapped')['name']=='Notes'
         reviewed=policy(origin)
+        if scenario in {'disabled_filter','disabled_fieldset'}:
+            reviewed['steps']=[reviewed['steps'][2 if scenario=='disabled_filter' else 3]]
+            reviewed['steps'][0]['source_url']=reviewed['steps'][0]['destination_url']=origin+'/controls/start'
+            if scenario=='disabled_filter':
+                cdp.evaluate(console,'''const group=document.createElement('optgroup');group.disabled=true;
+                    group.label='Unavailable';group.append(document.querySelector('#severity option[value=high]'));
+                    document.getElementById('severity').append(group);true''')
+            else:
+                cdp.evaluate(console,'''const fieldset=document.createElement('fieldset');fieldset.disabled=true;
+                    document.getElementById('q').before(fieldset);fieldset.append(document.getElementById('q'));true''')
         if scenario in {'password','post','hidden_field','invalid_form','invalid_fill'}:
             reviewed['steps']=[reviewed['steps'][3 if scenario in {'password','invalid_fill'} else 5]]
             reviewed['steps'][0]['source_url']=origin+'/controls/start'
@@ -176,5 +186,6 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
     return ['menu_disclosure','menu_link_subpage','native_filter','text_search_field','button_pagination','reviewed_get_form',
         'exact_postconditions','encrypted_six_step_observations','credential_exclusion','unassigned_tab_isolation',
         'no_submit_event_handler','explicit_approval','ambiguous_target_denied','password_drift_denied','post_form_denied','hidden_form_fields_denied',
-        'invalid_form_no_events','invalid_fill_restored_without_events','postcondition_failure_stops','covered_postcondition_stops',
+        'invalid_form_no_events','invalid_fill_restored_without_events','disabled_optgroup_denied','disabled_fieldset_denied',
+        'postcondition_failure_stops','covered_postcondition_stops',
         'stale_postcondition_denied','stop_after_prepare_no_dispatch','no_automatic_replay','private_token_exclusion']

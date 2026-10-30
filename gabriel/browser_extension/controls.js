@@ -51,7 +51,7 @@ export function controlDOM(mode, step=null) {
   }
   function safe(node) {
     const tag=node.tagName.toLowerCase();
-    return visible(node) && !node.disabled && node.getAttribute("aria-disabled")!=="true" &&
+    return visible(node) && !node.matches(':disabled') && !node.closest('[aria-disabled="true"]') &&
       !secret.test([node.id,node.name,node.getAttribute("autocomplete"),name(node)].join(" ")) &&
       !mutation.test(name(node)) && !node.closest('iframe') &&
       (tag!=="input" || ["text","search","date","number"].includes(node.type));
@@ -104,7 +104,7 @@ export function controlDOM(mode, step=null) {
     const original=node.value;
     let prototype;
     if(node.tagName==="SELECT") {
-      if(step.kind!=="filter" || node.multiple || !Array.from(node.options).some(o=>o.value===step.value && !o.disabled))
+      if(step.kind!=="filter" || node.multiple || !Array.from(node.options).some(o=>o.value===step.value && !o.matches(':disabled')))
         throw new Error("Filter choice changed.");
       prototype=HTMLSelectElement.prototype;
     } else {
@@ -137,7 +137,7 @@ export function controlDOM(mode, step=null) {
       throw new Error("Search form destination changed.");
     const fields={};
     for(const field of node.elements) {
-      if(['BUTTON','FIELDSET','OUTPUT'].includes(field.tagName) || !field.name || field.disabled) continue;
+      if(['BUTTON','FIELDSET','OUTPUT'].includes(field.tagName) || !field.name || field.matches(':disabled')) continue;
       if(!['INPUT','TEXTAREA','SELECT'].includes(field.tagName) || !safe(field) || field.name in fields ||
           !(field.name in step.fields) || field.value!==step.fields[field.name]) throw new Error("Search form fields changed or contain excluded content.");
       fields[field.name]=field.value;
