@@ -32,6 +32,7 @@ def page(path,query):
 <button id="next" type="button" onclick="window.actions++;document.getElementById('page-result').textContent='Page 2'">Next page</button><p id="page-result">Page 1</p>
 <label for="password">Password</label><input id="password" type="password" value="GENERATED_CREDENTIAL_EXCLUDED">
 <textarea id="unlabelled">GENERATED_CONFIDENTIAL_NOTES_EXCLUDED</textarea>
+<label>Notes<textarea id="wrapped">GENERATED_PRIVATE_NOTE_4961</textarea></label>
 <button id="delete" type="button" onclick="window.unsafeActions++">Delete incident</button>
 <script>window.actions=0;window.unsafeActions=0;window.submitHandlerCalled=0;</script></body></html>''').encode()
 
@@ -71,6 +72,8 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
         assert all(row['id'] not in {'password','delete','unlabelled'} for row in inventory['controls'])
         assert 'GENERATED_CREDENTIAL_EXCLUDED' not in json.dumps(inventory)
         assert 'GENERATED_CONFIDENTIAL_NOTES_EXCLUDED' not in json.dumps(inventory)
+        assert 'GENERATED_PRIVATE_NOTE_4961' not in json.dumps(inventory)
+        assert next(row for row in inventory['controls'] if row['id']=='wrapped')['name']=='Notes'
         reviewed=policy(origin)
         if scenario in {'password','post','hidden_field'}:
             reviewed['steps']=[reviewed['steps'][3 if scenario=='password' else 5]]

@@ -19,15 +19,21 @@ export function controlDOM(mode, step=null) {
   const secret=/password|passwd|secret|token|cookie|session|auth|credential|api.?key|otp|credit.?card/i;
   const mutation=/\b(delete|remove|disable|enable|execute|save|create|reset|reboot|shutdown|terminate|block|unblock|approve|revoke|edit|logout|signout)\b/i;
   const clean=value=>(value || "").trim().replace(/\s+/g," ");
+  function labelText(node) {
+    if (["INPUT","TEXTAREA","SELECT"].includes(node.tagName)) return "";
+    const copy=node.cloneNode(true);
+    for(const field of copy.querySelectorAll('input,textarea,select')) field.remove();
+    return clean(copy.textContent);
+  }
   function name(node) {
     const labelled=node.getAttribute("aria-labelledby");
     if (labelled) {
       const labels=labelled.split(/\s+/).map(id=>document.getElementById(id));
       if (labels.some(label=>!label || !visible(label,false))) throw new Error("Control label is not visible.");
-      return clean(labels.map(label=>label.textContent).join(" "));
+      return clean(labels.map(labelText).join(" "));
     }
     if (node.getAttribute("aria-label")) return clean(node.getAttribute("aria-label"));
-    if (node.labels?.length) return clean(Array.from(node.labels).map(label=>label.textContent).join(" "));
+    if (node.labels?.length) return clean(Array.from(node.labels).map(labelText).join(" "));
     if (["INPUT","TEXTAREA","SELECT"].includes(node.tagName)) return "";
     return clean(node.tagName==="FORM" ? node.getAttribute("name") : node.textContent);
   }

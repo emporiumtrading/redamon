@@ -112,7 +112,7 @@ class Controls:
     def activate(self,app):
         lease=app._bound()
         recorded=app.service.acquire(app._human,lease['case_id'],uuid5(UUID(self.plan['request_id']),'reviewed-controls-plan'),
-            json.dumps(self.plan,sort_keys=True,separators=(',',':')),'Engineer-reviewed browser control plan; role attested, semantics unverified',approved=True)
+            json.dumps(self.plan,sort_keys=True,separators=(',',':')),'Engineer-reviewed browser control plan / role attested / semantics unverified',approved=True)
         self.evidence_id=str(recorded['id'])
         request=uuid5(UUID(self.evidence_id),VERSION+'|'+app.lease_id)
         self.grant=app.service.grant_navigation(app._human,app._peer,request,OPERATOR_PAGES,
