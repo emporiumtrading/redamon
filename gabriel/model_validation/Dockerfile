@@ -1,4 +1,5 @@
-FROM python@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e AS runtime
+FROM python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211 AS runtime
+RUN ["apk", "del", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/__init__.py /app/gabriel/
@@ -9,7 +10,7 @@ ENTRYPOINT ["python","-m","gabriel.identity.model_validation"]
 
 FROM runtime AS test
 USER 0:0
-RUN pip install --no-cache-dir pytest==8.3.5
+RUN ["pip", "install", "--no-cache-dir", "pytest==8.3.5"]
 ENV PYTHONPATH=/app:/repo
 WORKDIR /repo
 COPY conftest.py pytest.ini /repo/

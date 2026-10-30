@@ -28,6 +28,68 @@ class BrowserInstallation(unittest.TestCase):
         self.app.browser_image_supported=MagicMock(return_value=True)
         self.app.operator=MagicMock(return_value={'revocation_confirmed':True})
 
+    def configure_tls_renewal(self):
+        self.app.config['image']='sha256:'+'a'*64
+        self.app.browser_stop=MagicMock(return_value={'revocation_confirmed':True})
+        self.app.check_network=MagicMock()
+        (self.root/'tls').mkdir(mode=0o700)
+        (self.root/'tls/ca.pem').write_bytes(b'generated-original-ca')
+        def generate(directory,image):
+            directory.mkdir(mode=0o700)
+            (directory/'ca.pem').write_bytes(b'generated-replacement-ca')
+        return generate
+
+    def test_tls_renewal_closes_and_revokes_before_replacement(self):
+        generate=self.configure_tls_renewal()
+        events=[]
+        self.app.compose.side_effect=lambda *a,**k:events.append(('compose',a))
+        self.app.browser_stop.side_effect=lambda:events.append(('browser',)) or {'revocation_confirmed':True}
+        self.app.start_db.side_effect=lambda:events.append(('database',))
+        self.app.operator.side_effect=lambda *a:events.append(('operator',a)) or {}
+        with patch.object(installer,'run',return_value=b'{"org.gabriel.tls-profile":"rfc5280-strict-v1"}'), \
+                patch.object(installer,'prepare_tls',side_effect=generate):
+            result=self.app.renew_tls()
+        self.assertEqual(events[:3],[('compose',('stop','local-entry','workbench')),('browser',),('database',)])
+        self.assertEqual(events[-1],('operator',('revoke',)))
+        self.assertTrue(result['tls_renewed']);self.assertTrue(result['certificate_trust_requires_review'])
+        self.assertTrue(result['requires_fresh_login']);self.assertFalse(result['production_admitted'])
+        self.assertEqual((self.root/'tls/ca.pem').read_bytes(),b'generated-replacement-ca')
+        retired=list(self.root.glob('tls-retired-*'))
+        self.assertEqual(len(retired),1)
+        self.assertEqual((retired[0]/'ca.pem').read_bytes(),b'generated-original-ca')
+        self.assertNotEqual(result['previous_ca_file_sha256'],result['ca_file_sha256'])
+
+    def test_tls_renewal_keeps_original_files_on_generation_failure(self):
+        self.configure_tls_renewal()
+        with patch.object(installer,'run',return_value=b'{"org.gabriel.tls-profile":"rfc5280-strict-v1"}'), \
+                patch.object(installer,'prepare_tls',side_effect=ValueError('generation failed')):
+            with self.assertRaisesRegex(ValueError,'generation failed'):self.app.renew_tls()
+        self.assertEqual((self.root/'tls/ca.pem').read_bytes(),b'generated-original-ca')
+        self.assertFalse(list(self.root.glob('tls-retired-*')))
+
+    def test_tls_renewal_restores_original_directory_on_publication_failure(self):
+        generate=self.configure_tls_renewal()
+        rename=installer.os.rename
+        def publish(source,target):
+            if Path(source).name.startswith('tls-pending-'):raise OSError('publication failed')
+            return rename(source,target)
+        with patch.object(installer,'run',return_value=b'{"org.gabriel.tls-profile":"rfc5280-strict-v1"}'), \
+                patch.object(installer,'prepare_tls',side_effect=generate),patch.object(installer.os,'rename',side_effect=publish):
+            with self.assertRaisesRegex(OSError,'publication failed'):self.app.renew_tls()
+        self.assertEqual((self.root/'tls/ca.pem').read_bytes(),b'generated-original-ca')
+        self.assertEqual(len(list(self.root.glob('tls-pending-*'))),1)
+
+    def test_tls_renewal_requires_capable_image_and_confirmed_browser_revocation(self):
+        self.configure_tls_renewal()
+        with patch.object(installer,'run',return_value=b'{}'):
+            with self.assertRaisesRegex(ValueError,'rebuild_required'):self.app.renew_tls()
+        self.app.compose.assert_not_called()
+        self.app.browser_stop.return_value={'revocation_confirmed':False}
+        with patch.object(installer,'run',return_value=b'{"org.gabriel.tls-profile":"rfc5280-strict-v1"}'):
+            with self.assertRaisesRegex(ValueError,'revocation_unconfirmed'):self.app.renew_tls()
+        self.app.start_db.assert_not_called();self.app.operator.assert_not_called()
+        self.assertEqual((self.root/'tls/ca.pem').read_bytes(),b'generated-original-ca')
+
     def test_stop_closes_both_services_before_database_even_with_corrupt_metadata(self):
         (self.root/'browser.json').write_text('not-json')
         events=[]
@@ -134,3 +196,4 @@ class BrowserInstallation(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+

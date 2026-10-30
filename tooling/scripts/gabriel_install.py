@@ -92,6 +92,13 @@ def external(path):
     return path
 
 
+def prepare_tls(directory,image):
+    directory.mkdir(mode=0o700)
+    run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
+        '--user',str(os.getuid())+':'+str(os.getgid()),'--mount','type=bind,src='+str(directory)+',dst=/tls',
+        '--entrypoint','python',image,'-m','gabriel.identity.installation','tls','--directory','/tls'])
+
+
 def prepare(root,port,image):
     if root.exists() or type(port) is not int or not 1024<=port<=65535: raise ValueError('new_directory_and_local_port_required')
     run(['docker','info'])
@@ -101,10 +108,7 @@ def prepare(root,port,image):
     database_secrets(root/'database')
     keyring(root/'provider')
     keyring(root/'evidence',purpose='evidence-v1')
-    (root/'tls').mkdir(mode=0o700)
-    run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
-        '--user',str(os.getuid())+':'+str(os.getgid()),'--mount','type=bind,src='+str(root/'tls')+',dst=/tls',
-        '--entrypoint','python',image,'-m','gabriel.identity.installation','tls','--directory','/tls'])
+    prepare_tls(root/'tls',image)
     manifest=dict(schema_version=1,purpose='gabriel-local-test-installation-v1',project='gabriel-install-'+uuid4().hex[:16],
         port=port,image=image,source=run(['git','rev-parse','HEAD']).decode().strip(),production_admitted=False)
     write(root/'installation.json',manifest)
@@ -244,13 +248,44 @@ class Installation:
         with (destination/'database.dump').open('xb') as stream:
             self.compose('exec','-T','identity-db','pg_dump','-U','postgres','-d','gabriel','--format=custom',output=stream)
         with (destination/'evidence.tar.gz').open('xb') as stream:
-            self.compose('run','--rm','--no-deps','-T','--entrypoint','tar','operator','-czf','-','-C','/var/lib/gabriel-evidence','.',output=stream)
+            self.compose('run','--rm','--no-deps','-T','--entrypoint','python','operator','-c',
+                "import sys,tarfile\nwith tarfile.open(fileobj=sys.stdout.buffer,mode='w|gz') as archive: archive.add('/var/lib/gabriel-evidence',arcname='.')\n",output=stream)
         manifest=dict(schema_version=1,purpose='gabriel-quiesced-test-backup-v1',image=self.config['image'],source=self.config['source'],
             identity=receipt,files={name:digest(destination/name) for name in ('database.dump','evidence.tar.gz')},
             key_fingerprints={name:digest(self.root/name/'keyring.json') for name in ('provider','evidence')})
         write(destination/'backup.json',manifest)
         return {'backup_complete':True,'workbench_stopped':True,'keys_included':False,'browser_stop':browser}
 
+
+    def renew_tls(self):
+        labels=json.loads(run(['docker','image','inspect',self.config['image'],'--format','{{json .Config.Labels}}']))
+        if not isinstance(labels,dict) or labels.get('org.gabriel.tls-profile')!='rfc5280-strict-v1':
+            raise ValueError('strict_tls_image_rebuild_required')
+        if len(list(self.root.glob('tls-retired-*')))+len(list(self.root.glob('tls-pending-*')))>=16:
+            raise ValueError('tls_history_limit_requires_operator_review')
+        self.compose('stop','local-entry','workbench')
+        browser=self.browser_stop()
+        if not browser.get('revocation_confirmed'):
+            raise ValueError('browser_revocation_unconfirmed')
+        self.start_db()
+        self.check_network()
+        self.operator('revoke')
+        directory=self.root/('tls-pending-'+uuid4().hex)
+        prepare_tls(directory,self.config['image'])
+        previous=digest(self.root/'tls/ca.pem')
+        current=digest(directory/'ca.pem')
+        retired=self.root/('tls-retired-'+uuid4().hex)
+        os.rename(self.root/'tls',retired)
+        try: os.rename(directory,self.root/'tls')
+        except OSError:
+            os.rename(retired,self.root/'tls')
+            raise
+        fd=os.open(self.root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+        return dict(tls_renewed=True,previous_ca_file_sha256=previous,ca_file_sha256=current,
+            certificate_trust_requires_review=True,requires_fresh_login=True,
+            workbench_stopped=True,browser_stop=browser,production_admitted=False)
 
     def rebuild(self,backup,image=None):
         self.compose('stop','local-entry','workbench')
@@ -354,7 +389,7 @@ def password(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','diagnose','browser-open','browser-stop'))
+    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','diagnose','browser-open','browser-stop','renew-tls'))
     parser.add_argument('directory')
     parser.add_argument('--port',type=int,default=8444)
     parser.add_argument('--image')
@@ -401,6 +436,7 @@ def main():
                         port=args.gateway_port,duration=args.duration,max_steps=args.max_steps,
                         share_observations=args.approve_observation_sharing)
                 elif args.command=='browser-stop':result=installation.browser_stop()
+                elif args.command=='renew-tls':result=installation.renew_tls()
                 elif args.command=='status':
                     raw=installation.compose('ps','--all','--format','json').decode().strip()
                     rows=json.loads(raw) if raw.startswith('[') else [json.loads(line) for line in raw.splitlines()]
@@ -421,4 +457,5 @@ def main():
 
 
 if __name__=='__main__': raise SystemExit(main())
+
 

@@ -58,6 +58,7 @@ jobs:
           git rev-parse HEAD > "$RUNNER_TEMP/gabriel-installation-evidence/source-sha.txt"
           docker image inspect gabriel-installation-check --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-installation-evidence/image-id.txt"
           cp "$RUNNER_TEMP/gabriel-installation-journey/browser-ai-readiness.json" "$RUNNER_TEMP/gabriel-installation-evidence/browser-ai-readiness.json"
+          cp "$RUNNER_TEMP/gabriel-installation-journey/tls-renewal.json" "$RUNNER_TEMP/gabriel-installation-evidence/tls-renewal.json"
           cp "$RUNNER_TEMP/gabriel-installation-journey/runtime-acceptance.json" "$RUNNER_TEMP/gabriel-installation-evidence/runtime-acceptance.json"
           cp "$RUNNER_TEMP/gabriel-installation-journey/installation-network.json" "$RUNNER_TEMP/gabriel-installation-evidence/installation-network.json"
           cp "$RUNNER_TEMP/gabriel-blocked-network-journey/network-failure-result.json" "$RUNNER_TEMP/gabriel-installation-evidence/network-failure-result.json"

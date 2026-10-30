@@ -1,7 +1,7 @@
 name: Gabriel existing installation rebuild
 on:
   pull_request:
-    paths: ['tooling/scripts/gabriel_install.py', 'testing/gabriel_browser_ai/rebuild_journey.py', '.github/workflows/gabriel-rebuild.yml']
+    paths: ['gabriel/identity/Dockerfile', 'gabriel/identity/requirements.txt', 'tooling/scripts/gabriel_install.py', 'testing/gabriel_browser_ai/rebuild_journey.py', '.github/workflows/gabriel-rebuild.yml']
   workflow_dispatch:
 permissions:
   contents: read
