@@ -5,7 +5,7 @@ x-identity: &identity
     dockerfile: gabriel/identity/Dockerfile
     target: production
     args:
-      IDENTITY_BASE: ${GABRIEL_IDENTITY_BASE:-python@sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2}
+      IDENTITY_BASE: ${GABRIEL_IDENTITY_BASE:-python@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e}
   user: '10001:10001'
   read_only: true
   cap_drop: [ALL]
@@ -62,7 +62,7 @@ services:
       dockerfile: gabriel/identity/Dockerfile
       target: test
       args:
-        IDENTITY_BASE: ${GABRIEL_IDENTITY_BASE:-python@sha256:09d17d5e4c16d0a7a1eea690bcb7c6ab8616b211f8421e429e97c1bef5bd0ed2}
+        IDENTITY_BASE: ${GABRIEL_IDENTITY_BASE:-python@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e}
     environment:
       GABRIEL_IDENTITY_DSN_FILE: /run/secrets/app_dsn
       GABRIEL_MIGRATION_DSN_FILE: /run/secrets/owner_dsn
