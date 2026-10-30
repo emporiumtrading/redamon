@@ -23,6 +23,7 @@ class NetworkCheckTests(unittest.TestCase):
         app=installer.Installation.__new__(installer.Installation)
         app.config={'project':'gabriel-install-'+'a'*16}
         app.compose=MagicMock(return_value=json.dumps(report()).encode())
+        app.browser_stop=MagicMock(return_value={'listener_stopped':True,'revocation_confirmed':True})
         return app
 
     def probe(self,*,dns_error=None,tcp_error=None):
@@ -106,7 +107,8 @@ class NetworkCheckTests(unittest.TestCase):
         app.check_network=MagicMock(side_effect=installer.InstallationNetworkError('database_tcp'))
         with self.assertRaises(installer.InstallationNetworkError): app.open('generated-test-password')
         app.operator.assert_not_called()
-        app.compose.assert_not_called()
+        app.browser_stop.assert_called_once_with()
+        app.compose.assert_called_once_with('stop','local-entry','workbench')
 
     def test_later_login_failure_is_not_reclassified_as_network_failure(self):
         app=self.app();app.start_db=MagicMock();app.check_network=MagicMock(return_value=report())

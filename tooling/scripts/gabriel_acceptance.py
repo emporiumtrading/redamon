@@ -14,30 +14,45 @@ import sys
 
 SERVICES={'identity-db','workbench','hermes','investigation-tools','local-entry'}
 APP=SERVICES-{'identity-db'}
+OPTIONAL_BROWSER={'browser-gateway','browser-entry'}
 RUNTIME_FILES=('service.py','schema.sql','schema_v31.sql','installation.py','workbench.py',
     'model_worker.py','model_budget.py','model_routes.py','model_transport.py','personal_providers.py',
     'specialist_agents.py','specialist_qualification.py','hermes_supervisor.py','hermes_bridge.py',
     'hermes_qualification.py','browser_semantics.py','browser_hermes.py','release_qualification.py','reviewed_memory.py',
-    'memory.py','coordinator.py','browser_sessions.py','browser_observations.py','browser_events.py','browser_specialists.py')
+    'memory.py','coordinator.py','browser_sessions.py','browser_observations.py','browser_events.py','browser_specialists.py',
+    'browser_gateway.py','browser_navigation.py','gateway_cli.py')
 
 NETWORKS={'identity-db':{'private'},'workbench':{'private','toolbus'},'hermes':{'toolbus'},
-    'investigation-tools':{'toolbus'},'local-entry':{'private','entry'}}
+    'investigation-tools':{'toolbus'},'local-entry':{'private','entry'},
+    'browser-gateway':{'private'},'browser-entry':{'private','entry'}}
 BIND_FILES={'/run/secrets/db_password':'database/db_password',
     '/docker-entrypoint-initdb.d/01-gabriel-role.sql':'database/role_init.sql',
     '/run/secrets/app_dsn':'database/app_dsn','/run/secrets/provider_keyring':'provider/keyring.json',
     '/run/secrets/evidence_keyring':'evidence/keyring.json','/run/secrets/tls_certificate':'tls/server.pem',
     '/run/secrets/tls_key':'tls/server.key','/run/secrets/tls_ca':'tls/ca.pem'}
 VOLUME_NAMES={'/var/lib/postgresql/data':'database','/var/lib/gabriel-evidence':'evidence',
-    '/var/lib/gabriel-workbench':'workbench'}
+    '/var/lib/gabriel-workbench':'workbench','/var/lib/gabriel-browser':'browser'}
 MOUNTS={'identity-db':{'/var/lib/postgresql/data':('volume',True),'/run/secrets/db_password':('bind',False),
     '/docker-entrypoint-initdb.d/01-gabriel-role.sql':('bind',False)},
     'workbench':{'/var/lib/gabriel-evidence':('volume',True),'/var/lib/gabriel-workbench':('volume',True),
-        **{'/run/secrets/'+n:('bind',False) for n in ('app_dsn','provider_keyring','evidence_keyring','tls_certificate','tls_key','tls_ca')}}}
+        **{'/run/secrets/'+n:('bind',False) for n in ('app_dsn','provider_keyring','evidence_keyring','tls_certificate','tls_key','tls_ca')}},
+    'browser-gateway':{'/var/lib/gabriel-evidence':('volume',True),'/var/lib/gabriel-browser':('volume',True),
+        **{'/run/secrets/'+n:('bind',False) for n in ('app_dsn','evidence_keyring','tls_certificate','tls_key','tls_ca')}}}
 
 
 
 def require(condition,code):
     if not condition:raise ValueError(code)
+
+
+def environment_map(values):
+    require(type(values) is list and all(type(v) is str and '=' in v for v in values),'browser_environment_invalid')
+    result={}
+    for value in values:
+        name,content=value.split('=',1)
+        require(name and name not in result,'browser_environment_duplicate')
+        result[name]=content
+    return result
 
 
 def committed_runtime_sources(source,run_command):
@@ -72,29 +87,48 @@ def assess(config,containers,networks,*,provider_egress=False,mount_profile=NATI
     root=Path(config['installation_root'])
     require(root.is_absolute() and str(root)==config['installation_root'] and '..' not in root.parts,'invalid_installation_root')
     by_service={}
+    expected_services=SERVICES|OPTIONAL_BROWSER if 'browser_port' in config else SERVICES
+    if 'browser_port' in config:
+        require(type(config['browser_port']) is int and 1024<=config['browser_port']<=65535
+            and config['browser_port']!=config['port'],'invalid_browser_port')
+        require(type(config.get('browser_expires_at')) is str,'browser_expiry_required')
+        expiry=datetime.fromisoformat(config['browser_expires_at'])
+        require(expiry.tzinfo is not None and expiry>datetime.now(timezone.utc),'browser_lifetime_expired')
     for row in containers:
         labels=row['Config'].get('Labels') or {}
         require(labels.get('com.docker.compose.project')==config['project'],'foreign_project')
         service=labels.get('com.docker.compose.service')
-        require(service in SERVICES and service not in by_service,'unexpected_or_duplicate_service')
+        require(service in expected_services and service not in by_service,'unexpected_or_duplicate_service')
         by_service[service]=row
-    require(set(by_service)==SERVICES,'required_services_missing')
+    require(set(by_service)==expected_services,'required_services_missing')
     result=[]
     for service,row in sorted(by_service.items()):
         host=row['HostConfig'];state=row['State'];cfg=row['Config']
+        if service in OPTIONAL_BROWSER:
+            command='browser-serve' if service=='browser-gateway' else 'browser-relay'
+            require(cfg.get('Entrypoint')==['python','-m','gabriel.identity.installation',command]
+                and not cfg.get('Cmd'),'browser_entrypoint_changed')
+            environment=environment_map(cfg.get('Env'))
+            expected_environment=dict(environment_map(config.get('browser_image_environment')))
+            expected_environment.update({'GABRIEL_IDENTITY_DSN_FILE':'/run/secrets/app_dsn',
+                'GABRIEL_EVIDENCE_KEYRING_FILE':'/run/secrets/evidence_keyring','GABRIEL_EVIDENCE_ROOT':'/var/lib/gabriel-evidence'}
+                if service=='browser-gateway' else {'GABRIEL_BROWSER_EXPIRES_AT':config['browser_expires_at']})
+            require(environment==expected_environment,'browser_environment_changed')
+            require(not host.get('RestartPolicy',{}).get('Name') or host['RestartPolicy']['Name']=='no','browser_restart_policy_changed')
         require(state.get('Running') is True and state.get('Health',{}).get('Status')=='healthy','service_not_healthy')
         require(not host.get('Privileged') and host.get('NetworkMode')!='host' and host.get('PidMode')!='host','host_privilege_denied')
         bindings=host.get('PortBindings') or {}
-        if service=='local-entry':
-            require(bindings=={'8444/tcp':[{'HostIp':'127.0.0.1','HostPort':str(config['port'])}]},'entry_listener_not_loopback')
+        if service in {'local-entry','browser-entry'}:
+            internal,external=('8443/tcp',config['browser_port']) if service=='browser-entry' else ('8444/tcp',config['port'])
+            require(bindings=={internal:[{'HostIp':'127.0.0.1','HostPort':str(external)}]},'entry_listener_not_loopback')
         else:require(not bindings,'private_service_published')
-        if service in APP:
+        if service in APP|OPTIONAL_BROWSER:
             require(row['Image']==config['hermes_image' if service=='hermes' else 'image'],'image_identity_changed')
             require(host.get('ReadonlyRootfs') is True and cfg.get('User')=='10001:10001','application_hardening_missing')
             require('ALL' in [v.upper() for v in host.get('CapDrop',[])] and not host.get('CapAdd'),'capability_policy_changed')
             require(any(v in {'no-new-privileges','no-new-privileges:true'} for v in host.get('SecurityOpt',[])),'privilege_policy_missing')
             temporary=host.get('Tmpfs') or {}
-            if service=='local-entry':require(not temporary,'relay_temporary_mount_denied')
+            if service in {'local-entry','browser-entry'}:require(not temporary,'relay_temporary_mount_denied')
             else:require(set(temporary)=={'/tmp'} and {'noexec','nosuid'}<=set(temporary['/tmp'].split(',')),'temporary_mount_hardening_missing')
             require(type(host.get('Memory')) is int and host['Memory']>0 and host.get('PidsLimit',0)>0,'resource_limits_missing')
         mounts=row.get('Mounts',[])
@@ -146,7 +180,11 @@ def collect(root,*,provider_egress=False):
     network_rows=json.loads(run(['docker','network','inspect',*names]))
     networks={row['Name']:row for row in network_rows}
     hermes_image=json.loads(run(['docker','image','inspect',app.config['project']+'-hermes:local']))[0]['Id']
-    report=assess(dict(app.config,installation_root=str(root.resolve()),hermes_image=hermes_image),containers,networks,provider_egress=provider_egress,mount_profile=mount_profile)
+    browser_state=app.browser_state() if (root/'browser.json').exists() else None
+    browser=dict(browser_port=browser_state['port'],browser_expires_at=browser_state['expires_at']) if browser_state else {}
+    if browser:
+        browser['browser_image_environment']=json.loads(run(['docker','image','inspect',app.config['image']]))[0]['Config']['Env']
+    report=assess(dict(app.config,installation_root=str(root.resolve()),hermes_image=hermes_image,**browser),containers,networks,provider_egress=provider_egress,mount_profile=mount_profile)
     supervisor=json.loads(app.compose('exec','-T','workbench','python','-c',
         'import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))'))
     require(supervisor.get('status')=='ready' and re.fullmatch('[a-f0-9]{64}',supervisor.get('runtime_digest','')),'hermes_source_binding_failed')
@@ -156,6 +194,9 @@ def collect(root,*,provider_egress=False):
         '; print(json.dumps({n:hashlib.sha256((Path("/app/gabriel/identity")/n).read_bytes()).hexdigest() for n in names}))')
     actual=json.loads(app.compose('exec','-T','workbench','python','-c',program))
     report['runtime_source_binding']=validate_runtime_sources(expected,actual)
+    if browser:
+        actual_gateway=json.loads(app.compose('exec','-T','browser-gateway','python','-c',program))
+        report['browser_gateway_source_binding']=validate_runtime_sources(expected,actual_gateway)
     client=http.client.HTTPSConnection('localhost',app.config['port'],timeout=10,
         context=ssl.create_default_context(cafile=str(root/'tls/ca.pem')))
     try:

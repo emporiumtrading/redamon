@@ -74,6 +74,23 @@ Failure leaves the interface stopped and retains the backup and rebuild intent f
 Rebuilding includes the AI application bridge, but does not qualify a model, enable provider egress in the private workbench or start a browser gateway. Read the [AI phase guide](GABRIEL_BROWSER_AI_DETECTION.md) before activation.
 
 
+## Optional finite browser gateway
+
+After opening your workbench, create or select an open case and note its case UUID. Load the reviewed Gabriel extension in your dedicated Chrome/Brave profile, sign into the intended console yourself, select its current tab, and save the displayed non-secret context JSON in your private installation directory. Use the exact extension origin displayed by that installed extension. Never extract or copy the general Gabriel human token.
+
+```bash
+python3 tooling/scripts/gabriel_install.py browser-open "$HOME/gabriel-private-test" --case-id CASE_UUID --context-file "$HOME/gabriel-private-test/context.json" --extension-origin chrome-extension://EXTENSION_ID --gateway-port 8443 --duration 300 --max-steps 20 --approve-observation-sharing
+python3 tooling/scripts/gabriel_install.py browser-stop "$HOME/gabriel-private-test"
+```
+
+`browser-open` is explicit private operator authorization using the still-valid original installation session. It creates a dedicated browser task and a lease bound to that exact case, tab/document, declared account and extension origin. A saved expired or revoked human session is rejected. Durations are 60–300 seconds and are clipped by original human/task authority; no renewal, scheduled collection, navigation, AI activation or provider egress is enabled by this command. Omit the sharing flag for pairing only. The browser port must differ from the workbench port. The installation image must support this feature; older installations need the backed-up rebuild workflow first.
+
+The command prints the existing short-lived single-use pairing ticket and loopback HTTPS endpoint. Enter that ticket in the extension promptly; it expires at most sixty seconds after gateway startup and never beyond the lease. Keep it out of URLs, logs, screenshots and support reports. The human token stays inside trusted private containers. Native browser context selection and the endpoint permission prompt remain human actions. This slice retains ticket entry; it does not provide an all-in-workbench pairing wizard.
+
+Only one gateway is active per installation. Gateway bootstraps use a separate private volume; the gateway receives neither provider keys nor the workbench volume. A separate unprivileged relay without secrets publishes opaque TLS only on IPv4 loopback. Both processes exit at the original lease deadline, without restart or credential renewal. Expired/stopped containers must be removed with `browser-stop` before collecting a clean runtime report; active reports strictly attest all seven services and actual gateway source bytes. New enrollment, workbench reopen/account switch, full Stop, backup and rebuild close the gateway listener before database or credential operations.
+
+`browser-stop` reports listener shutdown separately from database revocation. If the database or required human authority is unavailable, cleanup remains unconfirmed and its private receipt is retained. New browser enrollment is blocked until a later explicit Stop confirms both lease revocation and task cancellation. Restore database connectivity and, if necessary, open a currently authorized owner session before retrying. UI **Disconnect workbench** only closes that UI cookie; it is not installation Stop or human logout. Private bootstrap storage is bounded to 128 directories; review and cleanup are operator work, never silent deletion. Actual native OS, certificate trust, real-console compatibility and human acceptance remain separate release gates.
+
 ## Member accounts and specialist AI connectivity
 
 Owners/admins create analyst accounts through **Team members**. Open a named member's workbench using `open --username ANALYST_USERNAME`; the member's password is prompted. The installation still has one active workbench, so switching accounts revokes the previous session. `open --username ANALYST_USERNAME --ai-egress` explicitly attaches the workbench to the provider-capable overlay. The database stays private, and ordinary open remains private. This is separate from model qualification: the exact role configuration must still be admitted before inference. See [specialist agents](GABRIEL_SPECIALIST_AGENTS.md) for personal key setup and activation limits.
