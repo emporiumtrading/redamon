@@ -1,0 +1,61 @@
+name: Gabriel official runtime patch metadata
+on:
+  pull_request:
+    paths: ['.github/workflows/gabriel-runtime-patch-resolution.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  registry-metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resolve official Python patch index and verify both architecture manifests
+        env:
+          REPORT: ${{ runner.temp }}/gabriel-runtime-patch
+        run: |
+          mkdir -m 700 "$REPORT"
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib,re,subprocess
+          root=pathlib.Path(os.environ['REPORT'])
+          target='docker.io/library/python:3.15.2-alpine3.24'
+          def inspect(reference,*options):
+              return subprocess.check_output(['docker','buildx','imagetools','inspect',reference,*options],timeout=45)
+          def digest(value):
+              assert isinstance(value,str) and re.fullmatch(r'sha256:[a-f0-9]{64}',value)
+              return value
+          def verified(reference,expected):
+              raw=inspect(reference,'--raw')
+              # The CLI may append one display newline to the registry bytes.
+              for data in (raw,raw.removesuffix(b'\n')):
+                  if 'sha256:'+hashlib.sha256(data).hexdigest()==expected:
+                      return data,json.loads(data)
+              raise AssertionError('registry manifest content digest mismatch')
+          descriptor=json.loads(inspect(target,'--format','{{json .Manifest}}'))
+          index_digest=digest(descriptor.get('digest',descriptor.get('Digest')))
+          index_bytes,index=verified('docker.io/library/python@'+index_digest,index_digest)
+          assert index.get('mediaType') in {'application/vnd.oci.image.index.v1+json','application/vnd.docker.distribution.manifest.list.v2+json'}
+          (root/'index.json').write_bytes(index_bytes)
+          (root/'descriptor.json').write_text(json.dumps(descriptor,indent=2)+'\n')
+          platforms={}
+          for architecture in ('amd64','arm64'):
+              rows=[m for m in index['manifests'] if m.get('platform',{}).get('os')=='linux' and m['platform'].get('architecture')==architecture]
+              assert len(rows)==1,architecture
+              selected=digest(rows[0]['digest'])
+              data,manifest=verified('docker.io/library/python@'+selected,selected)
+              assert manifest.get('schemaVersion')==2 and 'config' in manifest and manifest.get('layers')
+              digest(manifest['config']['digest'])
+              (root/(architecture+'-manifest.json')).write_bytes(data)
+              platforms[architecture]=dict(manifest_digest=selected,config_digest=manifest['config']['digest'])
+          result=dict(purpose='gabriel-official-runtime-patch-resolution-v1',tag=target,
+              immutable_base='python@'+index_digest,index_digest=index_digest,platforms=platforms,
+              application_tests_executed=False,provider_calls=0,production_admitted=False)
+          (root/'resolution.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gabriel-official-runtime-patch-metadata
+          path: ${{ runner.temp }}/gabriel-runtime-patch
+          if-no-files-found: error
+          retention-days: 14
