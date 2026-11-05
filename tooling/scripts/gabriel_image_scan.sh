@@ -30,12 +30,24 @@ docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-
     -v "$report/core.tar:/image/core.tar:ro" \
     "$scanner" docker-archive:/image/core.tar -o syft-json > "$report/sbom.json"
 scanner=$(sed -n '2p' "$report/scanners.txt")
+vex_mount=()
+vex_args=()
+case ${3:-} in
+    --verify-resolver-backport)
+        docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+          --entrypoint python "$image_id" - "$image_id" < gabriel/identity/verify_resolver_backport.py > "$report/resolver.vex.json"
+        vex_mount=(-v "$report/resolver.vex.json:/image/resolver.vex.json:ro")
+        vex_args=(--vex /image/resolver.vex.json)
+        ;;
+    '') ;;
+    *) echo "Unknown scan option" >&2; exit 2 ;;
+esac
 vulnerabilities=0
 docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 128 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
     --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 -e XDG_CACHE_HOME=/cache -e GRYPE_CHECK_FOR_APP_UPDATE=false \
     -v "$cache:/cache" -v "$report/sbom.json:/image/sbom.json:ro" \
-    "$scanner" sbom:/image/sbom.json -o json --fail-on high > "$report/vulnerabilities.json" || vulnerabilities=$?
+    "${vex_mount[@]}" "$scanner" sbom:/image/sbom.json "${vex_args[@]}" -o json --fail-on high > "$report/vulnerabilities.json" || vulnerabilities=$?
 scanner=$(sed -n '3p' "$report/scanners.txt")
 secrets=0
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \

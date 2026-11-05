@@ -37,6 +37,11 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,size=1g,mode=1777 -e XDG_CACHE_HOME=/tmp -e SYFT_CHECK_FOR_APP_UPDATE=false \
             -v "$RUNNER_TEMP/gabriel-security/core.tar:/image/core.tar:ro" \
             "$scanner" docker-archive:/image/core.tar -o syft-json > "$RUNNER_TEMP/gabriel-security/sbom.json"
+      - name: Prove the resolver backport inside the exact candidate
+        run: |
+          image_id=$(cat "$RUNNER_TEMP/gabriel-security/image-id.txt")
+          docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --entrypoint python "$image_id" - "$image_id" < gabriel/identity/verify_resolver_backport.py > "$RUNNER_TEMP/gabriel-security/resolver.vex.json"
       - name: Scan the production SBOM and block Medium or higher findings
         run: |
           scanner=$(sed -n '2p' "$RUNNER_TEMP/gabriel-security/scanners.txt")
@@ -46,7 +51,8 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 -e XDG_CACHE_HOME=/cache -e GRYPE_CHECK_FOR_APP_UPDATE=false \
             -v "$RUNNER_TEMP/gabriel-grype-cache:/cache" \
             -v "$RUNNER_TEMP/gabriel-security/sbom.json:/image/sbom.json:ro" \
-            "$scanner" sbom:/image/sbom.json -o json --fail-on medium > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
+            -v "$RUNNER_TEMP/gabriel-security/resolver.vex.json:/image/resolver.vex.json:ro" \
+            "$scanner" sbom:/image/sbom.json --vex /image/resolver.vex.json -o json --fail-on medium > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
       - name: Report package advisories when the vulnerability gate fails
         if: failure()
         run: |

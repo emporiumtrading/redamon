@@ -37,7 +37,7 @@ jobs:
       - name: Scan the exact candidate and reject Medium or higher findings
         if: steps.build.outcome == 'success'
         run: |
-          bash tooling/scripts/gabriel_image_scan.sh "$(cat "$RUNNER_TEMP/gabriel-base/image-id.txt")" "$RUNNER_TEMP/gabriel-base/security"
+          bash tooling/scripts/gabriel_image_scan.sh "$(cat "$RUNNER_TEMP/gabriel-base/image-id.txt")" "$RUNNER_TEMP/gabriel-base/security" --verify-resolver-backport
           python3 - "$RUNNER_TEMP/gabriel-base/security/summary.json" <<'PY'
           import json,sys
           summary=json.load(open(sys.argv[1]))

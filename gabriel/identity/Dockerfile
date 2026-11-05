@@ -17,24 +17,8 @@ RUN set -eux; \
 
 FROM ${IDENTITY_BASE} AS patched-python
 COPY --from=socket-backport /patched/ /usr/local/
-RUN python - <<'PY'
-import socket
-import _socket
-
-for resolve in (socket.getaddrinfo, _socket.getaddrinfo):
-    for host, port in (
-        ("127.0.0.1\0", 80),
-        (b"127.0.0.1\0", 80),
-        ("127.0.0.1", "8\x000"),
-        ("127.0.0.1", b"8\x000"),
-    ):
-        try:
-            resolve(host, port, 0, 0, 0, socket.AI_NUMERICHOST | socket.AI_NUMERICSERV)
-        except ValueError:
-            continue
-        raise SystemExit("CVE-2026-116566 regression: embedded NUL was accepted")
-    assert resolve("127.0.0.1", "80", 0, 0, 0, socket.AI_NUMERICHOST | socket.AI_NUMERICSERV)
-PY
+RUN --mount=type=bind,source=gabriel/identity/verify_resolver_backport.py,target=/verify-resolver.py \
+    python /verify-resolver.py
 
 FROM ${IDENTITY_BASE} AS dependencies
 WORKDIR /build
