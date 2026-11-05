@@ -8,10 +8,12 @@ FROM python@sha256:bc62fbcb684904b1bb81a6240041bb60e9c1ee19ddeaf17a6b4297e1cc9c9
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 HOME=/tmp HERMES_HOME=/tmp HERMES_DISABLE_LAZY_INSTALLS=1
 # Hermes retains SQLite for its native runtime. Fetch only the signed library
 # package from Alpine edge and resolve installation against the existing image.
-RUN apk fetch --no-cache --repository https://dl-cdn.alpinelinux.org/alpine/edge/main \
-        --output /tmp sqlite-libs=3.54.1-r0 \
-    && apk add --no-network /tmp/sqlite-libs-3.54.1-r0.apk \
-    && rm /tmp/sqlite-libs-3.54.1-r0.apk
+RUN set -eux; \
+    arch="$(apk --print-arch)"; \
+    package=sqlite-libs-3.54.1-r0.apk; \
+    wget -O "/tmp/$package" "https://dl-cdn.alpinelinux.org/alpine/edge/main/$arch/$package"; \
+    apk add --no-network "/tmp/$package"; \
+    rm "/tmp/$package"
 RUN python - <<'PY'
 import shutil
 import sqlite3
