@@ -56,6 +56,7 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
     click,text,wait_for,native_popup,mark=(helpers[key] for key in ('click','text','wait_for','native_popup','mark'))
     service=BrowserNavigationService(service._dsn,service.store)
     checks=[]
+    cdp.send('Target.activateTarget',{'targetId':console_target})
     unassigned=cdp.send('Target.createTarget',{'url':origin+'/controls/unassigned','background':True})['targetId']
     other=cdp.attach(unassigned)
     wait_for(lambda:cdp.evaluate(other,'document.readyState')=='complete')
@@ -63,9 +64,6 @@ def journey(cdp,family,service,human,tls,root,env,console_target,console,origin,
         mark(family+':controls-'+scenario)
         cdp.send('Page.navigate',{'url':origin+'/controls/start'},console)
         wait_for(lambda:cdp.evaluate(console,'document.title')=='Generated Controls Dashboard' and cdp.evaluate(console,'document.readyState')=='complete')
-        for old in cdp.targets():
-            if old.get('url')==extension_origin+'/popup.html':cdp.send('Target.closeTarget',{'targetId':old['targetId']})
-        cdp.send('Target.activateTarget',{'targetId':console_target})
         popup=native_popup(cdp,console_target,extension_origin)
         cdp.evaluate(popup,'document.getElementById("account").value="Generated lab account";document.getElementById("browser").value='+json.dumps(family))
         click(cdp,popup,'select')

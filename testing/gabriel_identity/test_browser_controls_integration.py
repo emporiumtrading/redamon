@@ -17,7 +17,9 @@ pytestmark=pytest.mark.integration
 
 @pytest.fixture
 def context(base_context):
-    return dict(base_context,extension_version='0.4.0')
+    # Keep shared database rows compatible with the historical migration fixtures.
+    # The packaged browser lab separately exercises the current extension version.
+    return base_context
 
 
 def plan(context):
