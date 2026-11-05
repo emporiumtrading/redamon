@@ -2,8 +2,10 @@ Backport of CPython commit 131a3a66c5f400b588f9fd2732a5ed4e89623ee3 (CVE-2026-11
 
 --- a/Modules/socketmodule.c
 +++ b/Modules/socketmodule.c
-@@ -6940,7 +6940,8 @@ socket_getaddrinfo(PyObject *self, PyObject *args, PyObject* kwargs)
+@@ -6934,9 +6934,10 @@ socket_getaddrinfo(PyObject *self, PyObject *args, PyObject* kwargs)
      struct addrinfo *res0 = NULL;
+     PyObject *hobj = NULL;
+     PyObject *pobj = (PyObject *)NULL;
      PyObject *pstr = NULL;
      const char *hptr, *pptr;
 +    Py_ssize_t hlen = 0, plen = 0;
