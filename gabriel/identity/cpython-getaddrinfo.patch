@@ -2,9 +2,7 @@ Backport of CPython commit 131a3a66c5f400b588f9fd2732a5ed4e89623ee3 (CVE-2026-11
 
 --- a/Modules/socketmodule.c
 +++ b/Modules/socketmodule.c
-@@ -6934,9 +6934,10 @@ socket_getaddrinfo(PyObject *self, PyObject *args, PyObject* kwargs)
-     struct addrinfo *res0 = NULL;
-     PyObject *hobj = NULL;
+@@ -6935,6 +6935,7 @@
      PyObject *pobj = (PyObject *)NULL;
      PyObject *pstr = NULL;
      const char *hptr, *pptr;
@@ -12,8 +10,7 @@ Backport of CPython commit 131a3a66c5f400b588f9fd2732a5ed4e89623ee3 (CVE-2026-11
      int family, socktype, protocol, flags;
      int error;
      PyObject *all = (PyObject *)NULL;
-     PyObject *idna = NULL;
-@@ -7030,13 +7031,20 @@ _socket_getaddrinfo_impl(PyObject *module, PyObject *hobj, PyObject *pobj,
+@@ -6955,12 +6956,19 @@
              return NULL;
          assert(PyBytes_Check(idna));
          hptr = PyBytes_AS_STRING(idna);
@@ -26,16 +23,15 @@ Backport of CPython commit 131a3a66c5f400b588f9fd2732a5ed4e89623ee3 (CVE-2026-11
          PyErr_SetString(PyExc_TypeError,
                          "getaddrinfo() argument 1 must be string or None");
          return NULL;
-     }
++    }
 +    if (hptr != NULL && strlen(hptr) != (size_t)hlen) {
 +        PyErr_SetString(PyExc_ValueError,
 +                        "getaddrinfo() host must not contain null characters");
 +        goto err;
-+    }
+     }
      if (PyIndex_Check(pobj)) {
          pstr = PyNumber_Index(pobj);
-         if (pstr == NULL)
-@@ -7046,21 +7054,27 @@ _socket_getaddrinfo_impl(PyObject *module, PyObject *hobj, PyObject *pobj,
+@@ -6971,19 +6979,25 @@
          if (pstr == NULL)
              goto err;
          assert(PyUnicode_Check(pstr));
@@ -55,13 +51,11 @@ Backport of CPython commit 131a3a66c5f400b588f9fd2732a5ed4e89623ee3 (CVE-2026-11
          pptr = (char *)NULL;
      } else {
          PyErr_SetString(PyExc_OSError, "Int or String expected");
-         goto err;
-     }
++        goto err;
++    }
 +    if (pptr != NULL && strlen(pptr) != (size_t)plen) {
 +        PyErr_SetString(PyExc_ValueError,
 +                        "getaddrinfo() port must not contain null characters");
-+        goto err;
-+    }
+         goto err;
+     }
  #if defined(__APPLE__) && defined(AI_NUMERICSERV)
-     if ((flags & AI_NUMERICSERV) && (pptr == NULL || (pptr[0] == '0' && pptr[1] == 0))) {
-         /* On OSX up to at least OSX 10.8 getaddrinfo crashes
