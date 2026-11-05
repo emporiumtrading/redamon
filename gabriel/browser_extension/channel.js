@@ -1,3 +1,4 @@
+import {controlDOM,validateControls} from "./controls.js";
 import {inspectPage} from "./collector.js";
 import {inspectNavigationIdentity, validatePlan, approvedURL, readOnlyURL, inspectConsole} from "./navigator.js";
 import {inspectEventSection} from "./events.js";
@@ -120,10 +121,10 @@ async function stop() {
 }
 
 async function handle(message) {
-  if (!message || typeof message !== "object" || !["state","select","pair","preview","share","status","receipts","pause","resume","stop","navigation-plan","navigation-run","monitor-start","monitor-stop","preview-structure","share-structure","discard-previews"].includes(message.operation)) throw new Error("Unsupported operation.");
+  if (!message || typeof message !== "object" || !["state","select","pair","preview","share","status","receipts","pause","resume","stop","navigation-plan","navigation-run","monitor-start","monitor-stop","preview-structure","share-structure","discard-previews","controls-inventory","controls-plan","controls-run"].includes(message.operation)) throw new Error("Unsupported operation.");
   if (message.operation === "stop") return stop();
   if (message.operation === "discard-previews") { discardPreviews(); return {message: "Local previews cleared."}; }
-  if (["preview","preview-structure","navigation-plan","navigation-run","monitor-start"].includes(message.operation)) discardPreviews();
+  if (["preview","preview-structure","navigation-plan","navigation-run","monitor-start","controls-plan","controls-run"].includes(message.operation)) discardPreviews();
   if (message.operation === "state") {
     const {selected, session, paused, navigation, tour, monitoring} = await storage.get(["selected","session","paused","navigation","tour","monitoring"]);
     return {context: selected, extension_origin: "chrome-extension://" + chrome.runtime.id, stored_pairing: !!session, paused: !!paused || !!navigation,
@@ -178,9 +179,74 @@ async function handle(message) {
       return {message: "Paired. Sharing requires preview and explicit approval.", expires_at: result.expires_at,
         organization_id: result.organization_id, case_id: result.case_id, task_id: result.task_id};
     }
+    if (message.operation === "controls-inventory") {
+      await current(selected);
+      const values=await chrome.scripting.executeScript({target:{tabId:selected.tab_id,documentIds:[selected.document_id]},func:controlDOM,args:["inventory"]});
+      if(values.length!==1 || values[0].frameId!==0 || values[0].documentId!==selected.document_id) throw new Error("Control document changed.");
+      return {control_inventory:values[0].result,message:"Review these visible control identities with your operator. No field values or credentials were read."};
+    }
     if (!session || Date.parse(session.expires_at) <= Date.now()) throw new Error("Pairing is missing or expired. Obtain fresh approval.");
     if (navigation) throw new Error("Navigation outcome unresolved. Stop and pair again before continuing.");
-    if (paused && ["preview","share","preview-structure","share-structure","navigation-plan","navigation-run"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
+    if (paused && ["preview","share","preview-structure","share-structure","navigation-plan","navigation-run","controls-plan","controls-run"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
+    if (["controls-plan","controls-run"].includes(message.operation)) {
+      if(pending || !session.sharing_approved || (await storage.get("monitoring")).monitoring?.enabled)
+        throw new Error("Resolve captures and pause scheduled work before reviewing controls.");
+      await current(selected);
+      await navigationIdentity(selected.tab_id,selected.page_url,selected.account_label,"operator-reviewed-pages-v1");
+      await request(session,"heartbeat",{context:wireContext(selected)});
+      const plan=await request(session,"controls-plan",{context:wireContext(selected)});
+      const signature=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(validateControls(plan,selected))))).map(b=>b.toString(16).padStart(2,"0")).join("");
+      if(message.operation==="controls-plan") {
+        await persist({reviewed_controls:signature},revision);
+        return {control_plan:plan,message:"Review every control, field value, destination and expected result before approving this finite plan."};
+      }
+      if(message.approved!==true || (await storage.get("reviewed_controls")).reviewed_controls!==signature)
+        throw new Error("Review the current control plan and explicitly approve controls and minimized sharing first.");
+      tourStarted=true;
+      const controlTour={state:"running",sections:[]};
+      for(let index=plan.next_step;index<plan.steps.length;index++) {
+        const step=plan.steps[index];
+        stillCurrent(revision);await current(selected);
+        await navigationIdentity(selected.tab_id,selected.page_url,selected.account_label,"operator-reviewed-pages-v1");
+        await controlScript(selected,"inspect",step);
+        await request(session,"heartbeat",{context:wireContext(selected)});
+        const prepared=await request(session,"controls-prepare",{context:wireContext(selected),step:index,plan_digest:plan.plan_digest});
+        if(prepared.step_index!==index || prepared.plan_digest!==plan.plan_digest || canonical(prepared.step)!==canonical(step) ||
+            prepared.intent?.state!=="prepared" || prepared.intent.destination_url!==step.destination_url ||
+            canonical(prepared.intent.source_context)!==canonical(wireContext(selected)) ||
+            !Number.isFinite(Date.parse(prepared.intent.expires_at)) || Date.parse(prepared.intent.expires_at)<=Date.now())
+          throw new Error("Control intent does not match the reviewed plan.");
+        const deadline=Math.min(Date.parse(prepared.intent.expires_at),Date.now()+10000);
+        await persist({navigation:{kind:"controls",intent_id:prepared.intent.id,step:index,state:"prepared"}},revision);
+        await current(selected);await request(session,"heartbeat",{context:wireContext(selected)});stillCurrent(revision);
+        if(Date.now()>=deadline) throw new Error("Control dispatch expired.");
+        expectedMove={tab_id:selected.tab_id,source:selected.page_url,destination:step.destination_url,revision};
+        const action=await controlScript(selected,"execute",step);
+        stillCurrent(revision);
+        if(action.navigate) {
+          if(action.navigate!==step.destination_url || !["paginate","submit"].includes(step.kind)) throw new Error("Unexpected control destination.");
+          await chrome.tabs.update(selected.tab_id,{url:action.navigate});
+        } else if(action.same_document!==true || step.destination_url!==selected.page_url) throw new Error("Unconfirmed control dispatch.");
+        let next=null;
+        while(Date.now()<deadline) {
+          stillCurrent(revision);
+          const identity=await waitForDestination(selected,step.destination_url,deadline,revision,"operator-reviewed-pages-v1");
+          if(!action.navigate && identity.document_id!==selected.document_id) throw new Error("In-page control replaced its document.");
+          const candidate={...selected,page_url:step.destination_url,document_id:identity.document_id};
+          if((await controlScript(candidate,"verify",step)).confirmed) {next=candidate;break;}
+          await new Promise(resolve=>setTimeout(resolve,50));
+        }
+        if(!next) throw new Error("Control result did not match the reviewed postcondition. Nothing will be repeated.");
+        const completed=await request(session,"controls-complete",{context:wireContext(next),intent_id:prepared.intent.id,step:index,plan_digest:plan.plan_digest});
+        if(!completed.current || completed.next_step!==index+1 || canonical(completed.context)!==canonical(wireContext(next)))
+          throw new Error("Control completion is unconfirmed. Inspect its receipt.");
+        stillCurrent(revision);selected=next;session.context=next;
+        await persist({selected,session},revision);await storage.remove("navigation");expectedMove=null;
+        await capture(selected,session,revision,controlTour,prepared.intent,false);
+      }
+      controlTour.state="complete";await persist({tour:controlTour},revision);await storage.remove("reviewed_controls");
+      return {tour:controlTour,message:"Completed "+controlTour.sections.length+" reviewed control steps with encrypted observations. No AI or unreviewed action was enabled."};
+    }
     if (message.operation === "monitor-start") {
       if (message.approved !== true || !session.sharing_approved || !session.scheduled_review_enabled || pending || paused || navigation)
         throw new Error("Approve scheduled sharing with a current, unpaused pairing and resolved receipts first.");
@@ -382,6 +448,13 @@ async function onUpdated(tabId, change) {
   await stop();
 }
 
+async function controlScript(selected, mode, step) {
+  const rows=await chrome.scripting.executeScript({target:{tabId:selected.tab_id,documentIds:[selected.document_id]},func:controlDOM,args:[mode,step]});
+  if(rows.length!==1 || rows[0].frameId!==0 || rows[0].documentId!==selected.document_id || !rows[0].result)
+    throw new Error("Control document or frame changed.");
+  return rows[0].result;
+}
+
 async function navigationIdentity(tabId, pageURL, account, version) {
   const tab = await chrome.tabs.get(tabId);
   if (tab.incognito || safeURL(tab.url) !== pageURL) throw new Error("Navigation left its assigned page.");
@@ -534,3 +607,4 @@ async function tick() {
 }
 return {handle, stop, onUpdated, tick, discardPreviews};
 }
+

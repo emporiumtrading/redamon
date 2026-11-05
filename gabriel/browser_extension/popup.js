@@ -2,14 +2,17 @@ const byId = id => document.getElementById(id);
 let observedAt = null;
 let structureObservedAt = null;
 function clearPreviews() {
+  byId("controls-details").textContent=""; byId("controls-approved").checked=false;
   byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null;
   byId("structure-text").value = ""; byId("structure-approved").checked = false; structureObservedAt = null;
 }
 let paired = false;
+let controlBusy = false;
 let requestGeneration = 0;
 const field = (id) => byId(id).value;
 async function run(operation, extra = {}) {
   const revision = ++requestGeneration;
+  if(operation==="controls-run") controlBusy=true;
   byId("message").textContent = operation === "stop" ? "Stopping locally…" : "Working…";
   try {
     if (["select","stop"].includes(operation)) {
@@ -18,10 +21,11 @@ async function run(operation, extra = {}) {
     }
     if (["stop","pause","select"].includes(operation)) paired = false;
     if (["stop","pause","select"].includes(operation)) byId("ai-approved").checked = false;
-    if (["stop","stop-tab","pause","select","navigation-plan","navigation-run","monitor-start","monitor-stop","channel-select","preview","preview-structure"].includes(operation)) {
+    if (["stop","stop-tab","pause","select","navigation-plan","navigation-run","monitor-start","monitor-stop","channel-select","preview","preview-structure","controls-plan","controls-run","controls-inventory"].includes(operation)) {
       clearPreviews();
       byId("navigation-approved").checked = false;
     }
+    if (["select","pause","stop","stop-tab","channel-select","controls-plan","controls-run","controls-inventory"].includes(operation)) byId("controls-approved").checked=false;
     const value = await chrome.runtime.sendMessage({operation, ...extra});
     if (revision !== requestGeneration) return;
     if (!value?.ok) throw new Error(value?.error || "Connection lost. Nothing is confirmed.");
@@ -59,12 +63,18 @@ async function run(operation, extra = {}) {
       byId("structure-text").value = JSON.stringify(JSON.parse(result.content), null, 2);
       structureObservedAt = result.observed_at; byId("structure-approved").checked = false;
     } else if (result.content) { byId("preview-text").value = result.content; observedAt = result.observed_at; byId("approved").checked = false; }
+    if (result.control_inventory) byId("controls-details").textContent=JSON.stringify(result.control_inventory,null,2);
+    if (result.control_plan) byId("controls-details").textContent=result.control_plan.steps.map((step,index)=>
+      (index+1)+". "+step.kind+": "+step.target.name+(step.value!==undefined ? " → "+step.value : "")+
+      (step.fields ? " · fields "+JSON.stringify(step.fields) : "")+"\nPage: "+step.destination_url+"\nExpected: "+step.expect.text).join("\n\n");
+    if (["stop","select","channel-select"].includes(operation)) byId("controls-details").textContent="";
     if (result.plan) byId("navigation-sections").textContent = result.plan.destinations.join(" → ") + "; expires " + result.plan.expires_at;
     if (["stop","select"].includes(operation)) byId("navigation-sections").textContent = "";
     if (["share","share-structure","stop","stop-tab"].includes(operation)) clearPreviews();
     byId("message").textContent = result.message || (operation === "preview" ? "Partial preview ready. Review before sharing." : "Page selected. Give this context to your Gabriel operator.");
     byId("result").textContent = result.receipt ? "Observation " + result.receipt.observation_id + "; evidence " + result.receipt.evidence_id + (result.review?.draft_evidence_id ? "; structural draft " + result.review.draft_evidence_id : "") : result.expires_at ? "Pairing expires: " + result.expires_at + (result.organization_id ? "; Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id : "") : "";
   } catch (error) { if (revision === requestGeneration) byId("message").textContent = error.message; }
+  finally {if(operation==="controls-run") controlBusy=false;}
 }
 byId("select").onclick = () => run("select", {browser: field("browser"), account: field("account")});
 byId("pair").onclick = () => { const ticket = field("ticket"); byId("ticket").value = ""; return run("pair", {endpoint: field("endpoint"), ticket}); };
@@ -98,6 +108,11 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) {
   requestGeneration++; clearPreviews(); byId("ticket").value = ""; byId("navigation-approved").checked = false;
   chrome.runtime.sendMessage({operation: "discard-previews"}).catch(() => {});
 } });
-setInterval(() => { if (paired && !document.hidden) run("status"); }, 20000);
+setInterval(() => { if (paired && !document.hidden && !controlBusy) run("status"); }, 20000);
 document.body.dataset.gabrielReady = "true";
 run("state");
+
+
+byId("controls-inventory").onclick=()=>run("controls-inventory");
+byId("controls-plan").onclick=()=>run("controls-plan");
+byId("controls-run").onclick=()=>run("controls-run",{approved:byId("controls-approved").checked});

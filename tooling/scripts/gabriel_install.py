@@ -74,11 +74,12 @@ def private(path):
         raise ValueError('operator_owned_private_directory_required')
 
 
-def read(path):
+def read(path,*,private_file=False):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     with os.fdopen(fd,'rb') as stream:
         info=os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022: raise ValueError('unsafe_configuration_file')
+        if (not stat.S_ISREG(info.st_mode) or info.st_mode & (0o077 if private_file else 0o022)
+                or private_file and info.st_uid!=os.getuid()): raise ValueError('unsafe_configuration_file')
         data=stream.read(65537)
     if len(data)>65536: raise ValueError('configuration_limit')
     from gabriel_provider_keys import unique
@@ -90,6 +91,12 @@ def external(path):
     if path!=path.resolve() or path==REPO or REPO in path.parents or '\n' in str(path) or '$' in str(path):
         raise ValueError('absolute_external_directory_without_links_required')
     return path
+
+
+def read_controls(path):
+    path=external(path)
+    private(path.parent)
+    return read(path,private_file=True)
 
 
 def prepare_tls(directory,image):
@@ -192,16 +199,23 @@ class Installation:
         except (DockerOperationError,ValueError):result={'revocation_confirmed':False}
         return dict(listener_stopped=True,**result)
 
-    def browser_open(self,case_id,context,origin,*,port=8443,duration=300,max_steps=20,share_observations=False):
+    def browser_open(self,case_id,context,origin,*,port=8443,duration=300,max_steps=20,share_observations=False,control_plan=None,approve_controls=False):
         if type(port) is not int or not 1024<=port<=65535 or port==self.config['port']:
             raise ValueError('distinct_loopback_browser_port_required')
+        if control_plan is not None:
+            if not approve_controls or not share_observations:raise ValueError('explicit_controls_and_sharing_approval_required')
+            labels=json.loads(run(['docker','image','inspect',self.config['image'],'--format','{{json .Config.Labels}}']))
+            if not isinstance(labels,dict) or labels.get('org.gabriel.browser-controls')!='v1':raise ValueError('controls_image_rebuild_required')
+        elif approve_controls:raise ValueError('control_plan_required')
         previous=self.browser_stop()
         if not self.browser_image_supported():raise ValueError('rebuild_required_for_browser_installation')
         if not previous['revocation_confirmed']:raise ValueError('browser_revocation_unconfirmed; retry browser-stop before enrollment')
         self.start_db()
         self.check_network()
-        result=self.operator('browser-open',dict(case_id=case_id,context=context,extension_origin=origin,
-            port=port,duration=duration,max_steps=max_steps,share_observations=share_observations))
+        payload=dict(case_id=case_id,context=context,extension_origin=origin,
+            port=port,duration=duration,max_steps=max_steps,share_observations=share_observations)
+        if control_plan is not None:payload['control_plan']=control_plan
+        result=self.operator('browser-open',payload)
         state={k:v for k,v in result.items() if k!='ticket'}
         try:
             write(self.root/'browser.json',dict(state,port=port))
@@ -406,9 +420,12 @@ def main():
     parser.add_argument('--duration',type=int,default=300)
     parser.add_argument('--max-steps',type=int,default=20)
     parser.add_argument('--approve-observation-sharing',action='store_true')
+    parser.add_argument('--controls-file')
+    parser.add_argument('--approve-browser-controls',action='store_true')
     args=parser.parse_args()
     os.umask(0o077)
     try:
+        if bool(args.controls_file)!=args.approve_browser_controls or args.controls_file and args.command!='browser-open':raise ValueError('explicit_browser_controls_approval_required')
         if args.ai_egress and args.command!='open':raise ValueError('ai_egress_only_for_open')
         root=external(args.directory)
         if args.command=='prepare': result=prepare(root,args.port,args.image)
@@ -434,7 +451,8 @@ def main():
                     private(context_path.parent)
                     result=installation.browser_open(args.case_id,read(context_path),args.extension_origin,
                         port=args.gateway_port,duration=args.duration,max_steps=args.max_steps,
-                        share_observations=args.approve_observation_sharing)
+                        share_observations=args.approve_observation_sharing,
+                        control_plan=read_controls(args.controls_file) if args.controls_file else None,approve_controls=args.approve_browser_controls)
                 elif args.command=='browser-stop':result=installation.browser_stop()
                 elif args.command=='renew-tls':result=installation.renew_tls()
                 elif args.command=='status':
@@ -457,5 +475,6 @@ def main():
 
 
 if __name__=='__main__': raise SystemExit(main())
+
 
 

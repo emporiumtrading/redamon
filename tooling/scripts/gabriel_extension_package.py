@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import zipfile
 
-FILES={'manifest.json','worker.js','channel.js','collector.js','navigator.js','events.js','semantics.js','popup.html','popup.js','popup.css'}
+FILES={'controls.js','manifest.json','worker.js','channel.js','collector.js','navigator.js','events.js','semantics.js','popup.html','popup.js','popup.css'}
 
 
 def package(source,output):
@@ -35,3 +35,4 @@ if __name__=='__main__':
     parser.add_argument('output')
     args=parser.parse_args()
     print(json.dumps(package(args.source,args.output)))
+

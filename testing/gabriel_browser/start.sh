@@ -26,4 +26,5 @@ if [[ "$lab_ready" != true ]]; then
     exit 1
 fi
 printf '%s\n' 'LAB: display ready; starting bounded browser test'
-timeout --kill-after=10 360 python testing/gabriel_browser/lab.py "$@"
+timeout --kill-after=10 840 python testing/gabriel_browser/lab.py "$@"
+

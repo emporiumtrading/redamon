@@ -6,7 +6,7 @@ RUN apk add --no-cache build-base \
     && pip wheel --no-cache-dir --wheel-dir /wheels -r /build/requirements.txt
 
 FROM ${IDENTITY_BASE} AS runtime
-LABEL org.gabriel.browser-installation="v1" org.gabriel.tls-profile="rfc5280-strict-v1"
+LABEL org.gabriel.browser-installation="v1" org.gabriel.browser-controls="v1" org.gabriel.tls-profile="rfc5280-strict-v1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
@@ -19,6 +19,7 @@ COPY gabriel/identity/checkpoints.py gabriel/identity/checkpoint_service.py gabr
 COPY gabriel/identity/evidence_crypto.py gabriel/identity/evidence_keys.py gabriel/identity/key_retirement.py gabriel/identity/schema_v10.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_sessions.py gabriel/identity/browser_cli.py gabriel/identity/schema_v11.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_observations.py gabriel/identity/schema_v12.sql /app/gabriel/identity/
+COPY gabriel/identity/browser_controls.py /app/gabriel/identity/
 COPY gabriel/identity/browser_navigation.py gabriel/identity/schema_v21.sql /app/gabriel/identity/
 COPY gabriel/identity/schema_v22.sql /app/gabriel/identity/
 COPY gabriel/identity/browser_gateway.py gabriel/identity/gateway_cli.py /app/gabriel/identity/
@@ -113,7 +114,7 @@ COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
 ENV PYTHONPATH=/app:/repo
 WORKDIR /repo
 USER browserlab
-ENTRYPOINT ["timeout", "--kill-after=10", "420", "bash", "testing/gabriel_browser/start.sh"]
+ENTRYPOINT ["timeout", "--kill-after=10", "900", "bash", "testing/gabriel_browser/start.sh"]
 
 FROM runtime AS production
 USER 0:0
@@ -124,3 +125,4 @@ RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-
 RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
 RUN ["python", "-c", "import shutil,ssl; assert ssl.create_default_context().cert_store_stats()['x509_ca'] > 0; assert all(shutil.which(n) is None for n in ('busybox','wget','ssl_client','gcc','cc')); import psycopg,argon2,cryptography,gunicorn,yara,dpkt"]
 USER 10001:10001
+

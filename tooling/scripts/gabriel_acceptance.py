@@ -20,7 +20,7 @@ RUNTIME_FILES=('service.py','schema.sql','schema_v31.sql','installation.py','wor
     'specialist_agents.py','specialist_qualification.py','hermes_supervisor.py','hermes_bridge.py',
     'hermes_qualification.py','browser_semantics.py','browser_hermes.py','release_qualification.py','reviewed_memory.py',
     'memory.py','coordinator.py','browser_sessions.py','browser_observations.py','browser_events.py','browser_specialists.py',
-    'browser_gateway.py','browser_navigation.py','gateway_cli.py')
+    'browser_gateway.py','browser_navigation.py','gateway_cli.py','browser_controls.py')
 
 NETWORKS={'identity-db':{'private'},'workbench':{'private','toolbus'},'hermes':{'toolbus'},
     'investigation-tools':{'toolbus'},'local-entry':{'private','entry'},
@@ -235,3 +235,4 @@ if __name__=='__main__':
     except Exception:
         print('Runtime acceptance collection failed; inspect the local installation. No release approval was granted.',file=sys.stderr)
         raise SystemExit(2)
+

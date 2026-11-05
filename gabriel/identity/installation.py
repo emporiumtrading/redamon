@@ -142,12 +142,17 @@ def open_browser(payload):
     from gabriel.identity.browser_gateway import prepare,extension_origin
     from gabriel.identity.browser_sessions import approved_context
     required={'case_id','context','extension_origin','port','duration','max_steps','share_observations'}
-    if (set(payload)!=required or type(payload['port']) is not int or not 1024<=payload['port']<=65535
+    if (set(payload) not in (required,required|{'control_plan'}) or type(payload['port']) is not int or not 1024<=payload['port']<=65535
             or type(payload['duration']) is not int or not 60<=payload['duration']<=300
             or type(payload['max_steps']) is not int or not 1<=payload['max_steps']<=1000
             or type(payload['share_observations']) is not bool):
         raise ValueError('invalid_browser_open_request')
     context=approved_context(payload['context'])
+    control_plan=payload.get('control_plan')
+    if control_plan is not None:
+        from gabriel.identity.browser_controls import validate
+        validate(control_plan,context)
+        if not payload['share_observations'] or payload['max_steps']<len(control_plan['steps']):raise ValueError('controls_require_sharing_and_step_budget')
     origin=extension_origin(payload['extension_origin'])
     case_id=str(UUID(payload['case_id']))
     app=browser_service()
@@ -161,7 +166,7 @@ def open_browser(payload):
     result=None
     try:
         result=prepare(app,token,str(task['id']),case_id,context,'https://localhost:'+str(payload['port']),origin,directory,
-            share_observations=payload['share_observations'])
+            share_observations=payload['share_observations'],control_plan=control_plan)
         write_document(directory/'task.json',{'task_id':str(task['id'])})
         publish(BROWSER_ROOT/'active.json',{'session':directory.name})
     except Exception:
@@ -369,4 +374,5 @@ def main():
 
 
 if __name__=='__main__': raise SystemExit(main())
+
 
