@@ -5,7 +5,7 @@ COPY gabriel/identity/cpython-getaddrinfo.patch /build/cpython-getaddrinfo.patch
 # Match the pinned image's interpreter and verify the official source archive.
 RUN set -eux; \
     test "$(python -c 'import platform; print(platform.python_version())')" = 3.15.2; \
-    apk add --no-cache build-base linux-headers patch; \
+    apk add --no-cache build-base bluez-dev linux-headers patch; \
     wget -O python.tar.xz https://www.python.org/ftp/python/3.15.2/Python-3.15.2.tar.xz; \
     echo '8b5536d280142ecf6cdfe15d12a21ba1c65e300bbf7b28a8d0cdb849575797de  python.tar.xz' | sha256sum -c -; \
     tar -xf python.tar.xz; \
