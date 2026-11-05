@@ -47,6 +47,32 @@ jobs:
             -v "$RUNNER_TEMP/gabriel-grype-cache:/cache" \
             -v "$RUNNER_TEMP/gabriel-security/sbom.json:/image/sbom.json:ro" \
             "$scanner" sbom:/image/sbom.json -o json --fail-on medium > "$RUNNER_TEMP/gabriel-security/vulnerabilities.json"
+      - name: Report package advisories when the vulnerability gate fails
+        if: failure()
+        run: |
+          python3 - "$RUNNER_TEMP/gabriel-security/vulnerabilities.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report = pathlib.Path(sys.argv[1])
+          if not report.is_file() or not report.stat().st_size:
+              raise SystemExit("No vulnerability report was produced.")
+          matches = json.loads(report.read_text()).get("matches", [])
+          for match in matches:
+              advisory = match["vulnerability"]
+              if advisory["severity"].lower() in {"medium", "high", "critical", "unknown"}:
+                  package = match["artifact"]
+                  fix = advisory.get("fix", {})
+                  print(json.dumps({
+                      "package": package["name"],
+                      "version": package["version"],
+                      "advisory": advisory["id"],
+                      "severity": advisory["severity"],
+                      "fix_state": fix.get("state"),
+                      "fixed_versions": fix.get("versions", []),
+                  }))
+          PY
       - name: Scan defensive source for secrets with fully redacted output
         if: success() || failure()
         run: |

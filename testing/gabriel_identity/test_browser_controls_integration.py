@@ -111,6 +111,7 @@ def test_stop_and_original_logout_deny_completion(controls,context,ending):
 
 @pytest.mark.parametrize('change',['role','credential','mutation','post','query','origin','chain','oversize'])
 def test_control_policy_rejects_unreviewed_semantics(context,change):
+    context = dict(context, extension_version='0.4.0')
     value=plan(context)
     if change=='role':value['read_only_role_confirmed']=False
     elif change=='credential':value['steps'][0]['target']['name']='API token'
@@ -124,6 +125,7 @@ def test_control_policy_rejects_unreviewed_semantics(context,change):
 
 
 def test_only_exact_reviewed_get_form_fields_are_accepted(context):
+    context = dict(context, extension_version='0.4.0')
     value=plan(context);page=context['page_url'].split('#')[0]
     value['query_keys']=['q']
     value['steps']=[dict(kind='submit',target=dict(tag='form',id='search',name='Search events'),fields={'q':'generated'},
