@@ -1,11 +1,32 @@
 ARG IDENTITY_BASE=python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211
+FROM ${IDENTITY_BASE} AS socket-backport
+WORKDIR /build
+COPY gabriel/identity/cpython-getaddrinfo.patch /build/cpython-getaddrinfo.patch
+# Match the pinned image's interpreter and verify the official source archive.
+RUN set -eux; \
+    test "$(python -c 'import platform; print(platform.python_version())')" = 3.15.2; \
+    apk add --no-cache build-base bluez-dev linux-headers patch; \
+    wget -O python.tar.xz https://www.python.org/ftp/python/3.15.2/Python-3.15.2.tar.xz; \
+    echo '8b5536d280142ecf6cdfe15d12a21ba1c65e300bbf7b28a8d0cdb849575797de  python.tar.xz' | sha256sum -c -; \
+    tar -xf python.tar.xz; \
+    cd Python-3.15.2; \
+    patch --batch --forward --fuzz=0 -p1 < /build/cpython-getaddrinfo.patch; \
+    mkdir -p /patched/lib/python3.15/lib-dynload; \
+    cc -shared -fPIC -O2 $(python3-config --includes) -I Include/internal \
+        -o "/patched/lib/python3.15/lib-dynload/_socket$(python3-config --extension-suffix)" Modules/socketmodule.c
+
+FROM ${IDENTITY_BASE} AS patched-python
+COPY --from=socket-backport /patched/ /usr/local/
+RUN --mount=type=bind,source=gabriel/identity/verify_resolver_backport.py,target=/verify-resolver.py \
+    python /verify-resolver.py
+
 FROM ${IDENTITY_BASE} AS dependencies
 WORKDIR /build
 COPY gabriel/identity/requirements.txt /build/requirements.txt
 RUN apk add --no-cache build-base \
     && pip wheel --no-cache-dir --wheel-dir /wheels -r /build/requirements.txt
 
-FROM ${IDENTITY_BASE} AS runtime
+FROM patched-python AS runtime
 LABEL org.gabriel.browser-installation="v1" org.gabriel.browser-controls="v1" org.gabriel.tls-profile="rfc5280-strict-v1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
@@ -118,6 +139,15 @@ ENTRYPOINT ["timeout", "--kill-after=10", "900", "bash", "testing/gabriel_browse
 
 FROM runtime AS production
 USER 0:0
+# Identity persistence uses PostgreSQL. Preserve the other interpreter libraries.
+RUN set -eux; \
+    deps="$(apk info -R .python-rundeps | sed '1d; /^$/d; /^so:libsqlite3[.]so[.]/d')"; \
+    test -n "$deps"; \
+    apk add --no-network --virtual .gabriel-python-rundeps $deps; \
+    apk del --no-network .python-rundeps; \
+    rm -f /usr/local/lib/python3.15/lib-dynload/_sqlite3*.so; \
+    if apk info -e sqlite-libs || apk info -e sqlite; then exit 1; fi; \
+    test ! -e /usr/lib/libsqlite3.so.0
 # Production installs dependencies at build time; bundled build tools add attack surface.
 RUN python -m pip uninstall --yes setuptools wheel pip \
     && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
