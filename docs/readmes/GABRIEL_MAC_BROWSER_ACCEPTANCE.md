@@ -4,7 +4,7 @@ Status: procedure ready; native execution and human acceptance pending. Use a de
 
 ## Freeze the candidate first
 
-Use the final tested source from [runtime remediation PR104](https://github.com/emporiumtrading/redamon/pull/104), after both architecture security and regression results have been reviewed. Do not install an intermediate failing commit or substitute the documentation branch. Record the full source SHA and final image ID. A change to runtime source, dependency pin, extension bytes or Docker build requires the affected checks again.
+Use the source SHA recorded in the reviewed release evidence after core and Hermes image scans and both architecture regression runs have passed. Do not install an intermediate failing commit or substitute the documentation branch. Record the full source SHA and final image ID. A change to runtime source, dependency pin, extension bytes or Docker build requires the affected checks again.
 
 From that exact checkout, record locally:
 
@@ -98,6 +98,10 @@ For each row below, retain the actual action, expected and observed outcome, loc
 Use `browser-stop` from the installation guide for the explicit Stop checks. The UI's **Disconnect workbench** only closes its UI cookie; it is not human logout or installation Stop. The original human session lasts ten minutes; an expired session requires explicit fresh open. Keep the popup active during the initial sharing check; a heartbeat gap beyond 45 seconds requires fresh pairing and does not prove continuous coverage.
 
 Before backup/restore, finish or stop the active browser run. Use new backup and restore-target directories. Keep the original installation and its encryption keys. Never delete volumes or reinitialize to hide a failed recovery. The same-source restore procedure is in the installation guide; it does not implement a database downgrade.
+
+## Verify the reviewed dashboard controls
+
+After the observation checks, use a fresh pairing in each browser with an exact plan for a generated dashboard and a confirmed read-only role. Follow [reviewed browser controls](GABRIEL_REVIEWED_BROWSER_CONTROLS.md) for the private plan file and enrollment flags. Record the menu, filter, search field, pagination and GET result, plus the expected visible result and encrypted receipt for each step. Confirm that an unassigned tab stays untouched. With a fresh plan, stop before the next dispatch and verify the remaining steps do not run.
 
 ## Acceptance decision and handoff
 

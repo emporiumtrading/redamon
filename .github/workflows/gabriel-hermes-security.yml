@@ -27,7 +27,7 @@ jobs:
           GABRIEL_SCAN_DISK_CACHE: '1'
         run: |
           image_id="$(docker image inspect gabriel-hermes-security --format '{{.Id}}')"
-          bash tooling/scripts/gabriel_image_scan.sh "$image_id" "$RUNNER_TEMP/hermes-security"
+          bash tooling/scripts/gabriel_image_scan.sh "$image_id" "$RUNNER_TEMP/hermes-security" --verify-sqlite-library
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -41,5 +41,6 @@ jobs:
             ${{ runner.temp }}/hermes-security/sbom.json
             ${{ runner.temp }}/hermes-security/vulnerabilities.json
             ${{ runner.temp }}/hermes-security/secrets.json
+            ${{ runner.temp }}/hermes-security/sqlite.vex.json
           if-no-files-found: error
           retention-days: 14

@@ -39,6 +39,23 @@ case ${3:-} in
         vex_mount=(-v "$report/resolver.vex.json:/image/resolver.vex.json:ro")
         vex_args=(--vex /image/resolver.vex.json)
         ;;
+    --verify-sqlite-library)
+        purl=$(python3 - "$report/sbom.json" <<'PY'
+import json, sys
+with open(sys.argv[1]) as stream:
+    packages = json.load(stream)["artifacts"]
+matches = [p["purl"] for p in packages
+           if p["name"] == "sqlite-libs" and p["version"] == "3.54.1-r0"]
+if len(matches) != 1:
+    raise SystemExit("Expected exactly one SQLite library component in the SBOM.")
+print(matches[0])
+PY
+        )
+        docker run --rm -i --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+          --entrypoint python "$image_id" - "$image_id" "$purl" < gabriel/hermes/verify_sqlite_library.py > "$report/sqlite.vex.json"
+        vex_mount=(-v "$report/sqlite.vex.json:/image/sqlite.vex.json:ro")
+        vex_args=(--vex /image/sqlite.vex.json)
+        ;;
     '') ;;
     *) echo "Unknown scan option" >&2; exit 2 ;;
 esac
