@@ -55,6 +55,8 @@ def setup_ticket(app, password, action):
         status, html, headers = request(app.root, wizard.server_port, '/', host='127.0.0.1')
         assert status == 200 and wizard.key not in html
         assert headers['Cache-Control'] == 'no-store'
+        assert headers['Referrer-Policy'] == 'same-origin'
+        assert '<meta name="referrer" content="same-origin">' in html
         assert "frame-ancestors 'none'" in headers['Content-Security-Policy']
         assert submit(fields, {'Host': 'localhost'})[0] == 403
         assert submit(fields, {'Origin': 'null'})[0] == 403
@@ -73,7 +75,10 @@ def setup_ticket(app, password, action):
         assert status == 200, 'setup did not open the workbench'
         assert 'Gabriel is ready' in html and f'https://localhost:{app.config["port"]}/claim' in html
         assert password not in html and 'Connect Chrome or Brave' in html
-        return re.search(r'id="ticket" value="([A-Za-z0-9_-]+)"', html)[1]
+        ticket = re.search(r'id="ticket" value="([A-Za-z0-9_-]+)"', html)[1]
+        status, html, _ = request(app.root, wizard.server_port, '/finish', dict(setup_key=wizard.key), host='127.0.0.1')
+        assert status == 200 and 'Setup complete' in html
+        return ticket
 
 
 def connect(root,app,password,*,ticket=None):

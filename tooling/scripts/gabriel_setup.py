@@ -19,6 +19,8 @@ from gabriel_provider_keys import unique
 
 SETUP_SECONDS = 900
 FORM_LIMIT = 16384
+# Same-origin form posts need a usable Origin header for the setup check.
+REFERRER_POLICY = "same-origin"
 TRUST_REQUIRED = "<p>Return to Gabriel Setup and verify this lab’s certificate in Keychain Access.</p>"
 OPERATION_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError, subprocess.SubprocessError)
 SCRIPT = """
@@ -72,7 +74,7 @@ def page(title, body):
     return f"""<!doctype html>
 <html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer">
+<meta name="referrer" content="{REFERRER_POLICY}">
 <title>{escape(title)} | Gabriel</title><style>{STYLE}</style>
 <main><small>GABRIEL — THE DEFENDER</small><h1>{escape(title)}</h1>
 {body}
@@ -176,7 +178,7 @@ class SetupHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Referrer-Policy", REFERRER_POLICY)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy",
                          "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; "
