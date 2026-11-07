@@ -12,7 +12,7 @@ import time
 from unittest.mock import patch
 from uuid import uuid4
 
-from installation_journey import connect,request
+from installation_journey import connect,request,running_setup
 
 repo=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(repo/'tooling/scripts'))
@@ -69,12 +69,25 @@ def main():
         context=dict(browser='chrome',extension_version='0.4.0',installation_id=str(uuid4()),tab_id=7,
             document_id=str(uuid4()),page_url='https://generated-console.invalid/dashboard',account_label='Generated read-only lab')
         def opened(duration=120):
-            return app.browser_open(case_id,context,ORIGIN,port=18543,duration=duration,max_steps=3,share_observations=True)
-        result=opened()
-        assert set(result)-{'previous_browser_stop'}=={'lease_id','task_id','case_id','endpoint','expires_at','ticket','listener_loopback_only','sharing_approved'}
-        assert gateway(root,18543,'claim',dict(ticket=result['ticket'],context=context),origin='chrome-extension://'+'b'*32)[0]==403
-        assert gateway(root,18543,'claim',dict(ticket=result['ticket'],context=dict(context,tab_id=8)))[0]==403
-        code,value=gateway(root,18543,'claim',dict(ticket=result['ticket'],context=context));assert code==200
+            return app.browser_open(case_id,context,ORIGIN,port=8443,duration=duration,max_steps=3,share_observations=True)
+        with running_setup(app) as wizard:
+            def submit(path, fields):
+                return request(root, wizard.server_port, path, fields, host='127.0.0.1', timeout=120)
+            fields = dict(setup_key=wizard.key, case_id=case_id, context=json.dumps(context),
+                          extension_origin=ORIGIN, share='yes')
+            assert submit('/pairing', {'setup_key': wizard.key})[0] == 200
+            assert submit('/pair', dict(fields, setup_key='wrong'))[0] == 403
+            assert submit('/pair', dict(fields, context='{}'))[0] == 400
+            status, html, headers = submit('/pair', fields)
+            assert status == 200 and headers['Cache-Control'] == 'no-store'
+            assert 'Finish pairing in your browser' in html and 'https://localhost:8443' in html
+            assert wizard.key not in html and context['page_url'] not in html
+            ticket = re.search(r'id="ticket" value="([A-Za-z0-9_-]+)"', html)[1]
+        result = dict(app.browser_state(), ticket=ticket)
+        assert result['case_id'] == case_id
+        assert gateway(root,8443,'claim',dict(ticket=result['ticket'],context=context),origin='chrome-extension://'+'b'*32)[0]==403
+        assert gateway(root,8443,'claim',dict(ticket=result['ticket'],context=dict(context,tab_id=8)))[0]==403
+        code,value=gateway(root,8443,'claim',dict(ticket=result['ticket'],context=context));assert code==200
         assert set(value)=={'status','result'} and set(value['result'])=={'lease_id','paired','expires_at','scheduled_review_enabled',
             'discovery_enabled','capabilities','page_content_received','sharing_approved','token','context','organization_id','case_id','task_id','ai_review_enabled'}
         assert value['result']['sharing_approved']
@@ -92,15 +105,15 @@ print(json.dumps({'human_token_absent_from_exports':True}))
         assert confinement=={'human_token_absent_from_exports':True}
         peer=value['result']['token'];assert peer.startswith('gbp1_')
         assert value['result']['case_id']==case_id and value['result']['task_id']==result['task_id']
-        assert gateway(root,18543,'claim',dict(ticket=result['ticket'],context=context))[0]==403
-        assert gateway(root,18543,'heartbeat',dict(context=context),token=peer)[0]==200
+        assert gateway(root,8443,'claim',dict(ticket=result['ticket'],context=context))[0]==403
+        assert gateway(root,8443,'heartbeat',dict(context=context),token=peer)[0]==200
         content='Generated installation browser evidence; untrusted page text, no incident conclusion.'
         observation=dict(schema_version=1,operation='browser.observe',request_id=str(uuid4()),sequence=1,
             context=context,observed_at=datetime.now(timezone.utc).isoformat(),visibility='partial',client_minimized=True,content=content)
-        code,value=gateway(root,18543,'observe',observation,token=peer);assert code==200
+        code,value=gateway(root,8443,'observe',observation,token=peer);assert code==200
         receipt=value['result'];assert not receipt['source_verified']
-        assert gateway(root,18543,'observe',observation,token=peer)[1]['result']['evidence_id']==receipt['evidence_id']
-        code,value=gateway(root,18543,'receipts',dict(context=context),token=peer)
+        assert gateway(root,8443,'observe',observation,token=peer)[1]['result']['evidence_id']==receipt['evidence_id']
+        code,value=gateway(root,8443,'receipts',dict(context=context),token=peer)
         assert code==200 and value['result']['observations'][0]['state']=='captured'
         evidence_check="""from gabriel.identity.installation import active,browser_service
 from gabriel.identity.checkpoints import read_document
@@ -117,7 +130,7 @@ print('verified encrypted browser evidence and custody')
         assert not active['production_admitted'] and not active['provider_egress_explicit']
         (directory/'browser-runtime-acceptance.json').write_text(json.dumps(active,indent=2))
         stopped=app.browser_stop();assert stopped['listener_stopped'] and stopped['revocation_confirmed']
-        assert_closed(18543)
+        assert_closed(8443)
         assert len(collect(root)['services'])==5
         verify="""import json
 from gabriel.identity.installation import active,browser_service
@@ -135,15 +148,15 @@ print(json.dumps({'lease_revoked':True,'task_cancelled':True}))
 
         old_peer=peer
         opened()
-        assert gateway(root,18543,'heartbeat',dict(context=context),token=old_peer)[0]==403
+        assert gateway(root,8443,'heartbeat',dict(context=context),token=old_peer)[0]==403
         app.open(analyst_password,username='generated-browser-analyst')
-        assert_closed(18543)
+        assert_closed(8443)
         checks.append('named account switch quiesces and revokes gateway before replacing original authority')
         app.operator('revoke')
         try:opened()
         except ValueError:pass
         else:raise AssertionError('revoked human session enrolled browser')
-        assert_closed(18543)
+        assert_closed(8443)
         checks.append('saved but revoked human session cannot enroll or start listener')
         connect(root,app,password)
 
@@ -152,23 +165,23 @@ print(json.dumps({'lease_revoked':True,'task_cancelled':True}))
         # Keep the real database offline during this single Stop attempt instead of restarting it.
         with patch.object(app,'start_db',return_value=None):stopped=app.browser_stop()
         assert stopped['listener_stopped'] and not stopped['revocation_confirmed']
-        assert_closed(18543)
+        assert_closed(8443)
         checks.append('actual database outage closes listener and reports unconfirmed revocation')
         app.start_db()
         stopped=app.browser_stop();assert stopped['revocation_confirmed'] and stopped['listener_stopped']
         retry_verify=verify.replace(repr(result['lease_id']),repr(uncertain['lease_id'])).replace(repr(result['task_id']),repr(uncertain['task_id']))
         assert json.loads(app.compose('run','--rm','--no-deps','-T','--entrypoint','python','operator','-c',retry_verify))=={'lease_revoked':True,'task_cancelled':True}
-        assert_closed(18543)
+        assert_closed(8443)
         checks.append('restored database allows explicit Stop retry to confirm original lease and task cleanup')
 
         result=opened(60)
-        code,value=gateway(root,18543,'claim',dict(ticket=result['ticket'],context=context));assert code==200
+        code,value=gateway(root,8443,'claim',dict(ticket=result['ticket'],context=context));assert code==200
         deadline=datetime.fromisoformat(result['expires_at']).timestamp()+7
         while True:
             remaining=deadline-time.time()
             if remaining<=0:break
             time.sleep(min(1,remaining))
-        assert_closed(18543)
+        assert_closed(8443)
         ids=app.compose('ps','--all','--quiet','browser-gateway','browser-entry').decode().split()
         from gabriel_install import run
         containers=json.loads(run(['docker','inspect',*ids]))
@@ -180,7 +193,7 @@ print(json.dumps({'lease_revoked':True,'task_cancelled':True}))
         opened()
         backup=app.backup(directory/'backup')
         assert backup['browser_stop']['listener_stopped'] and backup['browser_stop']['revocation_confirmed']
-        assert_closed(18543)
+        assert_closed(8443)
         checks.append('quiesced backup stops and revokes browser gateway before snapshot')
         result=dict(version='gabriel-install-browser-journey-v1',checks=checks,production_admitted=False,
             native_browser_acceptance='pending',provider_dispatch_not_enabled=True,human_token_absent_from_exports=confinement['human_token_absent_from_exports'])

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local Docker test installation controller. Requires Python 3 and Docker Compose v2."""
 import argparse
+from contextlib import contextmanager,nullcontext
 import fcntl
 import getpass
 from hashlib import sha256
@@ -40,6 +41,13 @@ class InstallationNetworkError(ValueError):
         super().__init__('installation_network_check_failed: '+phase)
 
 
+class InstallationOperationDenied(ValueError):
+    def __init__(self, phase, kind):
+        super().__init__('installation operation denied')
+        self.phase = phase
+        self.kind = kind
+
+
 class DockerOperationError(ValueError):
     def __init__(self,completed):
         super().__init__('docker_operation_failed; inspect the local Docker service and installation state')
@@ -53,10 +61,11 @@ def run(command,*,env=None,payload=None,output=None,timeout=None):
     if completed.returncode:
         try:
             diagnostic=json.loads(completed.stdout or b'{}')
-            if diagnostic.get('code')=='installation_operation_denied':
+            if isinstance(diagnostic,dict) and diagnostic.get('code')=='installation_operation_denied':
                 phase=diagnostic.get('phase','unknown');kind=diagnostic.get('kind','unknown')
-                if re.fullmatch(r'[a-z_]{1,64}',phase) and re.fullmatch(r'[A-Za-z]{1,64}',kind):
-                    raise ValueError('installation denied at '+phase+' ('+kind+'); no secret values logged')
+                if (isinstance(phase,str) and isinstance(kind,str)
+                        and re.fullmatch(r'[a-z_]{1,64}',phase) and re.fullmatch(r'[A-Za-z]{1,64}',kind)):
+                    raise InstallationOperationDenied(phase,kind)
         except (json.JSONDecodeError,UnicodeError): pass
         raise DockerOperationError(completed)
     return completed.stdout
@@ -172,6 +181,26 @@ class Installation:
 
     def start_db(self): self.compose('up','-d','--wait','identity-db')
 
+    @contextmanager
+    def operation(self):
+        fd=os.open(self.root/'operation.lock',os.O_WRONLY|os.O_CREAT|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,'a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            yield
+
+    @staticmethod
+    def setup_failure(exc):
+        if isinstance(exc, InstallationNetworkError):
+            return f"Docker could not verify the private database network ({exc.phase})."
+        if isinstance(exc, InstallationOperationDenied):
+            if exc.phase == "command" and exc.kind == "AuthenticationDenied":
+                return "Gabriel could not sign in. Check your username and password."
+            message = f"Gabriel stopped at {exc.phase.replace('_', ' ')} ({exc.kind})."
+            if exc.phase in {"empty_organization_check", "receipt_publication"}:
+                message += " An owner may already exist. Inspect the existing lab before creating another owner."
+            return message
+        return "Gabriel could not start. Check Docker Desktop and retry with the same lab."
+
     def browser_image_supported(self):
         image=json.loads(run(['docker','image','inspect',self.config['image']]))[0]
         return (image.get('Config',{}).get('Labels') or {}).get('org.gabriel.browser-installation')=='v1'
@@ -246,8 +275,8 @@ class Installation:
         self.check_network()
         payload=dict(password=password,port=self.config['port'])
         if username is not None:payload['username']=username
-        ticket=self.operator('open',payload)
         self.compose('build','hermes')
+        ticket=self.operator('open',payload)
         self.compose('up','-d','--wait','--force-recreate','workbench','local-entry')
         return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',ai_egress=ai_egress,browser_stop=browser,**ticket)
 
@@ -403,7 +432,7 @@ def password(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','diagnose','browser-open','browser-stop','renew-tls'))
+    parser.add_argument('command',choices=('prepare','setup','initialize','open','status','stop','backup','restore','rebuild','diagnose','browser-open','browser-stop','renew-tls'))
     parser.add_argument('directory')
     parser.add_argument('--port',type=int,default=8444)
     parser.add_argument('--image')
@@ -430,11 +459,15 @@ def main():
         root=external(args.directory)
         if args.command=='prepare': result=prepare(root,args.port,args.image)
         else:
+            if args.command=='setup' and not root.exists():
+                print('Preparing the private Docker lab. The first build may take several minutes.',file=sys.stderr,flush=True)
+                prepare(root,args.port,args.image)
             installation=Installation(root)
-            fd=os.open(root/'operation.lock',os.O_WRONLY|os.O_CREAT|os.O_NOFOLLOW,0o600)
-            with os.fdopen(fd,'a') as lock:
-                fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-                if args.command=='initialize':
+            with (nullcontext() if args.command=='setup' else installation.operation()):
+                if args.command=='setup':
+                    from gabriel_setup import launch
+                    result=launch(installation)
+                elif args.command=='initialize':
                     installation.start_db()
                     installation.check_network()
                     secret=password(args)
@@ -469,12 +502,12 @@ def main():
         print(json.dumps({'status':'denied','code':'installation_network_check_failed','phase':exc.phase,
             'probe_uses_credentials':False,'guidance':'Inspect Docker DNS, bridge connectivity and firewall backend consistency; preserve internal networks and loopback listeners.'}))
         return 1
+    except InstallationOperationDenied as exc:
+        print(json.dumps({'status':'denied','code':'installation_operation_denied','phase':exc.phase,'kind':exc.kind}))
+        return 1
     except (OSError,ValueError,TypeError,KeyError,RuntimeError,subprocess.SubprocessError):
         print(json.dumps({'status':'denied','code':'installation_command_failed; existing state retained for inspection'}))
         return 1
 
 
 if __name__=='__main__': raise SystemExit(main())
-
-
-

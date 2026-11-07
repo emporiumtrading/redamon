@@ -31,7 +31,7 @@ STYLE='''
 .workspace{min-width:0}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 38px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}.workspace-label{letter-spacing:1.3px;text-transform:uppercase;font-size:10px;font-weight:700}.mode-tag{border:1px solid #60765b;color:#d0e0bd;background:#b5d5930b;padding:5px 10px;border-radius:30px;font-size:11px}main{width:100%;max-width:1440px;margin:auto;padding:38px;min-width:0}.page-heading{position:relative;isolation:isolate;overflow:hidden;margin-bottom:30px;padding:30px;border:1px solid #e7c88a30;border-radius:18px;background:radial-gradient(ellipse at 100% 0,#b2935524,transparent 65%),linear-gradient(120deg,#172333,#101a28)}.page-heading:after{content:"";position:absolute;z-index:-1;right:-65px;top:-165px;width:350px;height:350px;border:1px solid #e7c88a1c;border-radius:50%;box-shadow:0 0 0 28px #e7c88a05,0 0 0 58px #e7c88a04;pointer-events:none}h1{font-family:ui-serif,Georgia,"Times New Roman",serif;font-size:clamp(27px,3vw,40px);line-height:1.2;font-weight:650;letter-spacing:-1px;margin:10px 0 12px;overflow-wrap:anywhere}.page-heading p{color:var(--muted);max-width:720px;margin:0}h2{font-size:19px;line-height:1.4;letter-spacing:-.3px;margin:34px 0 16px;display:flex;align-items:center;gap:12px}h2:before{content:"";height:18px;width:3px;flex-shrink:0;border-radius:3px;background:var(--accent)}h3{font-size:16px;margin:0 0 14px}p{overflow-wrap:anywhere}small,.muted{color:var(--muted)}.content>p:first-child{color:var(--muted)}.notice{padding:17px 20px;border:1px solid #a2814b66;border-left:3px solid var(--gold);border-radius:0 12px 12px 0;background:#f3ca8708;color:#eed7b5;margin:20px 0}.content>section{padding:24px;background:linear-gradient(145deg,#162333,#101b29);border:1px solid var(--line);border-radius:var(--radius);margin:18px 0}.content>section h2:first-child{margin-top:0}
 form{padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin:20px 0;box-shadow:0 8px 25px #00000015}label{display:block;color:var(--muted);font-size:13px;font-weight:550;margin:0 0 18px;overflow-wrap:anywhere}input:not([type=hidden]):not([type=checkbox]),select,textarea{display:block;width:100%;max-width:660px;margin-top:8px;padding:12px 14px;border:1px solid #42566d;border-radius:9px;background:#0a1421;color:var(--text);min-height:46px}input[type=checkbox]{accent-color:var(--accent);width:18px;height:18px;vertical-align:middle;margin-right:9px}select{white-space:normal}textarea{resize:vertical;min-height:110px}button{padding:11px 19px;border:1px solid #e7c88a;border-radius:9px;background:linear-gradient(135deg,#f5dfb1,#d2af6c);color:#292011;font-weight:700;cursor:pointer;min-height:44px;max-width:100%;white-space:normal}button:hover{background:#fff0d1;box-shadow:0 3px 18px #e7c88a20}button:disabled{opacity:.55;cursor:not-allowed}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:22px;background:#080f19;border:1px solid var(--line);border-radius:12px;font:13px/1.8 ui-monospace,SFMono-Regular,Consolas,monospace}code{overflow-wrap:anywhere;font-size:.9em}.table-scroll{overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:var(--radius);margin:20px 0;background:var(--surface)}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{text-align:left;padding:16px 18px;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--line)}th{background:#1b2a3b;color:#c1d2e5;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:700}td{font-size:13px}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#e7c88a05}td a{font-weight:550}caption{text-align:left;padding:16px}.empty-state{padding:48px 25px;text-align:center;border:1px dashed #496176;border-radius:var(--radius);background:linear-gradient(145deg,#132331,#101a28)}.empty-state h2{display:block;margin:10px 0}.empty-state h2:before{display:none}.empty-state p{color:var(--muted);max-width:450px;margin:12px auto}.empty-mark{display:inline-grid;place-items:center;font-size:25px;color:var(--accent);width:58px;height:58px;background:#e7c88a12;border:1px solid #e7c88a50;border-radius:16px}.case-state{padding:15px 18px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--muted)}.case-links{display:flex;flex-wrap:wrap;gap:9px;align-items:center;color:transparent;font-size:0}.case-links a{font-size:12px;text-decoration:none;padding:9px 13px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--blue)}.case-links a:hover{border-color:var(--accent);color:var(--accent)}.footer{padding:25px 0;color:var(--muted);font-size:11px;letter-spacing:.3px;border-top:1px solid var(--line);margin-top:38px}.auth-shell .sidebar{height:auto;position:relative;overflow:hidden;background:radial-gradient(ellipse at 50% 35%,#a4874520,transparent 65%),#0c1521}.guardian-art{margin:auto 0;color:var(--accent);text-align:center}.guardian-art svg{width:100%;max-width:200px;opacity:.75}.guardian-art p{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);line-height:2.4}.auth-shell .workspace{display:flex;flex-direction:column;justify-content:center}.auth-shell main{max-width:850px}.auth-shell .topbar{display:none}
 
-.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:22px 0}.metric,.source-card,.action-card{min-width:0;padding:21px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#192a3b,#111c2a)}.metric dt{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}.metric dd{font-size:28px;line-height:1.3;margin:9px 0 5px;font-weight:650;color:var(--accent);min-width:0;overflow-wrap:anywhere}.metric dd.metric-detail{font-size:11px;font-weight:400;color:var(--muted);line-height:1.5}.metric small{display:block;font-size:11px}.section-nav{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0}.section-nav a,.button-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;min-height:44px;padding:9px 14px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-size:12px;font-weight:650}.button-link.primary{background:var(--accent);border-color:var(--accent);color:#292011}.action-grid,.source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.action-card h3,.source-card h3{margin:0 0 9px}.action-card p,.source-card p{color:var(--muted);font-size:12px}.source-card dl{display:grid;grid-template-columns:minmax(105px,.8fr) minmax(0,1.2fr);gap:9px;font-size:12px}.source-card dt{color:var(--muted)}.source-card dd{margin:0;overflow-wrap:anywhere}.status{display:inline-flex;align-items:center;gap:7px;border:1px solid #56758f;border-radius:30px;padding:4px 10px;font-size:11px;font-weight:650;background:#b7d5fa0a;color:var(--blue);white-space:normal}.status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}.status.attention{color:#f3ce96;border-color:#846a43;background:#f3ca870a}.status.neutral{color:#c0ccd9;border-color:#526274;background:#a9bacd08}.card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.card-header p{margin:0}.workflow-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));list-style:none;padding:0;gap:12px;margin:22px 0;counter-reset:stages}.workflow-stages li{counter-increment:stages;padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.workflow-stages li:before{content:counter(stages,decimal-leading-zero);display:block;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:10px}.workflow-stages strong{display:block;font-size:13px}.workflow-stages small{display:block;font-size:11px;margin-top:5px}.result-panel{border:1px solid #e7c88a60;border-radius:14px;padding:22px;margin:24px 0;background:#e7c88a08}.result-panel h2{margin-top:0}.result-links{display:flex;flex-wrap:wrap;gap:12px}.section-heading{scroll-margin-top:24px}.bounded-note{font-size:11px;color:var(--muted)}
+.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:22px 0}.metric,.source-card,.action-card{min-width:0;padding:21px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,#192a3b,#111c2a)}.metric dt{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}.metric dd{font-size:28px;line-height:1.3;margin:9px 0 5px;font-weight:650;color:var(--accent);min-width:0;overflow-wrap:anywhere}.metric dd.metric-detail{font-size:11px;font-weight:400;color:var(--muted);line-height:1.5}.metric small{display:block;font-size:11px}.section-nav{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0}.section-nav a,.button-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;min-height:44px;padding:9px 14px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-size:12px;font-weight:650}.button-link.primary{background:var(--accent);border-color:var(--accent);color:#292011}.action-grid,.source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.action-card h3,.source-card h3{margin:0 0 9px}.action-card p,.source-card p{color:var(--muted);font-size:12px}.source-card dl{display:grid;grid-template-columns:minmax(105px,.8fr) minmax(0,1.2fr);gap:9px;font-size:12px}.source-card dt{color:var(--muted)}.source-card dd{margin:0;overflow-wrap:anywhere}.status{display:inline-flex;align-items:center;gap:7px;border:1px solid #56758f;border-radius:30px;padding:4px 10px;font-size:11px;font-weight:650;background:#b7d5fa0a;color:var(--blue);white-space:normal}.status:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}.status.attention{color:#f3ce96;border-color:#846a43;background:#f3ca870a}.status.neutral{color:#c0ccd9;border-color:#526274;background:#a9bacd08}.card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.card-header p{margin:0}.workflow-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));list-style:none;padding:0;gap:12px;margin:22px 0;counter-reset:stages}.workflow-stages li{counter-increment:stages;padding:17px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.onboarding{padding:20px;border:1px solid #e7c88a60;border-radius:14px;background:#e7c88a08}.onboarding summary{cursor:pointer;font-weight:750;color:var(--accent)}.onboarding ol{margin-bottom:0;padding-inline-start:24px}.onboarding li{margin:12px 0}.workflow-stages li:before{content:counter(stages,decimal-leading-zero);display:block;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:10px}.workflow-stages strong{display:block;font-size:13px}.workflow-stages small{display:block;font-size:11px;margin-top:5px}.result-panel{border:1px solid #e7c88a60;border-radius:14px;padding:22px;margin:24px 0;background:#e7c88a08}.result-panel h2{margin-top:0}.result-links{display:flex;flex-wrap:wrap;gap:12px}.section-heading{scroll-margin-top:24px}.bounded-note{font-size:11px;color:var(--muted)}
 @media(max-width:1000px){.summary-grid,.workflow-stages{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.summary-grid{gap:10px}.metric{padding:16px}.metric dd{font-size:24px}.action-grid,.source-grid{grid-template-columns:1fr}.source-card,.action-card{padding:18px}.workflow-stages{gap:9px}.workflow-stages li{padding:14px}.source-card dl{grid-template-columns:minmax(90px,.8fr) minmax(0,1.2fr)}}
 @media(max-width:380px){.summary-grid{grid-template-columns:1fr}}
@@ -109,6 +109,21 @@ def status_badge(value,*,attention=False,neutral=False):
 def action_card(title,description,path,label):
     return '<article class="action-card"><h3>'+e(title)+'</h3><p>'+e(description)+'</p><a class="button-link" href="'+e(path)+'">'+e(label)+' <span aria-hidden="true">↗</span></a></article>'
 
+
+
+def getting_started(role):
+    case_action = ('<a href="/cases">Open an assigned case</a>' if role == 'viewer'
+                   else '<a href="/cases/new">Create an investigation</a> or <a href="/cases">open a case</a>')
+    browser_action = ('Ask your operator to connect an approved browser tab to the case.' if role == 'viewer'
+                      else 'In Gabriel Setup, choose <strong>Connect Chrome or Brave</strong>. Load the extension, select the approved tab and pair it to your case.')
+    return (
+        '<ol><li><strong>Start with a case.</strong> ' + case_action + ' to organize evidence and questions.</li>'
+        '<li><strong>Connect your browser if the case needs it.</strong> ' + browser_action +
+        ' Check the connection in <a href="/sources">Browser health</a>.</li>'
+        '<li><strong>Investigate.</strong> Open the case and select Specialist AI agents to reach local tools, '
+        'or use Hermes supervisor to check readiness for an AI investigation. '
+        'Review the evidence and coverage before drawing conclusions.</li></ol>'
+    )
 
 def source_cards(result):
     rows=result['sources']
@@ -207,6 +222,7 @@ class Workbench:
 
     def _page(self,title,body,principal=None):
         descriptions={
+            'Getting started':'Set up the case, connect the sources you need and choose the right tools.',
             'Investigations':'Follow the evidence. Keep decisions grounded in what has been observed.',
             'New investigation':'Start with a clear question. Build the evidence trail as your investigation develops.',
             'Connect to your workbench':'Your private workspace for evidence-led investigation.',
@@ -223,11 +239,11 @@ class Workbench:
         }
         navigation=''
         if principal:
-            items=[('/cases','Cases','▦'),('/sources','Browser health','◎'),('/spending','AI spending','$')]
+            items=[('/cases','Cases','▦'),('/getting-started','Getting started','↳'),('/sources','Browser health','◎'),('/spending','AI spending','$')]
             if principal.role!='viewer': items.extend([('/cases/new','New case','+'),('/audit','Audit','≡')])
             if principal.role!='viewer': items.append(('/personal-providers','My AI key','◇'))
             if principal.role in {'owner','admin'}: items.extend([('/providers','Organization AI keys','◇'),('/members','Team members','♙')])
-            active={'Browser health and coverage':'/sources','AI spending':'/spending','New investigation':'/cases/new',
+            active={'Getting started':'/getting-started','Browser health and coverage':'/sources','AI spending':'/spending','New investigation':'/cases/new',
                 'Audit activity':'/audit','Your AI keys':'/providers','My AI key':'/personal-providers','Team members':'/members'}.get(title,'/cases')
             navigation='<div><span class="nav-label">Workspace</span><nav aria-label="Main navigation">'+''.join(
                 '<a href="'+path+'"'+(' aria-current="page"' if path==active else '')+'><span class="nav-icon" aria-hidden="true">'+icon+'</span>'+label+'</a>'
@@ -269,11 +285,20 @@ class Workbench:
 
     def _route(self,environ):
         method,path=environ['REQUEST_METHOD'],environ['PATH_INFO']
+        # Let a user open the blank claim page from the local launcher without
+        # admitting cross-site form submissions or access to the signed-in workbench.
+        launcher_navigation = (
+            method == 'GET' and path == '/claim'
+            and environ.get('HTTP_SEC_FETCH_MODE') == 'navigate'
+            and environ.get('HTTP_SEC_FETCH_DEST') == 'document'
+            and environ.get('HTTP_SEC_FETCH_USER') == '?1'
+        )
         if (environ.get('wsgi.url_scheme')!='https' or environ.get('HTTP_HOST')!=urlsplit(self.target).netloc
                 or environ.get('QUERY_STRING') or environ.get('HTTP_FORWARDED') or any(k.startswith('HTTP_X_FORWARDED_') for k in environ)
                 or environ.get('HTTP_CONTENT_ENCODING') or environ.get('HTTP_TRANSFER_ENCODING')
                 or (method=='GET' and environ.get('CONTENT_LENGTH','') not in {'','0'})
-                or environ.get('HTTP_SEC_FETCH_SITE') in {'cross-site','same-site'} or method not in {'GET','POST'}):
+                or (environ.get('HTTP_SEC_FETCH_SITE') in {'cross-site','same-site'} and not launcher_navigation)
+                or method not in {'GET','POST'}):
             raise AccessDenied('workbench_boundary_denied')
         fields={}
         if method=='POST':
@@ -289,6 +314,8 @@ class Workbench:
             self._claimed=True
             return '303 See Other',b'',[('Location','/cases'),('Set-Cookie',COOKIE+'='+self._cookie+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=600')]
         principal=self._authenticate(environ)
+        if method=='GET' and path=='/getting-started':
+            return '200 OK',self._page('Getting started','<section>'+getting_started(principal.role)+'</section>',principal),[]
         if path in {'/members','/members/create'}:
             if principal.role not in {'owner','admin'}:raise AccessDenied('operation_not_permitted')
             if method=='POST':
@@ -499,6 +526,9 @@ class Workbench:
             body+=table(['Case','State','Created'],[(f'<a href="/cases/{e(row["id"])}">{e(row["title"])}</a>',e(row['state']),e(row['created_at'])) for row in rows]) if rows else '<div class="empty-state"><span class="empty-mark" aria-hidden="true">◇</span><h2>Your investigation workspace</h2><p id="empty">No cases yet.</p><p>Cases bring evidence, questions and review history together in one place.</p></div>'
             body=metrics([('Investigations displayed',len(rows),'Latest 100 cases in this view'),('Open cases',sum(row['state']=='open' for row in rows),'In the displayed case list'),('Other case states',sum(row['state']!='open' for row in rows),'Historical case records'),('Assessment','Not inferred','Open each case to inspect recorded reviews')])+('<p><a class="button-link primary" href="/cases/new">Start an investigation</a></p>' if principal.role!='viewer' else '')+body
             body+='<p class="muted">Showing up to 100 most recently created cases.</p>'
+            if not rows:
+                body = ('<details class="onboarding" open><summary>Welcome to Gabriel · 3 steps to get started</summary>'
+                        + getting_started(principal.role) + '</details>') + body
             return '200 OK',self._page('Investigations',body,principal),[]
         if path=='/cases/new' and method=='GET':
             if principal.role=='viewer': raise AccessDenied('operation_not_permitted')

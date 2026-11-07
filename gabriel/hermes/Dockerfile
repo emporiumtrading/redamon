@@ -6,6 +6,8 @@ RUN /opt/hermes/.venv/bin/python /prepare-runtime.py
 
 FROM python@sha256:bc62fbcb684904b1bb81a6240041bb60e9c1ee19ddeaf17a6b4297e1cc9c95d2
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 HOME=/tmp HERMES_HOME=/tmp HERMES_DISABLE_LAZY_INSTALLS=1
+# Keep the signed Alpine stable package above the CVE-2026-4738 fix floor.
+RUN apk add --no-cache 'zlib>=1.4-r0'
 # Hermes retains SQLite for its native runtime. Fetch only the signed library
 # package from Alpine edge and resolve installation against the existing image.
 RUN set -eux; \
@@ -17,7 +19,9 @@ RUN set -eux; \
 RUN python - <<'PY'
 import shutil
 import sqlite3
+import zlib
 
+assert zlib.decompress(zlib.compress(b"Gabriel")) == b"Gabriel"
 assert sqlite3.sqlite_version == "3.54.1"
 assert shutil.which("sqlite3") is None
 with sqlite3.connect(":memory:") as db:
