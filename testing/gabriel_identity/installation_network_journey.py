@@ -28,7 +28,7 @@ def main():
         assert probe['user']=='10001:10001' and probe['read_only'] and probe['cap_drop']==['ALL']
         assert not any(probe.get(key) for key in ('secrets','volumes','ports','environment','cap_add'))
         app.start_db()
-        ready=app.compose('exec','-T','identity-db','pg_isready','-h','127.0.0.1','-U','postgres','-d','gabriel')
+        ready=app.compose('exec','-T','identity-db','pg_isready','-h','identity-db','-U','postgres','-d','gabriel')
         assert b'accepting connections' in ready
         merged=root/'blocked-installation.json'
         merged.write_text(json.dumps(config))
