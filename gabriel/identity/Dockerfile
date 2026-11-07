@@ -1,5 +1,9 @@
 ARG IDENTITY_BASE=python@sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211
-FROM ${IDENTITY_BASE} AS socket-backport
+FROM ${IDENTITY_BASE} AS identity-base
+# Keep the signed Alpine stable package above the CVE-2026-4738 fix floor.
+RUN apk add --no-cache 'zlib>=1.4-r0'
+
+FROM identity-base AS socket-backport
 WORKDIR /build
 COPY gabriel/identity/cpython-getaddrinfo.patch /build/cpython-getaddrinfo.patch
 # Match the pinned image's interpreter and verify the official source archive.
@@ -15,12 +19,12 @@ RUN set -eux; \
     cc -shared -fPIC -O2 $(python3-config --includes) -I Include/internal \
         -o "/patched/lib/python3.15/lib-dynload/_socket$(python3-config --extension-suffix)" Modules/socketmodule.c
 
-FROM ${IDENTITY_BASE} AS patched-python
+FROM identity-base AS patched-python
 COPY --from=socket-backport /patched/ /usr/local/
 RUN --mount=type=bind,source=gabriel/identity/verify_resolver_backport.py,target=/verify-resolver.py \
     python /verify-resolver.py
 
-FROM ${IDENTITY_BASE} AS dependencies
+FROM identity-base AS dependencies
 WORKDIR /build
 COPY gabriel/identity/requirements.txt /build/requirements.txt
 RUN apk add --no-cache build-base \
@@ -97,7 +101,7 @@ RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for
 USER 10001:10001
 ENTRYPOINT ["python", "tooling/scripts/pytest_isolated.py", "all", "testing/gabriel_identity", "--strict", "--parallel", "1"]
 
-FROM ${IDENTITY_BASE} AS checkpoint-signer
+FROM identity-base AS checkpoint-signer
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 RUN pip install --no-cache-dir cryptography==50.0.2
@@ -153,6 +157,6 @@ RUN python -m pip uninstall --yes setuptools wheel pip \
     && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
 RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-data"]
 RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
-RUN ["python", "-c", "import shutil,ssl; assert ssl.create_default_context().cert_store_stats()['x509_ca'] > 0; assert all(shutil.which(n) is None for n in ('busybox','wget','ssl_client','gcc','cc')); import psycopg,argon2,cryptography,gunicorn,yara,dpkt"]
+RUN ["python", "-c", "import shutil,ssl,zlib; assert zlib.decompress(zlib.compress(b'Gabriel')) == b'Gabriel'; assert ssl.create_default_context().cert_store_stats()['x509_ca'] > 0; assert all(shutil.which(n) is None for n in ('busybox','wget','ssl_client','gcc','cc')); import psycopg,argon2,cryptography,gunicorn,yara,dpkt"]
 USER 10001:10001
 
