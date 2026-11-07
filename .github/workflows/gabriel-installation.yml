@@ -4,6 +4,7 @@ on:
     paths:
       - 'gabriel/identity/**'
       - 'compose.gabriel-installation.yml'
+      - 'compose.gabriel-installation-tls.yml'
       - 'tooling/scripts/gabriel_install.py'
       - 'tooling/scripts/gabriel_setup.py'
       - 'Gabriel-Setup.command'

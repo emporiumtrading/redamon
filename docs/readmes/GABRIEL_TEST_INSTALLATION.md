@@ -32,6 +32,14 @@ python3 tooling/scripts/gabriel_install.py open "$HOME/gabriel-private-test"
 
 `initialize` prompts privately for an owner password and stores only its Argon2 hash in PostgreSQL. Enrollment is single-use and refuses an existing organization; uncertain enrollment state is left for operator inspection. There is no default owner password. `open` asks for the same password, revokes the previous workbench's authority and prints a new access ticket. Open the displayed `https://localhost:8444/claim` promptly and enter that ticket. It is a secret: do not place it in a URL, logs, screenshots or tickets. The claim expires after 60 seconds and the workbench session after ten minutes. Re-run `open` for a fresh authenticated session; no automatic authority renewal or unattended continuous monitoring is provided. After 128 session directories, operator cleanup/review is required rather than unbounded enrollment storage.
 
+## Verified private transport
+
+Gabriel Setup, the workbench and the browser gateway use HTTPS on loopback. The installation also requires TLS between containers. The workbench verifies HTTPS for Hermes and the investigation toolbox. PostgreSQL connections use `verify-full`, and the server rejects unencrypted TCP connections. Database administration inside the database container uses a Unix socket.
+
+The installer generates a separate private service CA and one server key per service. Your browser trusts only `tls/ca.pem`. Each internal service receives its own key and the public internal CA as needed. The internal CA key is discarded. Provider HTTPS remains opt-in and uses the operating trust store.
+
+For an enrolled installation from an older image, use the backed-up `rebuild` command below. It closes the existing listeners and configures database TLS before taking the backup. For an empty lab, prepare a new directory. The launcher requires the secured installation before enabling setup. Rotate internal certificates with `python3 tooling/scripts/gabriel_install.py renew-transport "$HOME/gabriel-private-test"` within their 90-day lifetime. Rotation stops the lab and uses the same volumes. Reopen with the launcher afterward.
+
 ## Diagnose installation networking
 
 ```bash

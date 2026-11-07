@@ -41,6 +41,56 @@ MOUNTS={'identity-db':{'/var/lib/postgresql/data':('volume',True),'/run/secrets/
 
 
 
+TRANSPORT_ENV={'PGSSLMODE':'verify-full','PGGSSENCMODE':'disable','PGSSLROOTCERT':'/run/secrets/transport_ca'}
+TRANSPORT_MOUNTS={
+    'identity-db':{'/run/secrets/transport_ca':'transport/ca.pem',
+        '/run/secrets/identity_db_tls_certificate':'transport/identity-db.pem',
+        '/run/secrets/identity_db_tls_key':'transport/identity-db.key',
+        '/run/secrets/transport_pg_hba':'transport/pg_hba.conf'},
+    'workbench':{'/run/secrets/transport_ca':'transport/ca.pem'},
+    'browser-gateway':{'/run/secrets/transport_ca':'transport/ca.pem'},
+    **{service:{'/run/secrets/transport_ca':'transport/ca.pem',
+                '/run/secrets/service_tls_certificate':f'transport/{service}.pem',
+                '/run/secrets/service_tls_key':f'transport/{service}.key'}
+        for service in ('hermes','investigation-tools')},
+}
+
+TRANSPORT_CHECK = """import http.client,json,os,ssl
+import psycopg
+from gabriel.identity.cli import read_secret
+from gabriel.identity.service import connection
+
+ca='/run/secrets/transport_ca'
+assert os.environ['PGSSLMODE']=='verify-full' and os.environ['PGSSLROOTCERT']==ca
+assert os.environ['PGGSSENCMODE']=='disable' and os.environ['GABRIEL_TOOL_TLS_CA']==ca
+with connection(read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE'])) as db:
+    assert db.execute('SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()').fetchone()['ssl']
+try:
+    with psycopg.connect(host='identity-db',dbname='gabriel',user='gabriel_transport_probe',
+                         password='',sslmode='disable',gssencmode='disable',connect_timeout=3):
+        raise AssertionError('plaintext database connection admitted')
+except psycopg.OperationalError as exc:
+    assert 'pg_hba.conf rejects connection' in str(exc) and 'no encryption' in str(exc)
+context=ssl.create_default_context(cafile=ca)
+for service,port in (('hermes',8451),('investigation-tools',8450)):
+    with_tls=http.client.HTTPSConnection(service,port,context=context,timeout=3)
+    try:
+        with_tls.request('GET','/health')
+        assert with_tls.getresponse().status==200
+    finally:with_tls.close()
+    clear=http.client.HTTPConnection(service,port,timeout=3)
+    try:
+        clear.request('GET','/health')
+        clear.getresponse()
+    except (OSError,http.client.RemoteDisconnected):
+        pass
+    else:
+        raise AssertionError('plaintext tool connection admitted')
+    finally:clear.close()
+print(json.dumps({'postgres_tls':True,'hermes_https':True,'toolbox_https':True,'plaintext_denied':True}))
+"""
+
+
 def require(condition,code):
     if not condition:raise ValueError(code)
 
@@ -84,6 +134,8 @@ def assess(config,containers,networks,*,provider_egress=False,mount_profile=NATI
     require(type(provider_egress) is bool,'invalid_egress_policy')
     require(mount_profile in {NATIVE_MOUNTS,DESKTOP_MOUNTS},'invalid_mount_source_profile')
     require(re.fullmatch('sha256:[a-f0-9]{64}',config['image']) is not None,'invalid_image_identity')
+    transport=config.get('private_transport',False)
+    require(type(transport) is bool,'invalid_transport_profile')
     root=Path(config['installation_root'])
     require(root.is_absolute() and str(root)==config['installation_root'] and '..' not in root.parts,'invalid_installation_root')
     by_service={}
@@ -110,6 +162,7 @@ def assess(config,containers,networks,*,provider_egress=False,mount_profile=NATI
                 and not cfg.get('Cmd'),'browser_entrypoint_changed')
             environment=environment_map(cfg.get('Env'))
             expected_environment=dict(environment_map(config.get('browser_image_environment')))
+            if transport and service=='browser-gateway':expected_environment.update(TRANSPORT_ENV)
             expected_environment.update({'GABRIEL_IDENTITY_DSN_FILE':'/run/secrets/app_dsn',
                 'GABRIEL_EVIDENCE_KEYRING_FILE':'/run/secrets/evidence_keyring','GABRIEL_EVIDENCE_ROOT':'/var/lib/gabriel-evidence'}
                 if service=='browser-gateway' else {'GABRIEL_BROWSER_EXPIRES_AT':config['browser_expires_at']})
@@ -132,17 +185,21 @@ def assess(config,containers,networks,*,provider_egress=False,mount_profile=NATI
             else:require(set(temporary)=={'/tmp'} and {'noexec','nosuid'}<=set(temporary['/tmp'].split(',')),'temporary_mount_hardening_missing')
             require(type(host.get('Memory')) is int and host['Memory']>0 and host.get('PidsLimit',0)>0,'resource_limits_missing')
         mounts=row.get('Mounts',[])
+        scoped=TRANSPORT_MOUNTS.get(service,{}) if transport else {}
+        expected_mounts={**MOUNTS.get(service,{}),**{target:('bind',False) for target in scoped}}
         targets=[m.get('Destination') for m in mounts]
-        require(len(set(targets))==len(targets) and set(MOUNTS.get(service,{}))<=set(targets),'required_mounts_missing')
+        require(len(set(targets))==len(targets) and set(expected_mounts)<=set(targets),'required_mounts_missing')
         for mount in mounts:
             target=mount.get('Destination')
-            if mount.get('Type')=='tmpfs' and target=='/tmp':continue
-            expected=MOUNTS.get(service,{}).get(target)
+            if mount.get('Type')=='tmpfs' and (target=='/tmp' or transport and service=='identity-db' and target=='/run/gabriel-tls'):
+                continue
+            expected=expected_mounts.get(target)
             require(expected is not None and (mount.get('Type'),mount.get('RW'))==expected,'unexpected_mount')
             if expected[0]=='bind':
-                sources={str(root/BIND_FILES[target])}
+                binding=root/(scoped[target] if target in scoped else BIND_FILES[target])
+                sources={str(binding)}
                 if mount_profile==DESKTOP_MOUNTS:
-                    sources.add('/host_mnt'+str(root/BIND_FILES[target]))
+                    sources.add('/host_mnt'+str(binding))
                 require(mount.get('Source') in sources,'secret_mount_source_changed')
             else:
                 require(mount.get('Name')==config['project']+'_'+VOLUME_NAMES[target],'persistent_volume_changed')
@@ -168,6 +225,7 @@ def assess(config,containers,networks,*,provider_egress=False,mount_profile=NATI
 def collect(root,*,provider_egress=False):
     from gabriel_install import Installation,run
     app=Installation(root)
+    app.require_transport()
     engine=json.loads(run(['docker','info','--format','{{json .}}']))
     host_system=platform.system()
     mount_profile=mount_source_profile(host_system,engine)
@@ -184,7 +242,10 @@ def collect(root,*,provider_egress=False):
     browser=dict(browser_port=browser_state['port'],browser_expires_at=browser_state['expires_at']) if browser_state else {}
     if browser:
         browser['browser_image_environment']=json.loads(run(['docker','image','inspect',app.config['image']]))[0]['Config']['Env']
-    report=assess(dict(app.config,installation_root=str(root.resolve()),hermes_image=hermes_image,**browser),containers,networks,provider_egress=provider_egress,mount_profile=mount_profile)
+    report=assess(dict(app.config,installation_root=str(root.resolve()),hermes_image=hermes_image,private_transport=True,**browser),containers,networks,provider_egress=provider_egress,mount_profile=mount_profile)
+    transport=json.loads(app.compose('exec','-T','workbench','python','-c',TRANSPORT_CHECK))
+    require(transport=={'postgres_tls':True,'hermes_https':True,'toolbox_https':True,'plaintext_denied':True},'private_transport_verification_failed')
+    report['private_transport']=transport
     supervisor=json.loads(app.compose('exec','-T','workbench','python','-c',
         'import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))'))
     require(supervisor.get('status')=='ready' and re.fullmatch('[a-f0-9]{64}',supervisor.get('runtime_digest','')),'hermes_source_binding_failed')
@@ -235,4 +296,3 @@ if __name__=='__main__':
     except Exception:
         print('Runtime acceptance collection failed; inspect the local installation. No release approval was granted.',file=sys.stderr)
         raise SystemExit(2)
-

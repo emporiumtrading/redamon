@@ -24,9 +24,18 @@ class BrowserInstallation(unittest.TestCase):
         self.root=Path(self.temporary.name)
         self.app=installer.Installation.__new__(installer.Installation)
         self.app.root=self.root;self.app.env={};self.app.config={'port':8444,'project':'generated'}
+        self.app.transport=True
+        self.app.require_transport=MagicMock()
         self.app.compose=MagicMock();self.app.start_db=MagicMock()
         self.app.browser_image_supported=MagicMock(return_value=True)
         self.app.operator=MagicMock(return_value={'revocation_confirmed':True})
+
+    def test_legacy_stop_closes_services_without_opening_plaintext_database(self):
+        self.app.transport=False
+        self.app.stop()
+        self.app.start_db.assert_not_called()
+        self.app.operator.assert_not_called()
+        self.assertEqual(self.app.compose.call_args_list[-1].args,('stop','hermes','investigation-tools','identity-db'))
 
     def test_controls_file_requires_private_file_and_parent(self):
         path=self.root/'reviewed-controls.json'
@@ -233,5 +242,3 @@ class BrowserInstallation(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
-
-
