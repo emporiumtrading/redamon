@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local Docker test installation controller. Requires Python 3 and Docker Compose v2."""
 import argparse
+from contextlib import contextmanager,nullcontext
 import fcntl
 import getpass
 from hashlib import sha256
@@ -179,6 +180,13 @@ class Installation:
         return value['result']
 
     def start_db(self): self.compose('up','-d','--wait','identity-db')
+
+    @contextmanager
+    def operation(self):
+        fd=os.open(self.root/'operation.lock',os.O_WRONLY|os.O_CREAT|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,'a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            yield
 
     @staticmethod
     def setup_failure(exc):
@@ -455,9 +463,7 @@ def main():
                 print('Preparing the private Docker lab. The first build may take several minutes.',file=sys.stderr,flush=True)
                 prepare(root,args.port,args.image)
             installation=Installation(root)
-            fd=os.open(root/'operation.lock',os.O_WRONLY|os.O_CREAT|os.O_NOFOLLOW,0o600)
-            with os.fdopen(fd,'a') as lock:
-                fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            with (nullcontext() if args.command=='setup' else installation.operation()):
                 if args.command=='setup':
                     from gabriel_setup import launch
                     result=launch(installation)

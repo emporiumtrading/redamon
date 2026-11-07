@@ -1,4 +1,5 @@
 """Exercise the actual host controller, fresh Docker services and HTTPS UI privately."""
+from contextlib import contextmanager
 import http.client
 import json
 import os
@@ -29,46 +30,56 @@ def request(root,port,path,fields=None,cookie=None,*,host='localhost',timeout=10
     finally: client.close()
 
 
-def setup_ticket(app, password, action):
+@contextmanager
+def running_setup(app):
     with SetupServer(app) as wizard:
         server = Thread(target=wizard.run, daemon=True)
         server.start()
         try:
-            def submit(fields, headers=None):
-                return request(app.root, wizard.server_port, '/start', fields,
-                               host='127.0.0.1', timeout=420, extra_headers=headers)
-
-            fields = dict(setup_key=wizard.key, action=action, organization='Generated installation lab',
-                          username='owner', password=password)
-            status, html, headers = request(app.root, wizard.server_port, '/', host='127.0.0.1')
-            assert status == 200 and wizard.key not in html
-            assert headers['Cache-Control'] == 'no-store'
-            assert "frame-ancestors 'none'" in headers['Content-Security-Policy']
-            assert submit(fields, {'Host': 'localhost'})[0] == 403
-            assert submit(fields, {'Origin': 'null'})[0] == 403
-            assert submit(dict(fields, setup_key='invalid'))[0] == 403
-            if action == 'create':
-                status, html, _ = submit(dict(fields, password='weak'))
-                assert status == 400 and 'at least 16 characters' in html
-                assert not wizard.owner_created
-            status, html, _ = submit(fields)
-            assert status == 200, 'setup did not open the workbench'
-            assert 'Gabriel is ready' in html and f'https://localhost:{app.config["port"]}/claim' in html
-            assert password not in html and wizard.key not in html
-            return re.search(r'id="ticket" value="([A-Za-z0-9_-]+)"', html)[1]
+            yield wizard
         finally:
             wizard.finished = True
             server.join(timeout=10)
             assert not server.is_alive()
 
 
+def setup_ticket(app, password, action):
+    with running_setup(app) as wizard:
+        def submit(fields, headers=None):
+            return request(app.root, wizard.server_port, '/start', fields,
+                           host='127.0.0.1', timeout=420, extra_headers=headers)
+
+        fields = dict(setup_key=wizard.key, action=action, organization='Generated installation lab',
+                      username='owner', password=password)
+        status, html, headers = request(app.root, wizard.server_port, '/', host='127.0.0.1')
+        assert status == 200 and wizard.key not in html
+        assert headers['Cache-Control'] == 'no-store'
+        assert "frame-ancestors 'none'" in headers['Content-Security-Policy']
+        assert submit(fields, {'Host': 'localhost'})[0] == 403
+        assert submit(fields, {'Origin': 'null'})[0] == 403
+        assert submit(dict(fields, setup_key='invalid'))[0] == 403
+        if action == 'create':
+            status, html, _ = submit(dict(fields, password='weak'))
+            assert status == 400 and 'at least 16 characters' in html
+            assert not wizard.owner_created
+        status, html, _ = submit(fields)
+        assert status == 200, 'setup did not open the workbench'
+        assert 'Gabriel is ready' in html and f'https://localhost:{app.config["port"]}/claim' in html
+        assert password not in html and 'Connect Chrome or Brave' in html
+        return re.search(r'id="ticket" value="([A-Za-z0-9_-]+)"', html)[1]
+
+
 def connect(root,app,password,*,ticket=None):
     if ticket is None:
         ticket=app.open(password)['ticket']
     port=app.config['port']
-    code,html,_=request(root,port,'/claim');assert code==200
+    navigation = {'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'navigate',
+                  'Sec-Fetch-Dest': 'document', 'Sec-Fetch-User': '?1'}
+    assert request(root,port,'/claim',extra_headers={'Sec-Fetch-Site': 'cross-site'})[0]==403
+    code,html,_=request(root,port,'/claim',extra_headers=navigation);assert code==200
     csrf=re.search(r'name="csrf" value="([A-Za-z0-9_-]+)"',html)[1]
     assert request(root,port,'/claim',dict(csrf='wrong',ticket=ticket))[0]==403
+    assert request(root,port,'/claim',dict(csrf=csrf,ticket=ticket),extra_headers=navigation)[0]==403
     code,_,headers=request(root,port,'/claim',dict(csrf=csrf,ticket=ticket));assert code==303
     cookie=headers['Set-Cookie'].split(';',1)[0]
     assert all(part in headers['Set-Cookie'] for part in ('Secure','HttpOnly','SameSite=Strict'))
@@ -120,6 +131,11 @@ def main():
         else: raise AssertionError('duplicate initialization admitted')
         cookie,csrf=connect(root,app,secret,ticket=ticket)
         assert request(root,18444,'/providers',cookie=cookie)[0]==200
+        assert request(root,18444,'/getting-started')[0]==403
+        status, html, _ = request(root,18444,'/cases',cookie=cookie)
+        assert status == 200 and '3 steps to get started' in html and '/getting-started' in html
+        status, html, _ = request(root,18444,'/getting-started',cookie=cookie)
+        assert status == 200 and all(label in html for label in ('Create an investigation', 'Connect Chrome or Brave', 'Investigate.'))
         tooling=json.loads(app.compose('exec','-T','workbench','python','-c',"import json; from gabriel.identity.investigation_tools import remote; print(json.dumps(remote('inspect_toolkit')))"))
         assert tooling['status']=='ready' and tooling['packaged_tools_ready']
         supervisor=json.loads(app.compose('exec','-T','workbench','python','-c',"import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))"))

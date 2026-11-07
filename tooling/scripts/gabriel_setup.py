@@ -2,6 +2,7 @@
 from hashlib import sha256
 from html import escape
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
 from pathlib import Path
 import re
 import secrets
@@ -11,17 +12,23 @@ import sys
 from tempfile import TemporaryDirectory
 from time import monotonic
 from urllib.parse import parse_qs
+from uuid import UUID
 import webbrowser
+
+from gabriel_provider_keys import unique
 
 SETUP_SECONDS = 900
 FORM_LIMIT = 16384
+OPERATION_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError, subprocess.SubprocessError)
 SCRIPT = """
-const form = document.querySelector('form');
+const form = document.querySelector('#start-form');
 const action = document.querySelector('#action');
 const organization = document.querySelector('#organization');
 const password = document.querySelector('#password');
 if (location.hash) {
-  form.elements.setup_key.value = location.hash.slice(1);
+  for (const field of document.querySelectorAll('input[name="setup_key"]')) {
+    field.value = location.hash.slice(1);
+  }
   history.replaceState(null, '', '/');
 }
 function updateFields() {
@@ -43,15 +50,19 @@ STYLE = """
 body { margin: 0; background: #0d1421; color: #e6edf6; font: 1rem/1.5 system-ui, sans-serif }
 main { max-width: 40rem; margin: 5vh auto; padding: 2rem; background: #162338;
        border: 1px solid #405470; border-radius: 1rem }
-small { color: #98d8fb; font-weight: 700 }
+small { color: #e7c88a; font-weight: 700 }
 h1 { line-height: 1.15 }
-a { color: #98d8fb }
+a { color: #b7d5fa }
 code { overflow-wrap: anywhere }
 label { display: block; margin: 1rem 0 .3rem }
-input, select, button { font: inherit; padding: .65rem; border-radius: .4rem }
-input, select { width: 100%; background: #0d1421; color: inherit; border: 1px solid #748ba7 }
-button { margin-top: 1.2rem; background: #98d8fb; color: #091523; border: 0; font-weight: 700 }
+input, select, textarea, button { font: inherit; padding: .65rem; border-radius: .4rem }
+input, select, textarea { width: 100%; background: #0d1421; color: inherit; border: 1px solid #748ba7 }
+button { margin-top: 1.2rem; background: #e7c88a; color: #292011; border: 0; font-weight: 700 }
 button:disabled { opacity: .65 }
+textarea { min-height: 8rem; resize: vertical }
+input[type="checkbox"] { width: auto }
+li { margin-bottom: .6rem }
+nav { display: flex; flex-wrap: wrap; gap: .7rem }
 [role="alert"] { border-left: .2rem solid #ffca8c; padding-left: .8rem }
 """
 
@@ -67,14 +78,27 @@ def page(title, body):
 </main></html>"""
 
 
+def setup_key(key):
+    return f'<input type="hidden" name="setup_key" value="{escape(key)}">'
+
+
+def navigation(key, *, pair=False):
+    options = {'/pairing': 'Connect Chrome or Brave'} if pair else {'/': 'Back to setup'}
+    options['/finish'] = 'Finish setup'
+    return '<nav aria-label="Setup actions">' + ''.join(
+        f'<form method="post" action="{path}">{setup_key(key)}<button type="submit">{label}</button></form>'
+        for path, label in options.items()
+    ) + '</nav>'
+
+
 def form(key="", *, message="", opening=False, username="owner"):
     alert = f'<p role="alert">{escape(message)}</p>' if message else ""
     selected = " selected" if opening else ""
     return page("Set up your private lab", f"""
 <p>Choose how to start your local Gabriel workbench.</p>
 {alert}
-<form method="post" action="/start">
-<input type="hidden" name="setup_key" value="{escape(key)}">
+<form id="start-form" method="post" action="/start">
+{setup_key(key)}
 <label for="action">Setup action</label>
 <select name="action" id="action">
   <option value="create">Create the first owner</option>
@@ -89,11 +113,45 @@ def form(key="", *, message="", opening=False, username="owner"):
 <input id="password" type="password" name="password" maxlength="1024" required
  autocomplete="new-password" aria-describedby="password-help">
 <p id="password-help">Use at least 16 characters when creating an owner.</p>
+<details>
+<summary>Optional AI connection</summary>
+<label><input type="checkbox" name="ai_egress" value="yes">Allow access to Gabriel’s configured AI provider</label>
+<p>AI investigations also require an approved model, your own provider key and spending controls.</p>
+</details>
 <button type="submit">Start Gabriel</button>
 <p id="progress" role="status"></p>
 </form>
+{navigation(key, pair=True)}
 <noscript><p>Enable JavaScript for this local page to use your private setup link.</p></noscript>
 <script src="/setup.js"></script>""")
+
+
+def browser_form(key, *, message=""):
+    alert = f'<p role="alert">{escape(message)}</p>' if message else ""
+    return page("Connect Chrome or Brave", f"""
+{alert}
+<ol>
+<li>Open a case in your active Gabriel workbench. Copy the case ID from its address.</li>
+<li>In your dedicated Chrome or Brave profile, open the browser’s Extensions page, enable Developer mode,
+ and choose <strong>Load unpacked</strong>. Select <code>gabriel/browser_extension</code> in your Gabriel checkout.</li>
+<li>Open the approved console tab and sign in yourself. Open the Gabriel extension, select the browser
+ and current tab, and copy its extension origin and generated context.</li>
+</ol>
+<form method="post" action="/pair">
+{setup_key(key)}
+<label for="case">Case ID</label>
+<input id="case" name="case_id" required maxlength="36" spellcheck="false">
+<label for="extension">Extension origin</label>
+<input id="extension" name="extension_origin" required maxlength="51" placeholder="chrome-extension://…"
+ autocomplete="off" spellcheck="false">
+<label for="context">Generated tab context (JSON)</label>
+<textarea id="context" name="context" required maxlength="4096" spellcheck="false"></textarea>
+<label><input type="checkbox" name="share" value="yes">Allow reviewed observations to be shared with this case</label>
+<p>Pairing is limited to the selected tab and expires after at most five minutes.
+ Starting a new connection replaces the previous one. You approve the Gabriel site permission in the extension.</p>
+<button type="submit">Generate pairing ticket</button>
+</form>
+{navigation(key)}""")
 
 
 class SetupHandler(BaseHTTPRequestHandler):
@@ -129,7 +187,14 @@ class SetupHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         setup = self.server
-        if (self.path != "/start" or not self.local_request() or setup.finished
+        required = {
+            "/": {"setup_key"},
+            "/finish": {"setup_key"},
+            "/pairing": {"setup_key"},
+            "/pair": {"setup_key", "case_id", "extension_origin", "context"},
+            "/start": {"setup_key", "action", "organization", "username", "password"},
+        }.get(self.path)
+        if (required is None or not self.local_request() or setup.finished
                 or monotonic() >= setup.deadline
                 or self.headers.get_all("Origin") != [setup.origin]):
             self.reply(403)
@@ -147,20 +212,79 @@ class SetupHandler(BaseHTTPRequestHandler):
                 raise ValueError("incomplete form")
             fields = parse_qs(raw.decode("ascii"),
                               keep_blank_values=True, strict_parsing=True,
-                              errors="strict", max_num_fields=5)
-            if (set(fields) != {"setup_key", "action", "organization", "username", "password"}
-                    or any(len(values) != 1 for values in fields.values())):
+                              errors="strict", max_num_fields=6)
+            optional = {"/pair": "share", "/start": "ai_egress"}.get(self.path)
+            allowed = (required, required | {optional}) if optional else (required,)
+            if set(fields) not in allowed or any(len(values) != 1 for values in fields.values()):
                 raise ValueError("invalid form")
-            key, action, organization, username, password = (
-                fields[name][0] for name in ("setup_key", "action", "organization", "username", "password")
-            )
+            fields = {name: values[0] for name, values in fields.items()}
         except (UnicodeError, ValueError):
             self.reply(400)
             return
+        key = fields["setup_key"]
         if not key.isascii() or not secrets.compare_digest(key, setup.key) or monotonic() >= setup.deadline:
             self.reply(403, page("Setup link required", "<p>Return to the private welcome page and reopen setup.</p>"))
             return
-        if (action not in {"create", "open"} or not 0 < len(password.encode("utf-8")) <= 1024
+        if self.path == "/":
+            self.reply(200, form(key, opening=setup.workbench_opened or setup.owner_created))
+        elif self.path == "/finish":
+            setup.finished = True
+            self.reply(200, page("Setup complete", "<p>You can close this tab. Open the Gabriel launcher again to return.</p>"))
+        elif self.path == "/pairing":
+            self.reply(200, browser_form(key))
+        elif self.path == "/pair":
+            self.pair_browser(fields)
+        else:
+            self.start_workbench(fields)
+
+    def pair_browser(self, fields):
+        setup = self.server
+        key = fields["setup_key"]
+        try:
+            case_id = str(UUID(fields["case_id"].strip()))
+            origin = fields["extension_origin"].strip()
+            share = fields.get("share", "")
+            context = json.loads(fields["context"], object_pairs_hook=unique)
+            if (not re.fullmatch(r"chrome-extension://[a-p]{32}", origin) or share not in {"", "yes"}
+                    or not isinstance(context, dict) or len(fields["context"]) > 4096 or set(context) != {
+                        "browser", "extension_version", "installation_id", "tab_id", "document_id",
+                        "page_url", "account_label",
+                    } or context["browser"] not in ("chrome", "brave")
+                    or type(context["tab_id"]) is not int
+                    or any(not isinstance(context[name], str) for name in context if name != "tab_id")):
+                raise ValueError("invalid browser pairing form")
+        except (ValueError, RecursionError):
+            self.reply(400, browser_form(key, message="Check the case ID, extension origin and generated tab context."))
+            return
+        try:
+            port = 8445 if setup.installation.config["port"] == 8443 else 8443
+            with setup.installation.operation():
+                result = setup.installation.browser_open(case_id, context, origin, port=port,
+                                                         share_observations=share == "yes")
+        except OPERATION_ERRORS as exc:
+            message = setup.installation.setup_failure(exc)
+            self.reply(409, browser_form(key, message=message + " Open the workbench again if your session has expired."))
+            return
+        setup.finished = True
+        ticket = escape(result["ticket"])
+        endpoint = escape(result["endpoint"])
+        self.reply(200, page("Finish pairing in your browser", f"""
+<p>In the Gabriel extension, enter the endpoint, approve its site permission and claim with the ticket promptly.</p>
+<label for="endpoint">Gabriel endpoint</label>
+<input id="endpoint" value="{endpoint}" readonly spellcheck="false">
+<label for="ticket">Browser pairing ticket</label>
+<input id="ticket" value="{ticket}" readonly autocomplete="off" spellcheck="false">
+<p>Preview the selected page before sharing. Return to <strong>Browser health</strong> in your workbench to confirm the connection.</p>
+<p>Use Pause or Stop in the extension to control sharing.</p>"""))
+
+    def start_workbench(self, fields):
+        setup = self.server
+        key, action, organization, username, password = (
+            fields[name] for name in ("setup_key", "action", "organization", "username", "password")
+        )
+        ai_egress = fields.get("ai_egress", "")
+        if (action not in {"create", "open"} or ai_egress not in {"", "yes"}
+                or not 0 < len(password.encode("utf-8")) <= 1024
                 or re.fullmatch(r"[a-z0-9][a-z0-9._@+\-]{2,253}", username.strip().lower()) is None):
             self.reply(400, form(key, message="Enter a valid username and password.", opening=action == "open"))
             return
@@ -173,22 +297,23 @@ class SetupHandler(BaseHTTPRequestHandler):
                 self.reply(400, form(key, message="Enter an organization name and a password of at least 16 characters."))
                 return
         try:
-            if action == "create":
-                setup.installation.start_db()
-                setup.installation.check_network()
-                setup.installation.operator("initialize", {
-                    "organization": organization, "username": username, "password": password,
-                })
-                setup.owner_created = True
-            result = setup.installation.open(password, username=username)
-        except (OSError, ValueError, TypeError, KeyError, RuntimeError, subprocess.SubprocessError) as exc:
+            with setup.installation.operation():
+                if action == "create":
+                    setup.installation.start_db()
+                    setup.installation.check_network()
+                    setup.installation.operator("initialize", {
+                        "organization": organization, "username": username, "password": password,
+                    })
+                    setup.owner_created = True
+                result = setup.installation.open(password, username=username, ai_egress=ai_egress == "yes")
+        except OPERATION_ERRORS as exc:
             message = setup.installation.setup_failure(exc)
             if setup.owner_created:
                 message += " Your owner was saved. Choose Open an existing workbench to retry."
             self.reply(409, form(key, message=message, opening=setup.owner_created or action == "open",
                                  username=username))
             return
-        setup.finished = True
+        setup.workbench_opened = True
         endpoint = escape(f"https://localhost:{setup.installation.config['port']}/claim")
         ticket = escape(result["ticket"])
         self.reply(200, page("Gabriel is ready", f"""
@@ -196,7 +321,9 @@ class SetupHandler(BaseHTTPRequestHandler):
 <label for="ticket">Workbench ticket</label>
 <input id="ticket" value="{ticket}" readonly autocomplete="off" spellcheck="false">
 <p><a href="{endpoint}" target="_blank" rel="noopener noreferrer">Open Gabriel workbench</a></p>
-<p>The ticket stays on this page. Keep it private.</p>"""))
+<p>If the link is denied, paste <code>{endpoint}</code> into a new tab. Keep the ticket private.</p>
+<p>Create a case in the workbench, then return here to connect your browser. If you only need local tools, choose Finish setup.</p>
+{navigation(key, pair=True)}"""))
 
 
 class SetupServer(HTTPServer):
@@ -207,6 +334,7 @@ class SetupServer(HTTPServer):
         self.context.load_cert_chain(tls / "server.pem", tls / "server.key")
         self.installation = installation
         self.owner_created = False
+        self.workbench_opened = False
         self.finished = False
         self.key = secrets.token_urlsafe(32)
         super().__init__(("127.0.0.1", 0), SetupHandler)
@@ -257,4 +385,4 @@ def launch(installation):
         print(f"Opening Gabriel Setup. If needed, open {welcome} in your browser.", file=sys.stderr, flush=True)
         webbrowser.open(welcome.as_uri())
         server.run()
-        return {"workbench_opened": server.finished, "production_admitted": False}
+        return {"workbench_opened": server.workbench_opened, "production_admitted": False}
