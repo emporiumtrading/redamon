@@ -318,6 +318,7 @@ class SetupHandler(BaseHTTPRequestHandler):
                 return
         try:
             with setup.installation.operation():
+                setup.installation.require_transport()
                 if action == "create":
                     setup.installation.start_db()
                     setup.installation.check_network()
@@ -404,6 +405,7 @@ def open_local_page(path, title, body):
 
 
 def launch(installation):
+    installation.require_transport()
     certificate = installation.root / "tls" / "ca.pem"
     fingerprint = sha256(ssl.PEM_cert_to_DER_cert(certificate.read_text(encoding="ascii"))).hexdigest().upper()
     fingerprint = ":".join(re.findall("..", fingerprint))

@@ -4,6 +4,8 @@ from datetime import datetime
 from hashlib import sha256
 import http.client
 import json
+import os
+import ssl
 import math
 from pathlib import Path
 
@@ -62,8 +64,11 @@ def instructions(role):
 
 
 def remote(name,data=None):
-    client=http.client.HTTPConnection('investigation-tools',8450,timeout=7)
+    client=None
     try:
+        ca=os.environ.get('GABRIEL_TOOL_TLS_CA')
+        client=(http.client.HTTPSConnection('investigation-tools',8450,timeout=7,context=ssl.create_default_context(cafile=ca))
+                if ca else http.client.HTTPConnection('investigation-tools',8450,timeout=7))
         if name=='inspect_toolkit':client.request('GET','/health')
         else:client.request('POST','/analyze',body=canonical(dict(tool=name,data=base64.b64encode(data).decode())),headers={'Content-Type':'application/json'})
         response=client.getresponse();raw=response.read(8193)
@@ -77,7 +82,8 @@ def remote(name,data=None):
         return minimized(name,result)
     except (OSError,http.client.HTTPException,ValueError,TypeError,KeyError):
         return dict(status='tool_unavailable',required_action='check_private_toolbox_service',automatic_installation=False)
-    finally:client.close()
+    finally:
+        if client is not None:client.close()
 
 
 def minimized(name,row):

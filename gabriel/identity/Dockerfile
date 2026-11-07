@@ -31,7 +31,7 @@ RUN apk add --no-cache build-base \
     && pip wheel --no-cache-dir --wheel-dir /wheels -r /build/requirements.txt
 
 FROM patched-python AS runtime
-LABEL org.gabriel.browser-installation="v1" org.gabriel.browser-controls="v1" org.gabriel.tls-profile="rfc5280-strict-v1"
+LABEL org.gabriel.browser-installation="v1" org.gabriel.browser-controls="v1" org.gabriel.tls-profile="rfc5280-strict-v1" org.gabriel.private-transport="v1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt

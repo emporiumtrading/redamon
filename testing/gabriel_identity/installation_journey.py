@@ -120,10 +120,14 @@ def main():
         assert set(config['services']['workbench']['networks'])=={'private','toolbus'}
         toolbox=config['services']['investigation-tools']
         assert config['networks']['toolbus']['internal'] and set(toolbox['networks'])=={'toolbus'}
-        assert not toolbox.get('secrets') and not toolbox.get('volumes') and not toolbox.get('ports') and not toolbox.get('environment')
+        assert {item['source'] for item in toolbox['secrets']}=={'transport_ca','toolbox_tls_certificate','toolbox_tls_key'}
+        assert not toolbox.get('volumes') and not toolbox.get('ports')
+        assert toolbox['environment']=={'GABRIEL_TOOL_TLS':'required'}
         assert toolbox['read_only'] and toolbox['cap_drop']==['ALL'] and toolbox['user']=='10001:10001'
         hermes=config['services']['hermes']
-        assert set(hermes['networks'])=={'toolbus'} and not hermes.get('secrets') and not hermes.get('volumes') and not hermes.get('ports')
+        assert set(hermes['networks'])=={'toolbus'} and not hermes.get('volumes') and not hermes.get('ports')
+        assert {item['source'] for item in hermes['secrets']}=={'transport_ca','hermes_tls_certificate','hermes_tls_key'}
+        assert hermes['environment']=={'GABRIEL_TOOL_TLS':'required'}
         assert hermes['read_only'] and hermes['cap_drop']==['ALL'] and hermes['user']=='10001:10001'
         assert 'hermes' in config['services']['workbench']['depends_on']
         assert not config['services']['identity-db'].get('ports')
@@ -155,6 +159,7 @@ def main():
         (directory/'hermes-runtime-readiness.json').write_text(json.dumps(supervisor,indent=2))
         runtime=collect_runtime_acceptance(root)
         assert runtime['runtime_checks_passed'] and runtime['production_admitted'] is False
+        assert runtime['private_transport']=={'postgres_tls':True,'hermes_https':True,'toolbox_https':True,'plaintext_denied':True}
         (directory/'runtime-acceptance.json').write_text(json.dumps(runtime,indent=2))
         analyst_password=secrets.token_urlsafe(24)
         assert request(root,18444,'/members/create',dict(csrf=csrf,username='generated-install-analyst',password=analyst_password,role='analyst'),cookie)[0]==303

@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler,HTTPServer
 import json
 import os
 from pathlib import Path
+import ssl
 import subprocess
 import tempfile
 
@@ -57,7 +58,23 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:self.reply(503,{'error':'hermes_turn_unavailable'})
 
 
+class BoundedServer(HTTPServer):
+    def get_request(self):
+        client,address=super().get_request()
+        try:
+            client.settimeout(5)
+            return (self.context.wrap_socket(client,server_side=True) if self.context else client),address
+        except OSError:
+            client.close()
+            raise
+
+
 if __name__=='__main__':
-    server=HTTPServer(('0.0.0.0',8451),Handler)
+    server=BoundedServer(('0.0.0.0',8451),Handler)
+    server.context=None
+    if os.environ.get('GABRIEL_TOOL_TLS')=='required':
+        server.context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        server.context.minimum_version=ssl.TLSVersion.TLSv1_2
+        server.context.load_cert_chain('/run/secrets/service_tls_certificate','/run/secrets/service_tls_key')
     server.timeout=40
     server.serve_forever()

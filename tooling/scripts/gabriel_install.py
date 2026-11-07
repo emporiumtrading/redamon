@@ -19,6 +19,7 @@ from gabriel_provider_keys import prepare as keyring
 
 REPO=Path(__file__).resolve().parents[2]
 COMPOSE=REPO/'compose.gabriel-installation.yml'
+TRANSPORT_COMPOSE=REPO/'compose.gabriel-installation-tls.yml'
 NETWORK_CHECK="""import json,socket
 result={'version':'gabriel-install-network-v1','dns_resolves':False,'tcp_reachable':False}
 try:
@@ -33,6 +34,10 @@ except OSError:
     pass
 print(json.dumps(result))
 """
+
+
+class InstallationTransportRequired(ValueError):
+    pass
 
 
 class InstallationNetworkError(ValueError):
@@ -108,11 +113,11 @@ def read_controls(path):
     return read(path,private_file=True)
 
 
-def prepare_tls(directory,image):
+def prepare_tls(directory,image,*,transport=False):
     directory.mkdir(mode=0o700)
     run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
         '--user',str(os.getuid())+':'+str(os.getgid()),'--mount','type=bind,src='+str(directory)+',dst=/tls',
-        '--entrypoint','python',image,'-m','gabriel.identity.installation','tls','--directory','/tls'])
+        '--entrypoint','python',image,'-m','gabriel.identity.installation','tls','--directory','/tls']+(['--transport'] if transport else []))
 
 
 def prepare(root,port,image):
@@ -125,6 +130,7 @@ def prepare(root,port,image):
     keyring(root/'provider')
     keyring(root/'evidence',purpose='evidence-v1')
     prepare_tls(root/'tls',image)
+    prepare_tls(root/'transport',image,transport=True)
     manifest=dict(schema_version=1,purpose='gabriel-local-test-installation-v1',project='gabriel-install-'+uuid4().hex[:16],
         port=port,image=image,source=run(['git','rev-parse','HEAD']).decode().strip(),production_admitted=False)
     write(root/'installation.json',manifest)
@@ -144,7 +150,23 @@ class Installation:
                 or re.fullmatch(r'[a-f0-9]{40}',c['source']) is None or type(c['port']) is not int or not 1024<=c['port']<=65535):
             raise ValueError('invalid_installation')
         self.env=dict(os.environ,GABRIEL_INSTALL_ROOT=str(root),GABRIEL_INSTALL_PORT=str(c['port']),GABRIEL_INSTALL_IMAGE=c['image'],GABRIEL_HERMES_IMAGE=c['project']+'-hermes:local')
-        self.command=['docker','compose','--project-name',c['project'],'--file',str(COMPOSE)]
+        self.base_command=['docker','compose','--project-name',c['project'],'--file',str(COMPOSE)]
+        self.transport=(root/'transport').exists()
+        if self.transport:
+            private(root/'transport')
+            self.base_command.extend(['--file',str(TRANSPORT_COMPOSE)])
+        self.command=self.base_command.copy()
+
+    def require_transport(self):
+        self.require_transport_files()
+        label=run(['docker','image','inspect',self.config['image'],'--format',
+                   '{{index .Config.Labels "org.gabriel.private-transport"}}']).decode().strip()
+        if label!='v1':
+            raise InstallationTransportRequired('private_transport_rebuild_required')
+
+    def require_transport_files(self):
+        if not self.transport:
+            raise InstallationTransportRequired('private_transport_rebuild_required')
 
     def compose(self,*args,payload=None,output=None,timeout=None):
         return run(self.command+list(args),env=self.env,payload=payload,output=output,timeout=timeout)
@@ -190,6 +212,8 @@ class Installation:
 
     @staticmethod
     def setup_failure(exc):
+        if isinstance(exc, InstallationTransportRequired):
+            return "This lab needs a private transport rebuild. Use the installation guide to rebuild or prepare a fresh lab."
         if isinstance(exc, InstallationNetworkError):
             return f"Docker could not verify the private database network ({exc.phase})."
         if isinstance(exc, InstallationOperationDenied):
@@ -219,6 +243,8 @@ class Installation:
     def browser_stop(self):
         # Close the published listener first, even when PostgreSQL or human authority is gone.
         self.compose('rm','-sf','browser-entry','browser-gateway')
+        if not self.transport:
+            return {'listener_stopped':True,'revocation_confirmed':False}
         if (self.root/'browser.json').exists():(self.root/'browser.json').unlink()
         if not self.browser_image_supported():
             return {'listener_stopped':True,'revocation_confirmed':False,'browser_image_supported':False}
@@ -229,6 +255,7 @@ class Installation:
         return dict(listener_stopped=True,**result)
 
     def browser_open(self,case_id,context,origin,*,port=8443,duration=300,max_steps=20,share_observations=False,control_plan=None,approve_controls=False):
+        self.require_transport()
         if type(port) is not int or not 1024<=port<=65535 or port==self.config['port']:
             raise ValueError('distinct_loopback_browser_port_required')
         if control_plan is not None:
@@ -259,17 +286,21 @@ class Installation:
     def stop(self):
         self.compose('stop','local-entry','workbench')
         browser=self.browser_stop()
-        try:
-            self.start_db()
-            self.operator('revoke')
-        finally:self.compose('stop','hermes','investigation-tools','identity-db')
+        if self.transport:
+            try:
+                self.start_db()
+                self.operator('revoke')
+            finally:self.compose('stop','hermes','investigation-tools','identity-db')
+        else:
+            self.compose('stop','hermes','investigation-tools','identity-db')
         return browser
 
     def open(self,password,*,ai_egress=False,username=None):
+        self.require_transport()
         if type(ai_egress) is not bool:raise ValueError('invalid_ai_egress_option')
         self.compose('stop','local-entry','workbench')
         browser=self.browser_stop()
-        self.command=['docker','compose','--project-name',self.config['project'],'--file',str(COMPOSE)]
+        self.command=self.base_command.copy()
         if ai_egress:self.command.extend(['--file',str(REPO/'compose.gabriel-specialist-ai.yml')])
         self.start_db()
         self.check_network()
@@ -281,6 +312,7 @@ class Installation:
         return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',ai_egress=ai_egress,browser_stop=browser,**ticket)
 
     def backup(self,destination):
+        self.require_transport_files()
         if destination.exists(): raise ValueError('new_backup_directory_required')
         destination.mkdir(mode=0o700)
         self.compose('stop','local-entry','workbench')
@@ -301,6 +333,7 @@ class Installation:
 
 
     def renew_tls(self):
+        self.require_transport_files()
         labels=json.loads(run(['docker','image','inspect',self.config['image'],'--format','{{json .Config.Labels}}']))
         if not isinstance(labels,dict) or labels.get('org.gabriel.tls-profile')!='rfc5280-strict-v1':
             raise ValueError('strict_tls_image_rebuild_required')
@@ -330,6 +363,25 @@ class Installation:
             certificate_trust_requires_review=True,requires_fresh_login=True,
             workbench_stopped=True,browser_stop=browser,production_admitted=False)
 
+    def renew_transport(self):
+        self.require_transport()
+        if len(list(self.root.glob('transport-retired-*')))+len(list(self.root.glob('transport-pending-*')))>=16:
+            raise ValueError('transport_history_limit_requires_operator_review')
+        self.compose('stop','local-entry','workbench','browser-entry','browser-gateway','hermes','investigation-tools','identity-db')
+        directory=self.root/('transport-pending-'+uuid4().hex)
+        prepare_tls(directory,self.config['image'],transport=True)
+        current=self.root/'transport'
+        retired=self.root/('transport-retired-'+uuid4().hex)
+        os.rename(current,retired)
+        try: os.rename(directory,current)
+        except OSError:
+            os.rename(retired,current)
+            raise
+        fd=os.open(self.root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+        return dict(transport_renewed=True,services_stopped=True,requires_fresh_login=True,production_admitted=False)
+
     def rebuild(self,backup,image=None):
         self.compose('stop','local-entry','workbench')
         self.browser_stop()
@@ -342,6 +394,15 @@ class Installation:
         if readiness.get('projection_version')!='browser-candidate-ai-v1':
             raise ValueError('browser_ai_installation_image_required')
         new=dict(self.config,image=candidate,source=run(['git','rev-parse','HEAD']).decode().strip())
+        if not self.transport:
+            self.compose('stop','hermes','investigation-tools','identity-db')
+            directory=self.root/('transport-pending-'+uuid4().hex)
+            prepare_tls(directory,candidate,transport=True)
+            os.rename(directory,self.root/'transport')
+            # Old operator images already support verified PostgreSQL TLS through libpq.
+            self.transport=True
+            self.base_command.extend(['--file',str(TRANSPORT_COMPOSE)])
+            self.command=self.base_command.copy()
         self.backup(backup)
         previous=read(backup/'backup.json')
         record=self.root/('rebuild-'+uuid4().hex+'.json')
@@ -353,6 +414,8 @@ class Installation:
         try: os.fsync(parent)
         finally: os.close(parent)
         rebuilt=Installation(self.root)
+        rebuilt.require_transport()
+        rebuilt.start_db()
         rebuilt.check_network()
         program="""import os,json
 from gabriel.identity.cli import read_secret
@@ -370,6 +433,7 @@ print(json.dumps({'migrated':True}))
             production_admitted=False,browser_ai=readiness)
 
     def restore(self,backup,keys):
+        self.require_transport()
         private(backup);private(keys)
         manifest=read(backup/'backup.json')
         if (set(manifest)!={'schema_version','purpose','image','source','identity','files','key_fingerprints'}
@@ -405,6 +469,8 @@ def build_image(image):
     if re.fullmatch(r'sha256:[a-f0-9]{64}',image) is None: raise ValueError('exact_local_image_id_required')
     inspected=json.loads(run(['docker','image','inspect',image]))[0]
     if inspected['Config']['User']!='10001:10001': raise ValueError('non_root_image_required')
+    if (inspected['Config'].get('Labels') or {}).get('org.gabriel.private-transport')!='v1':
+        raise InstallationTransportRequired('private_transport_image_required')
     return image
 
 
@@ -432,7 +498,7 @@ def password(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','setup','initialize','open','status','stop','backup','restore','rebuild','diagnose','browser-open','browser-stop','renew-tls'))
+    parser.add_argument('command',choices=('prepare','setup','initialize','open','status','stop','backup','restore','rebuild','diagnose','browser-open','browser-stop','renew-tls','renew-transport'))
     parser.add_argument('directory')
     parser.add_argument('--port',type=int,default=8444)
     parser.add_argument('--image')
@@ -468,14 +534,17 @@ def main():
                     from gabriel_setup import launch
                     result=launch(installation)
                 elif args.command=='initialize':
+                    installation.require_transport()
                     installation.start_db()
                     installation.check_network()
                     secret=password(args)
                     result=installation.operator('initialize',dict(organization=args.organization,username=args.username or 'owner',password=secret))
                 elif args.command=='diagnose':
+                    installation.require_transport_files()
                     installation.start_db()
                     result=dict(network=installation.check_network(),production_admitted=False)
                 elif args.command=='open':
+                    installation.require_transport()
                     installation.compose('stop','local-entry','workbench')
                     installation.browser_stop()
                     result=installation.open(password(args),ai_egress=args.ai_egress,username=args.username)
@@ -488,6 +557,7 @@ def main():
                         control_plan=read_controls(args.controls_file) if args.controls_file else None,approve_controls=args.approve_browser_controls)
                 elif args.command=='browser-stop':result=installation.browser_stop()
                 elif args.command=='renew-tls':result=installation.renew_tls()
+                elif args.command=='renew-transport':result=installation.renew_transport()
                 elif args.command=='status':
                     raw=installation.compose('ps','--all','--format','json').decode().strip()
                     rows=json.loads(raw) if raw.startswith('[') else [json.loads(line) for line in raw.splitlines()]
@@ -498,6 +568,9 @@ def main():
                 else: result=installation.restore(external(args.backup),external(args.keys_from))
         print(json.dumps({'status':'ok','result':result}))
         return 0
+    except InstallationTransportRequired as exc:
+        print(json.dumps({'status':'denied','code':str(exc),'guidance':Installation.setup_failure(exc)}))
+        return 1
     except InstallationNetworkError as exc:
         print(json.dumps({'status':'denied','code':'installation_network_check_failed','phase':exc.phase,
             'probe_uses_credentials':False,'guidance':'Inspect Docker DNS, bridge connectivity and firewall backend consistency; preserve internal networks and loopback listeners.'}))

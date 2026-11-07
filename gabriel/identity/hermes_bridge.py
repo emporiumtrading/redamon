@@ -2,6 +2,8 @@
 from hashlib import sha256
 import http.client
 import json
+import os
+import ssl
 import logging
 import re
 from pathlib import Path
@@ -20,8 +22,11 @@ def runtime_digest():
 
 
 def request(path,packet=None):
-    client=http.client.HTTPConnection('hermes',8451,timeout=40)
+    client=None
     try:
+        ca=os.environ.get('GABRIEL_TOOL_TLS_CA')
+        client=(http.client.HTTPSConnection('hermes',8451,timeout=40,context=ssl.create_default_context(cafile=ca))
+                if ca else http.client.HTTPConnection('hermes',8451,timeout=40))
         client.request('GET' if packet is None else 'POST',path,
             body=canonical(packet) if packet is not None else None,headers={'Content-Type':'application/json'})
         response=client.getresponse();raw=response.read(32769)
@@ -48,7 +53,8 @@ def request(path,packet=None):
         return result
     except (OSError,http.client.HTTPException,ValueError,TypeError,AttributeError):
         raise AccessDenied('required_hermes_runtime_unavailable') from None
-    finally:client.close()
+    finally:
+        if client is not None:client.close()
 
 
 def health():

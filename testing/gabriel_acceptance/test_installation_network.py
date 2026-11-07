@@ -22,6 +22,9 @@ class NetworkCheckTests(unittest.TestCase):
     def app(self):
         app=installer.Installation.__new__(installer.Installation)
         app.config={'project':'gabriel-install-'+'a'*16}
+        app.base_command=[]
+        app.transport=True
+        app.require_transport=MagicMock()
         app.compose=MagicMock(return_value=json.dumps(report()).encode())
         app.browser_stop=MagicMock(return_value={'listener_stopped':True,'revocation_confirmed':True})
         return app

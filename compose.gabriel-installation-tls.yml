@@ -1,0 +1,74 @@
+# Installer-managed application transport. Each private service owns only its own key.
+x-pg-tls: &pg-tls
+  PGSSLMODE: verify-full
+  PGGSSENCMODE: disable
+  PGSSLROOTCERT: /run/secrets/transport_ca
+
+x-tool-tls: &tool-tls
+  GABRIEL_TOOL_TLS: required
+
+services:
+  identity-db:
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        install -m 0600 -o postgres -g postgres /run/secrets/identity_db_tls_key /run/gabriel-tls/server.key
+        exec docker-entrypoint.sh postgres -c ssl=on -c ssl_min_protocol_version=TLSv1.2 -c ssl_cert_file=/run/secrets/identity_db_tls_certificate -c ssl_key_file=/run/gabriel-tls/server.key -c hba_file=/run/secrets/transport_pg_hba
+    environment: *pg-tls
+    secrets: [transport_ca, identity_db_tls_certificate, identity_db_tls_key, transport_pg_hba]
+    tmpfs: ['/run/gabriel-tls:rw,noexec,nosuid,nodev,size=1m']
+    healthcheck:
+      test: [CMD, pg_isready, -h, identity-db, -U, postgres, -d, gabriel]
+  operator:
+    environment: *pg-tls
+    secrets: [transport_ca]
+  browser-operator:
+    environment: *pg-tls
+    secrets: [transport_ca]
+  browser-gateway:
+    environment: *pg-tls
+    secrets: [transport_ca]
+  workbench:
+    environment:
+      <<: *pg-tls
+      GABRIEL_TOOL_TLS_CA: /run/secrets/transport_ca
+    secrets: [transport_ca]
+  hermes:
+    environment: *tool-tls
+    secrets:
+      - transport_ca
+      - source: hermes_tls_certificate
+        target: service_tls_certificate
+      - source: hermes_tls_key
+        target: service_tls_key
+    healthcheck:
+      test: [CMD, /opt/hermes/.venv/bin/python, -c, "import ssl,urllib.request; urllib.request.urlopen('https://hermes:8451/health',context=ssl.create_default_context(cafile='/run/secrets/transport_ca'),timeout=2).read()"]
+  investigation-tools:
+    environment: *tool-tls
+    secrets:
+      - transport_ca
+      - source: toolbox_tls_certificate
+        target: service_tls_certificate
+      - source: toolbox_tls_key
+        target: service_tls_key
+    healthcheck:
+      test: [CMD, python, -c, "import ssl,urllib.request; urllib.request.urlopen('https://investigation-tools:8450/health',context=ssl.create_default_context(cafile='/run/secrets/transport_ca'),timeout=2).read()"]
+
+secrets:
+  transport_ca:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/ca.pem
+  transport_pg_hba:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/pg_hba.conf
+  identity_db_tls_certificate:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/identity-db.pem
+  identity_db_tls_key:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/identity-db.key
+  hermes_tls_certificate:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/hermes.pem
+  hermes_tls_key:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/hermes.key
+  toolbox_tls_certificate:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/investigation-tools.pem
+  toolbox_tls_key:
+    file: ${GABRIEL_INSTALL_ROOT}/transport/investigation-tools.key

@@ -4,7 +4,9 @@ from hashlib import sha256
 from http.server import BaseHTTPRequestHandler,HTTPServer
 from importlib.metadata import version
 import json
+import os
 from pathlib import Path
+import ssl
 import subprocess
 import sys
 
@@ -48,12 +50,22 @@ class Handler(BaseHTTPRequestHandler):
 class BoundedServer(HTTPServer):
     def get_request(self):
         sock,address=super().get_request()
-        sock.settimeout(5)
-        return sock,address
+        try:
+            sock.settimeout(5)
+            return (self.context.wrap_socket(sock,server_side=True) if self.context else sock),address
+        except OSError:
+            sock.close()
+            raise
 
 
 def main():
-    BoundedServer(('0.0.0.0',8450),Handler).serve_forever()
+    server=BoundedServer(('0.0.0.0',8450),Handler)
+    server.context=None
+    if os.environ.get('GABRIEL_TOOL_TLS')=='required':
+        server.context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        server.context.minimum_version=ssl.TLSVersion.TLSv1_2
+        server.context.load_cert_chain('/run/secrets/service_tls_certificate','/run/secrets/service_tls_key')
+    server.serve_forever()
 
 
 if __name__=='__main__':main()

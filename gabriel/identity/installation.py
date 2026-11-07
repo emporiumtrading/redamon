@@ -51,7 +51,7 @@ def active():
     return ROOT/receipt['session']
 
 
-def tls(directory):
+def tls(directory, *, transport=False):
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes,serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
@@ -60,30 +60,40 @@ def tls(directory):
     if not directory.is_dir() or any(directory.iterdir()): raise ValueError('new_tls_directory_required')
     now=datetime.now(timezone.utc)
     ca_key=rsa.generate_private_key(public_exponent=65537,key_size=3072)
-    key=rsa.generate_private_key(public_exponent=65537,key_size=3072)
-    name=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'Gabriel private test installation CA')])
+    ca_name='Gabriel private transport CA' if transport else 'Gabriel private test installation CA'
+    name=x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,ca_name)])
+    days=90 if transport else 30
     ca=(x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(ca_key.public_key())
-        .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(minutes=5)).not_valid_after(now+timedelta(days=31))
+        .serial_number(x509.random_serial_number()).not_valid_before(now-timedelta(minutes=5)).not_valid_after(now+timedelta(days=days+1))
         .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()),critical=False)
         .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),critical=False)
         .add_extension(x509.BasicConstraints(ca=True,path_length=0),critical=True)
         .add_extension(x509.KeyUsage(False,False,False,False,False,True,True,False,False),critical=True).sign(ca_key,hashes.SHA256()))
-    cert=(x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,'localhost')]))
-        .issuer_name(name).public_key(key.public_key()).serial_number(x509.random_serial_number())
-        .not_valid_before(now-timedelta(minutes=5)).not_valid_after(now+timedelta(days=30))
-        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()),critical=False)
-        .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),critical=False)
-        .add_extension(x509.KeyUsage(True,False,True,False,False,False,False,False,False),critical=True)
-        .add_extension(x509.BasicConstraints(ca=False,path_length=None),critical=True)
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName('localhost'),x509.IPAddress(ipaddress.ip_address('127.0.0.1'))]),critical=False)
-        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),critical=False).sign(ca_key,hashes.SHA256()))
-    values={'ca.pem':ca.public_bytes(serialization.Encoding.PEM),'server.pem':cert.public_bytes(serialization.Encoding.PEM),
-        'server.key':key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())}
+    values={'ca.pem':ca.public_bytes(serialization.Encoding.PEM)}
+    services=('identity-db','hermes','investigation-tools') if transport else ('localhost',)
+    for service in services:
+        key=rsa.generate_private_key(public_exponent=65537,key_size=3072)
+        names=[x509.DNSName(service)]
+        if not transport:names.append(x509.IPAddress(ipaddress.ip_address('127.0.0.1')))
+        cert=(x509.CertificateBuilder().subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME,service)]))
+            .issuer_name(name).public_key(key.public_key()).serial_number(x509.random_serial_number())
+            .not_valid_before(now-timedelta(minutes=5)).not_valid_after(now+timedelta(days=days))
+            .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()),critical=False)
+            .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),critical=False)
+            .add_extension(x509.KeyUsage(True,False,True,False,False,False,False,False,False),critical=True)
+            .add_extension(x509.BasicConstraints(ca=False,path_length=None),critical=True)
+            .add_extension(x509.SubjectAlternativeName(names),critical=False)
+            .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),critical=False).sign(ca_key,hashes.SHA256()))
+        prefix=service if transport else 'server'
+        values[prefix+'.pem']=cert.public_bytes(serialization.Encoding.PEM)
+        values[prefix+'.key']=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
+    if transport:
+        values['pg_hba.conf']=b'local all all trust\nhostssl all all all scram-sha-256\nhostnossl all all all reject\n'
     for name,value in values.items():
         fd=os.open(directory/name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o444)
         with os.fdopen(fd,'wb') as stream: stream.write(value)
-    # The signing key is intentionally not retained: this CA can only attest this installation.
-    return {'certificate_days':30}
+    # The signing key is intentionally discarded and browser trust stays separate from service trust.
+    return {'certificate_days':days}
 
 
 def initialize(payload):
@@ -328,9 +338,10 @@ def main():
     parser.add_argument('command',choices=('tls','initialize','open','serve','health','receipt','restore-receipt','revoke','restore-objects','relay',
         'browser-open','browser-stop','browser-serve','browser-relay','browser-health'))
     parser.add_argument('--directory')
+    parser.add_argument('--transport',action='store_true')
     args=parser.parse_args()
     try:
-        if args.command=='tls': result=tls(args.directory)
+        if args.command=='tls': result=tls(args.directory,transport=args.transport)
         elif args.command=='relay': relay();return 0
         elif args.command=='browser-relay':relay(browser=True);return 0
         elif args.command=='browser-stop':result=stop_browser()
@@ -374,5 +385,3 @@ def main():
 
 
 if __name__=='__main__': raise SystemExit(main())
-
-
