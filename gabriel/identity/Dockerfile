@@ -135,8 +135,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 COPY gabriel/browser_extension/ /repo/gabriel/browser_extension/
 COPY testing/gabriel_browser/ /repo/testing/gabriel_browser/
 COPY testing/gabriel_identity/tls_lab.py /repo/testing/gabriel_identity/
-COPY tooling/scripts/gabriel_extension_package.py /repo/tooling/scripts/
-ENV PYTHONPATH=/app:/repo
+COPY tooling/scripts/gabriel_extension_package.py tooling/scripts/gabriel_setup.py tooling/scripts/gabriel_provider_keys.py /repo/tooling/scripts/
+ENV PYTHONPATH=/app:/repo:/repo/tooling/scripts
 WORKDIR /repo
 USER browserlab
 ENTRYPOINT ["timeout", "--kill-after=10", "900", "bash", "testing/gabriel_browser/start.sh"]
@@ -159,4 +159,3 @@ RUN ["apk", "add", "--no-network", "ca-certificates-bundle", "alpine-baselayout-
 RUN ["apk", "del", "--rdepends", "--no-scripts", "--no-cache", "busybox", "busybox-binsh", "ssl_client"]
 RUN ["python", "-c", "import shutil,ssl,zlib; assert zlib.decompress(zlib.compress(b'Gabriel')) == b'Gabriel'; assert ssl.create_default_context().cert_store_stats()['x509_ca'] > 0; assert all(shutil.which(n) is None for n in ('busybox','wget','ssl_client','gcc','cc')); import psycopg,argon2,cryptography,gunicorn,yara,dpkt"]
 USER 10001:10001
-

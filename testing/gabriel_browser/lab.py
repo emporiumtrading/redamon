@@ -1,6 +1,6 @@
 """Actual Chrome for Testing and Brave UI/extension/TLS/PostgreSQL lab; no vendor telemetry."""
 import base64
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from hashlib import sha256
 from datetime import datetime,timedelta,timezone
 from html import escape
@@ -19,12 +19,14 @@ import tempfile
 from threading import Thread
 import time
 import traceback
+from unittest.mock import Mock
 from urllib.parse import urlsplit
 from uuid import uuid4
 from wsgiref.simple_server import make_server,WSGIRequestHandler,WSGIServer
 
 import websocket
 
+from gabriel_setup import SetupServer
 from gabriel.identity.browser_gateway import prepare
 from gabriel.identity.browser_observations import BrowserObservationService
 from gabriel.identity.browser_navigation import BrowserNavigationService
@@ -612,6 +614,47 @@ def monitoring_journey(cdp,family,service,human,tls,root,env,console_origin,exte
                 if any(t['targetId']==tab for t in cdp.targets()):cdp.send('Target.closeTarget',{'targetId':tab})
 
 
+def guided_setup_journey(cdp,family,root,tls):
+    mark(family+':guided-setup-form')
+    directory=root/'guided-setup'
+    certificate_directory=directory/'tls'
+    certificate_directory.mkdir(parents=True)
+    for name in ('server.pem','server.key'):
+        (certificate_directory/name).symlink_to(tls[name])
+    password=secrets.token_urlsafe(32)
+    installation=Mock(root=directory,config={'port':8444})
+    installation.operation.side_effect=nullcontext
+    installation.open.return_value={'ticket':secrets.token_urlsafe(32)}
+    with SetupServer(installation) as wizard:
+        server=Thread(target=wizard.run,daemon=True)
+        server.start()
+        tab=None
+        try:
+            tab=cdp.send('Target.createTarget',{'url':wizard.origin+'/#'+wizard.key})['targetId']
+            session=cdp.attach(tab)
+            def loaded(expression):
+                def read():
+                    try:return cdp.evaluate(session,expression)
+                    except AssertionError:return False
+                return wait_for(read)
+            loaded("Boolean(document.querySelector('#start-form input[name=setup_key]')?.value) && !location.hash")
+            cdp.evaluate(session,'document.getElementById("password").value='+json.dumps(password)+
+                ';document.querySelector("#start-form button").click();true')
+            loaded("document.title==='Gabriel is ready | Gabriel'")
+            assert installation.operator.call_args.args==('initialize',{
+                'organization':'Gabriel private lab','username':'owner','password':password})
+            assert installation.open.call_args.args==(password,)
+            assert installation.open.call_args.kwargs=={'username':'owner','ai_egress':False}
+            cdp.evaluate(session,"document.querySelector('form[action$=finish] button').click();true")
+            loaded("document.title==='Setup complete | Gabriel'")
+            assert wizard.finished
+        finally:
+            wizard.finished=True
+            server.join(timeout=10)
+            if tab:cdp.send('Target.closeTarget',{'targetId':tab})
+            assert not server.is_alive()
+
+
 def workbench_journey(cdp,family,service,human,case,tls,root,env,output,expected):
     mark(family+':workbench-start')
     port=free_port()
@@ -813,6 +856,7 @@ def run_browser(family,executable,output):
             mark(family+':browser-start')
             cdp=CDP(port)
             version=cdp.send('Browser.getVersion')['product']
+            guided_setup_journey(cdp,family,root,tls)
             worker=wait_for(lambda:next((t for t in cdp.targets() if t.get('type')=='service_worker' and t.get('url','').endswith('/worker.js')),None),30)
             origin=worker['url'].rsplit('/',1)[0]
             target=cdp.send('Target.createTarget',{'url':'https://localhost:'+str(server.server_port)+'/security'})['targetId']
@@ -935,6 +979,7 @@ def run_browser(family,executable,output):
                 'trusted_local_CA_TLS','one_use_claim','partial_preview','form_hidden_exclusion','covered_text_exclusion','no_upload_before_approval','pause_resume',
                 'visible_tenant_case_task','unchecked_consent_denial','paused_collection_denial','receipt_inspection',
                 'encrypted_receipt','exact_bytes','stop_disconnect','page_has_no_extension_channel','credential_log_exclusion'],
+                'guided_setup_checks':['trusted_loopback_form','owner_create_and_start','finish_setup'],
                 'workbench_checks':['responsive_390_and_1280','form_controls_within_viewport','theme_CSP_admission','skip_navigation','current_navigation','private_claim','source_health_screen','persisted_case_form','timeline_screen','case_provenance_screen','environment_unknown_state','separate_security_compliance_states','case_assignment','persisted_question','evidence_linked_answer','persisted_telemetry_specialist','local_plan_creation','persisted_local_steps','local_receipt_link','persisted_local_plan_stop','memory_proposal','memory_review','memory_forget','spending_screen','persisted_spending_pause_and_limits','explicit_evidence_view','audit_screen','disconnect_and_cookie_denial'],
                 'test_environment':'isolated generated console; container browser sandbox disabled; no production console/UAT acceptance'}
             (output/(family+'.json')).write_text(json.dumps(report,indent=2))
@@ -981,4 +1026,3 @@ def main():
 
 
 if __name__=='__main__': raise SystemExit(main())
-
