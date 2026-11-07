@@ -30,15 +30,13 @@ def main():
         app.start_db()
         ready=app.compose('exec','-T','identity-db','pg_isready','-h','identity-db','-U','postgres','-d','gabriel')
         assert b'accepting connections' in ready
-        merged=root/'blocked-installation.json'
-        merged.write_text(json.dumps(config))
         output=io.StringIO()
         # A regression past the network guard must fail on the unreadable password, not enroll.
-        with patch.object(installer,'COMPOSE',merged),patch.object(sys,'argv',[
+        with patch.object(installer,'Installation',return_value=app),patch.object(sys,'argv',[
                 'install','initialize',str(root),'--password-file',str(root/'must-not-be-read')]),contextlib.redirect_stdout(output):
             assert installer.main()==1
         denial=json.loads(output.getvalue())
-        assert denial['code']=='installation_network_check_failed' and denial['phase']=='database_tcp'
+        assert denial['code']=='installation_network_check_failed' and denial['phase']=='database_tcp', denial
         untouched=app.compose('exec','-T','identity-db','psql','-U','postgres','-d','gabriel','-Atc',
             "SELECT to_regnamespace('gabriel_identity') IS NULL")
         assert untouched.strip()==b't'
