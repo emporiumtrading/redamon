@@ -6,7 +6,18 @@ This installs the existing defensive case workbench and encrypted evidence servi
 
 The remediation candidate pins Python 3.15.2 on Alpine 3.24 to multiarch index `sha256:20a82dbc2783112ddb91d1534603f802d222a3e63e593cd002eb2ac534e70211`. [Registry resolution 41071707216](https://github.com/emporiumtrading/redamon/actions/runs/41071707216) verified index and Linux x86/ARM child-manifest bytes. YARA compiles in a separate dependency stage; the core production image excludes the compiler, pip and BusyBox packages. Evidence backup uses Python's archive writer. Core, component/tool-test, checkpoint-signer and model-validation defaults use the same interpreter pin. Review [PR104](https://github.com/emporiumtrading/redamon/pull/104) for the final exact-source scan and compatibility results before selecting this candidate. Registry metadata is not application or release acceptance.
 
-Use a checked-out source revision, Python 3.9 or later on a POSIX host, Docker Engine/Desktop with Compose v2, and an operator-owned directory outside the source checkout. The controller uses POSIX ownership and file locking; native Windows execution is not supported by this increment. Linux x86/ARM CI coverage is recorded in the PR; macOS/Windows Docker Desktop and the 18 GB target host still require acceptance. Commands below use `$HOME/gabriel-private-test` as a new directory; do not put it inside Git or a shared/synced folder. Docker volumes retain database, encrypted evidence and private workbench session files. Do not run inherited offensive-stack installation commands.
+Use a checked-out source revision, Python 3.9 or later on a POSIX host, Docker Engine/Desktop with Compose v2, and an operator-owned directory outside the source checkout. The controller uses POSIX ownership and file locking; native Windows execution is not supported by this increment. Linux x86/ARM CI coverage is recorded in the PR; macOS/Windows Docker Desktop and the 18 GB target host still require acceptance. The default private lab directory is `$HOME/gabriel-private-test`; do not put it inside Git or a shared/synced folder. Docker volumes retain database, encrypted evidence and private workbench session files. Do not run inherited offensive-stack installation commands.
+
+### Guided setup on Mac
+
+1. Start Docker Desktop. In Finder, open the Gabriel checkout and double-click `Gabriel-Setup.command`. The launcher prepares the private lab if the directory is new and opens Gabriel Setup in your browser when the image and local files are ready. If the lab was already prepared at the default location, the wizard uses its existing image and data.
+2. On first use, follow the welcome page to verify and trust this lab's certificate in Keychain Access or the test browser's certificate settings. Return to the welcome page and choose **Continue to secure setup**.
+3. Choose **Create the first owner** and enter the organization, username and a password of at least 16 characters. For an enrolled lab, choose **Open an existing workbench**. Select **Start Gabriel**. The wizard starts the Docker services and shows the private one-time ticket when the workbench is ready.
+4. Copy the ticket, choose **Open Gabriel workbench**, and paste it into the claim form. Keep the ticket private.
+
+For a different directory or a specific checked local image, use `python3 tooling/scripts/gabriel_install.py setup <directory>` with optional `--image sha256:<exact-local-image-id>` for a new directory. The setup link is local and expires after 15 minutes. Relaunch if you need a new setup link. If setup reports an owner may already exist, inspect the retained lab state before retrying creation. This wizard covers the local workbench. Chrome and Brave extension pairing uses the separate browser client guide.
+
+### Terminal setup
 
 ```bash
 python3 tooling/scripts/gabriel_install.py prepare "$HOME/gabriel-private-test"
@@ -116,5 +127,3 @@ Owners/admins create analyst accounts through **Team members**. Open a named mem
 ## Required Hermes supervisor
 
 Hermes is a required private dependency when opening the workbench. `open` builds its separately pinned upstream image; allow additional download space and a 2 GiB service memory limit. It receives no model keys, database credentials, evidence mounts or outbound network. Its own model configuration and the specialist configurations remain pending production qualification. See [Hermes setup, preflight, model access and limits](GABRIEL_HERMES.md). Local tools remain usable while AI admission is pending.
-
-

@@ -5,6 +5,8 @@ on:
       - 'gabriel/identity/**'
       - 'compose.gabriel-installation.yml'
       - 'tooling/scripts/gabriel_install.py'
+      - 'tooling/scripts/gabriel_setup.py'
+      - 'Gabriel-Setup.command'
       - 'tooling/scripts/gabriel_acceptance.py'
       - 'testing/gabriel_acceptance/**'
       - 'tooling/scripts/gabriel_identity_prepare.py'
@@ -44,7 +46,7 @@ jobs:
         run: |
           image_id="$(docker image inspect gabriel-installation-check --format '{{.Id}}')"
           python3 testing/gabriel_identity/installation_network_journey.py "$RUNNER_TEMP/gabriel-blocked-network-journey" "$image_id"
-      - name: Fresh install, actual HTTPS, persistent evidence and fresh-project restore
+      - name: Guided setup, actual HTTPS, persistent evidence and fresh-project restore
         run: |
           image_id="$(docker image inspect gabriel-installation-check --format '{{.Id}}')"
           python3 testing/gabriel_identity/installation_journey.py "$RUNNER_TEMP/gabriel-installation-journey" "$image_id"
@@ -72,4 +74,3 @@ jobs:
           path: ${{ runner.temp }}/gabriel-installation-evidence
           if-no-files-found: error
           retention-days: 14
-

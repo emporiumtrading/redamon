@@ -7,17 +7,19 @@ import re
 import secrets
 import ssl
 import sys
+from threading import Thread
 from urllib.parse import urlencode
 
 repo=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(repo/'tooling/scripts'))
 from gabriel_install import DockerOperationError,Installation,prepare
+from gabriel_setup import SetupServer
 from gabriel_acceptance import collect as collect_runtime_acceptance
 
 
-def request(root,port,path,fields=None,cookie=None):
-    client=http.client.HTTPSConnection('localhost',port,context=ssl.create_default_context(cafile=str(root/'tls/ca.pem')),timeout=10)
-    headers={'Origin':'https://localhost:'+str(port)}
+def request(root,port,path,fields=None,cookie=None,*,host='localhost',timeout=10,extra_headers=None):
+    client=http.client.HTTPSConnection(host,port,context=ssl.create_default_context(cafile=str(root/'tls/ca.pem')),timeout=timeout)
+    headers={'Origin':f'https://{host}:{port}', **(extra_headers or {})}
     if fields is not None: headers['Content-Type']='application/x-www-form-urlencoded'
     if cookie: headers['Cookie']=cookie
     try:
@@ -27,13 +29,47 @@ def request(root,port,path,fields=None,cookie=None):
     finally: client.close()
 
 
-def connect(root,app,password):
-    result=app.open(password)
+def setup_ticket(app, password, action):
+    with SetupServer(app) as wizard:
+        server = Thread(target=wizard.run, daemon=True)
+        server.start()
+        try:
+            def submit(fields, headers=None):
+                return request(app.root, wizard.server_port, '/start', fields,
+                               host='127.0.0.1', timeout=420, extra_headers=headers)
+
+            fields = dict(setup_key=wizard.key, action=action, organization='Generated installation lab',
+                          username='owner', password=password)
+            status, html, headers = request(app.root, wizard.server_port, '/', host='127.0.0.1')
+            assert status == 200 and wizard.key not in html
+            assert headers['Cache-Control'] == 'no-store'
+            assert "frame-ancestors 'none'" in headers['Content-Security-Policy']
+            assert submit(fields, {'Host': 'localhost'})[0] == 403
+            assert submit(fields, {'Origin': 'null'})[0] == 403
+            assert submit(dict(fields, setup_key='invalid'))[0] == 403
+            if action == 'create':
+                status, html, _ = submit(dict(fields, password='weak'))
+                assert status == 400 and 'at least 16 characters' in html
+                assert not wizard.owner_created
+            status, html, _ = submit(fields)
+            assert status == 200, 'setup did not open the workbench'
+            assert 'Gabriel is ready' in html and f'https://localhost:{app.config["port"]}/claim' in html
+            assert password not in html and wizard.key not in html
+            return re.search(r'id="ticket" value="([A-Za-z0-9_-]+)"', html)[1]
+        finally:
+            wizard.finished = True
+            server.join(timeout=10)
+            assert not server.is_alive()
+
+
+def connect(root,app,password,*,ticket=None):
+    if ticket is None:
+        ticket=app.open(password)['ticket']
     port=app.config['port']
     code,html,_=request(root,port,'/claim');assert code==200
     csrf=re.search(r'name="csrf" value="([A-Za-z0-9_-]+)"',html)[1]
-    assert request(root,port,'/claim',dict(csrf='wrong',ticket=result['ticket']))[0]==403
-    code,_,headers=request(root,port,'/claim',dict(csrf=csrf,ticket=result['ticket']));assert code==303
+    assert request(root,port,'/claim',dict(csrf='wrong',ticket=ticket))[0]==403
+    code,_,headers=request(root,port,'/claim',dict(csrf=csrf,ticket=ticket));assert code==303
     cookie=headers['Set-Cookie'].split(';',1)[0]
     assert all(part in headers['Set-Cookie'] for part in ('Secure','HttpOnly','SameSite=Strict'))
     assert request(root,port,'/cases')[0]==403
@@ -76,12 +112,13 @@ def main():
         assert 'owner_dsn' not in {s['source'] for s in config['services']['workbench']['secrets']}
         app.start_db()
         (directory/'installation-network.json').write_text(json.dumps(app.check_network(),indent=2))
-        identity=app.operator('initialize',dict(organization='Generated installation lab',username='owner',password=secret))
+        ticket=setup_ticket(app,secret,'create')
+        identity=app.operator('receipt')
         assert set(identity)=={'organization_id','user_id','username'}
         try: app.operator('initialize',dict(organization='Duplicate fixture',username='owner',password=secret))
         except ValueError: pass
         else: raise AssertionError('duplicate initialization admitted')
-        cookie,csrf=connect(root,app,secret)
+        cookie,csrf=connect(root,app,secret,ticket=ticket)
         assert request(root,18444,'/providers',cookie=cookie)[0]==200
         tooling=json.loads(app.compose('exec','-T','workbench','python','-c',"import json; from gabriel.identity.investigation_tools import remote; print(json.dumps(remote('inspect_toolkit')))"))
         assert tooling['status']=='ready' and tooling['packaged_tools_ready']
@@ -100,7 +137,7 @@ def main():
         analyst_cookie=headers['Set-Cookie'].split(';',1)[0]
         assert request(root,18444,'/personal-providers',cookie=analyst_cookie)[0]==200
         assert request(root,18444,'/providers',cookie=analyst_cookie)[0]==403
-        cookie,csrf=connect(root,app,secret)
+        cookie,csrf=connect(root,app,secret,ticket=setup_ticket(app,secret,'open'))
         optional=Installation(root)
         optional.command.extend(['--file',str(repo/'compose.gabriel-specialist-ai.yml')])
         ai_config=json.loads(optional.compose('--profile','operator','config','--format','json'))
@@ -173,7 +210,7 @@ print('PASS: restored encrypted evidence decrypted using the original evidence k
         restored.stop();restored.start_db()
         cookie,_=connect(target,restored,secret)
         assert request(target,18445,'/cases',cookie=cookie)[0]==200
-        print('PASS: browser AI module/readiness in rebuilt image; fresh installation; least-privilege loopback HTTPS; hashed owner identity; case and encrypted evidence persistence; old-cookie denial; quiesced backup; fresh-project restore with original keys; fresh login after Stop')
+        print('PASS: browser AI module/readiness in rebuilt image; guided setup and reopen; least-privilege loopback HTTPS; hashed owner identity; case and encrypted evidence persistence; old-cookie denial; quiesced backup; fresh-project restore with original keys; fresh login after Stop')
     except DockerOperationError as exc:
         diagnostic=((exc.stdout or b'')+b'\n'+(exc.stderr or b'')).decode(errors='replace')
         replacements=[secret]
@@ -196,5 +233,3 @@ print('PASS: restored encrypted evidence decrypted using the original evidence k
 
 
 if __name__=='__main__': main()
-
-
