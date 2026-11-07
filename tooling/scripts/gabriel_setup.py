@@ -10,7 +10,7 @@ import ssl
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-from time import monotonic
+from time import monotonic, sleep
 from urllib.parse import parse_qs
 from uuid import UUID
 import webbrowser
@@ -19,6 +19,7 @@ from gabriel_provider_keys import unique
 
 SETUP_SECONDS = 900
 FORM_LIMIT = 16384
+TRUST_REQUIRED = "<p>Return to Gabriel Setup and verify this lab’s certificate in Keychain Access.</p>"
 OPERATION_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError, subprocess.SubprocessError)
 SCRIPT = """
 const form = document.querySelector('#start-form');
@@ -76,6 +77,17 @@ def page(title, body):
 <main><small>GABRIEL — THE DEFENDER</small><h1>{escape(title)}</h1>
 {body}
 </main></html>"""
+
+
+def mac_tls_trusted(certificate):
+    # Use Keychain trust for both loopback names without supplying our own trust anchor.
+    try:
+        return all(subprocess.run(
+            ["/usr/bin/security", "verify-cert", "-L", "-q", "-p", "ssl", "-n", host, "-c", str(certificate)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=False,
+        ).returncode == 0 for host in ("127.0.0.1", "localhost"))
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def setup_key(key):
@@ -179,7 +191,10 @@ class SetupHandler(BaseHTTPRequestHandler):
         if not self.local_request():
             self.reply(403)
         elif self.path == "/":
-            self.reply(200, form())
+            if self.server.trust_ready():
+                self.reply(200, form())
+            else:
+                self.reply(403, page("Certificate trust required", TRUST_REQUIRED))
         elif self.path == "/setup.js":
             self.reply(200, SCRIPT, "application/javascript; charset=utf-8")
         else:
@@ -224,6 +239,9 @@ class SetupHandler(BaseHTTPRequestHandler):
         key = fields["setup_key"]
         if not key.isascii() or not secrets.compare_digest(key, setup.key) or monotonic() >= setup.deadline:
             self.reply(403, page("Setup link required", "<p>Return to the private welcome page and reopen setup.</p>"))
+            return
+        if self.path != "/finish" and not setup.trust_ready():
+            self.reply(403, page("Certificate trust required", TRUST_REQUIRED))
             return
         if self.path == "/":
             self.reply(200, form(key, opening=setup.workbench_opened or setup.owner_created))
@@ -331,7 +349,10 @@ class SetupServer(HTTPServer):
         tls = installation.root / "tls"
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.context.minimum_version = ssl.TLSVersion.TLSv1_2
-        self.context.load_cert_chain(tls / "server.pem", tls / "server.key")
+        self.certificate = tls / "server.pem"
+        self.certificate_digest = sha256(self.certificate.read_bytes()).digest()
+        self.context.load_cert_chain(self.certificate, tls / "server.key")
+        self.requires_system_trust = sys.platform == "darwin"
         self.installation = installation
         self.owner_created = False
         self.workbench_opened = False
@@ -341,6 +362,16 @@ class SetupServer(HTTPServer):
         self.authority = f"127.0.0.1:{self.server_port}"
         self.origin = f"https://{self.authority}"
         self.deadline = monotonic() + SETUP_SECONDS
+
+    def trust_ready(self):
+        if not self.requires_system_trust:
+            return True
+        try:
+            # A certificate rotation requires a fresh listener and setup link.
+            return (sha256(self.certificate.read_bytes()).digest() == self.certificate_digest
+                    and mac_tls_trusted(self.certificate))
+        except OSError:
+            return False
 
     def get_request(self):
         client, address = super().get_request()
@@ -364,25 +395,54 @@ class SetupServer(HTTPServer):
             self.handle_request()
 
 
+def open_local_page(path, title, body):
+    path.write_text(page(title, body), encoding="utf-8")
+    print(f"Opening {title}. If needed, open {path} in your browser.", file=sys.stderr, flush=True)
+    webbrowser.open(path.as_uri())
+
+
 def launch(installation):
     certificate = installation.root / "tls" / "ca.pem"
     fingerprint = sha256(ssl.PEM_cert_to_DER_cert(certificate.read_text(encoding="ascii"))).hexdigest().upper()
     fingerprint = ":".join(re.findall("..", fingerprint))
-    with SetupServer(installation) as server, TemporaryDirectory(prefix="gabriel-setup-") as directory:
-        welcome = Path(directory) / "Gabriel-Setup.html"
-        welcome.write_text(page("Welcome to Gabriel Setup", f"""
-<p>Your private Docker lab is prepared. Use the browser to create your owner and start Gabriel.</p>
+    public_ca = f'<a href="{escape(certificate.as_uri())}">this lab’s public CA certificate</a>'
+    ca_path = escape(str(certificate))
+    with TemporaryDirectory(prefix="gabriel-setup-") as directory:
+        guide = Path(directory)
+        if sys.platform == "darwin":
+            leaf = certificate.with_name("server.pem")
+            if not mac_tls_trusted(leaf):
+                open_local_page(guide / "Gabriel-Trust.html", "Trust your Gabriel certificate", f"""
+<p>Gabriel is waiting for macOS to verify HTTPS for this installation.</p>
 <ol>
-<li>On first use, open Keychain Access on Mac or your browser’s certificate settings.
- Import <a href="{escape(certificate.as_uri())}">this lab’s public certificate</a>
- from <code>{escape(str(certificate))}</code>.</li>
-<li>Compare its SHA-256 fingerprint and approve trust for this certificate in your test environment.
- <p><code>{fingerprint}</code></p></li>
-<li><a href="{server.origin}/#{server.key}">Continue to secure setup</a></li>
+<li>Open <strong>Keychain Access</strong> and select the <strong>login</strong> keychain.
+ Use <strong>File → Import Items</strong> to import {public_ca} from <code>{ca_path}</code>.</li>
+<li>Open the imported <strong>Gabriel private test installation CA</strong>.
+ Confirm its SHA-256 fingerprint matches <code>{fingerprint}</code>.</li>
+<li>Under <strong>Trust</strong>, set <strong>Secure Sockets Layer (SSL)</strong> to <strong>Always Trust</strong>.
+ Close the certificate details and approve the macOS prompt if it appears.</li>
 </ol>
-<p>Enter your password only after the browser accepts the local certificate. This private setup link expires after 15 minutes.</p>
-"""), encoding="utf-8")
-        print(f"Opening Gabriel Setup. If needed, open {welcome} in your browser.", file=sys.stderr, flush=True)
-        webbrowser.open(welcome.as_uri())
-        server.run()
-        return {"workbench_opened": server.workbench_opened, "production_admitted": False}
+<p>Gabriel opens the next page once macOS confirms trust. Keep the launcher open while you finish this step.</p>
+""")
+                deadline = monotonic() + SETUP_SECONDS
+                while monotonic() < deadline and not mac_tls_trusted(leaf):
+                    sleep(2)
+                if monotonic() >= deadline:
+                    print("Certificate trust was not confirmed. Open Gabriel Setup again to retry.", file=sys.stderr)
+                    return {"workbench_opened": False, "certificate_trust_confirmed": False,
+                            "production_admitted": False}
+            guidance = "<p>macOS verified the certificate for this local installation.</p>"
+        else:
+            guidance = f"""
+<p>On first use, use the certificate settings for your test browser to trust {public_ca}
+ at <code>{ca_path}</code>. Verify its SHA-256 fingerprint matches <code>{fingerprint}</code>.</p>
+"""
+        with SetupServer(installation) as server:
+            open_local_page(guide / "Gabriel-Setup.html", "Welcome to Gabriel Setup", f"""
+<p>Your private Docker lab is prepared. Use the browser to create your owner and start Gabriel.</p>
+{guidance}
+<p><a href="{server.origin}/#{server.key}">Continue to secure setup</a></p>
+<p>Enter your password only when the browser accepts the certificate. This private setup link expires after 15 minutes.</p>
+""")
+            server.run()
+            return {"workbench_opened": server.workbench_opened, "production_admitted": False}

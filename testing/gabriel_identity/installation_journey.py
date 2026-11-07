@@ -10,6 +10,7 @@ import ssl
 import sys
 from threading import Thread
 from urllib.parse import urlencode
+from unittest.mock import patch
 
 repo=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(repo/'tooling/scripts'))
@@ -59,6 +60,12 @@ def setup_ticket(app, password, action):
         assert submit(fields, {'Origin': 'null'})[0] == 403
         assert submit(dict(fields, setup_key='invalid'))[0] == 403
         if action == 'create':
+            with patch.object(wizard, 'requires_system_trust', True), patch('gabriel_setup.mac_tls_trusted', return_value=False):
+                status, html, _ = request(app.root, wizard.server_port, '/', host='127.0.0.1')
+                assert status == 403 and 'Certificate trust required' in html and 'type="password"' not in html
+                status, html, _ = submit(fields)
+                assert status == 403 and 'Certificate trust required' in html
+                assert not wizard.owner_created
             status, html, _ = submit(dict(fields, password='weak'))
             assert status == 400 and 'at least 16 characters' in html
             assert not wizard.owner_created
