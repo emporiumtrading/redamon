@@ -3,9 +3,10 @@ from copy import deepcopy
 from decimal import Decimal
 import json
 import unittest
+from uuid import UUID
 
-from packet import export,document,SAMPLES
-from gabriel.identity import specialist_agents as agents,hermes_supervisor as hermes
+from packet import export,document,history
+from gabriel.identity import catalog_skills,hermes_supervisor as hermes,specialist_agents as agents
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.model_evaluation import digest
 
@@ -29,6 +30,42 @@ class ProposedPacket(unittest.TestCase):
             self.assertEqual(row['body_sha256'],digest(row['body']))
             self.assertLessEqual(len(canonical(row['body'])),7000)
             self.assertEqual([m['role'] for m in row['body']['messages']],['system','user'])
+    def test_catalog_followups_fit_existing_model_limit(self):
+        for name, role in catalog_skills.SKILLS.items():
+            index = agents.ROLES.index(role) + 1
+            doc = document(index, role)
+            fact = doc['facts'][0]
+            if name == 'map_source_coverage':
+                fact.update(type='source_coverage', data=dict(source_kind='network',
+                            state='missing', window_start='2026-10-27T10:00:00Z'))
+            if name == 'analyze_false_negatives':
+                fact.update(type='detection_trial', data=dict(fact['data'], rule_digest='a'*64,
+                            engine_digest='b'*64, fixture_digest='c'*64))
+            refs = [
+                dict(kind='case_record', record_id=doc['case_id'], ref='case/'+doc['case_id']),
+                dict(kind='evidence_metadata', record_id=fact['evidence_id'], ref='evidence/'+fact['evidence_id'],
+                     digest=fact['evidence_digest'], content_integrity='verified'),
+            ]
+            result = catalog_skills.evaluate(name, doc, verified_refs=refs)
+            self.assertEqual(result['status'], 'review_required', name)
+            reviewed = history(index, doc)
+            reviewed['result']['historical_assertions'][0]['data'] = agents.fact_data_for_model(fact)
+            tools = [reviewed, dict(tool=name, result=result)]
+            packet = agents.project(doc, role, UUID(int=index), tools)['packet']
+            config = agents.configuration(role)
+            body = dict(model=config['model'], messages=[dict(role='system', content=agents.prompt(role)),
+                        dict(role='user', content=canonical(packet).decode())], **config['parameters'])
+            wire = canonical(body)
+            self.assertLessEqual(len(wire), 7000, name)
+            for key in ('id', 'evidence_id', 'evidence_digest', 'entity_id'):
+                self.assertNotIn(fact[key].encode(), wire, name)
+            if fact['type'] == 'detection_trial':
+                for stage in ('plan','report'):
+                    supervisor_wire = canonical(hermes.project(doc, stage)['packet'])
+                    for field in ('rule_digest','engine_digest','fixture_digest'):
+                        self.assertNotIn(fact['data'][field].encode(), supervisor_wire)
+                        self.assertNotIn(fact['data'][field].encode(), wire)
+
     def test_history_is_separate_and_private_fixture_identifiers_do_not_cross_boundary(self):
         value=export();requests={r['name']:r for r in value['requests']}
         for index,role in enumerate(agents.ROLES,1):

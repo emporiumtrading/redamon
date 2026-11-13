@@ -1,4 +1,4 @@
-"""First five implemented candidate skills from the 240-skill expansion.
+"""Bounded implementations from the 240-skill expansion.
 
 Pure, conservative summaries over the existing verified-entrypoint typed facts.
 These kernels do not receive credentials, access live systems or authorize actions.
@@ -6,10 +6,16 @@ These kernels do not receive credentials, access live systems or authorize actio
 from collections import Counter
 from datetime import datetime
 
+from gabriel.identity import catalog_dfir
+from gabriel.identity.catalog_detection import analyze_false_negatives
+from gabriel.identity.catalog_telemetry import map_source_coverage
 from gabriel.identity.specialist_analysis import validate_document
 
 VERSION='gabriel-catalog-tranche-1-v1'
 SKILLS={
+    **catalog_dfir.SKILLS,
+    'map_source_coverage': 'telemetry_health',
+    'analyze_false_negatives': 'detection_engineering',
     'prioritize_escalation_queue':'alert_triage',
     'review_incident_evidence_gaps':'incident_scoping',
     'review_privileged_access_changes':'identity_access',
@@ -22,10 +28,17 @@ def _at(s):
     return datetime.fromisoformat(s.replace('Z','+00:00'))
 
 
-def evaluate(name, document):
+def evaluate(name, document, *, verified_refs=None):
     if name not in SKILLS:
         raise ValueError('unknown_catalog_skill')
-    validate_document(document,document['case_id'])
+    if name in catalog_dfir.SKILLS:
+        return catalog_dfir.evaluate(name, document, verified_refs=verified_refs)
+    if name == 'map_source_coverage':
+        return map_source_coverage(document)
+    case_id = document.get('case_id') if type(document) is dict else None
+    validate_document(document, case_id)
+    if name == 'analyze_false_negatives':
+        return analyze_false_negatives(document)
     rows=document['facts']
     asof=_at(document['as_of'])
     result=dict(
