@@ -39,6 +39,12 @@ The module is deliberately read-only and local. Any integrated service must stil
 - Cross-case input rejection; 128-record cap and event-clock drift disclosure.
 - Re-run in real Docker x86_64 and ARM64 `Gabriel open-source investigation tools and skills` CI.
 
+## Integration with existing candidate detection
+
+`project_attack_pattern_document` converts a validated same-case batch into the existing `security-events-v1` document, retaining the Wazuh-reported authentication-failure category, source/native event ID, evidence linkage and explicitly unknown authorization. The caller must supply the snapshot time and any documented coverage gaps; the projection rejects contradictory native IDs and future-to-snapshot event times.
+
+The resulting document can be passed to Gabriel's existing `gabriel.identity.attack_patterns.investigate` **offline**. A generated ten-failure SSH sequence is tested end-to-end for a **suspected brute-force candidate requiring analyst review**, never a verified attack. This does not bypass the existing attack review's case, role and evidence source revalidation; the pure adapter is not a separate authenticated ingestion endpoint.
+
 ## Not implemented by this tranche
 
 Case-evidence service integration and source authentication, persistent normalized-event storage, ingestion adapters for other products, generic OCSF transformation, graph entity resolution, response automation, independently verified brute-force detection, or real-world held-out qualification.
