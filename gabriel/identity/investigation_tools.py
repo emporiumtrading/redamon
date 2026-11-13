@@ -23,7 +23,7 @@ EXTRA={
     'alert_triage':('inspect_logs','correlate_events','scan_artifacts','find_duplicate_facts','prioritize_escalation_queue'),
     'incident_scoping':('correlate_events','inspect_logs','inspect_packets','find_duplicate_facts','cross_check_timeline','review_incident_evidence_gaps','normalize_incident_timeline'),
     'threat_intelligence':('scan_artifacts','inspect_packets','review_indicator_freshness','review_intelligence_lifecycle'),
-    'threat_hunting':('inspect_logs','scan_artifacts','inspect_packets','summarize_hunt_hypotheses'),
+    'threat_hunting':('inspect_logs','scan_artifacts','inspect_packets','summarize_hunt_hypotheses','review_powershell_activity'),
     'dfir_evidence':('scan_artifacts','inspect_packets','audit_provenance','cross_check_timeline','validate_evidence_provenance'),
     'detection_engineering':('scan_artifacts','inspect_logs','review_detection_regression','analyze_false_negatives'),
     'exposure_vulnerability':('assess_exposure','review_exposure_context','review_vulnerability_sla'),
@@ -59,6 +59,7 @@ CATALOG={
     'review_intelligence_lifecycle':('Gabriel','MIT','Review supplied indicator versions, expiry, revocation and conflicts.'),
     'review_vulnerability_sla':('Gabriel','MIT','Review supplied finding ages, remediation deadlines and lifecycle conflicts.'),
     'normalize_incident_timeline':('Gabriel','MIT','Apply reported clock offsets and compare bounded incident intervals.'),
+    'review_powershell_activity':('Gabriel','MIT','Review reported PowerShell execution indicators with case-bound approvals.'),
     'map_source_coverage':('Gabriel','MIT','Map supplied source coverage windows and report gaps or conflicts.'),
     'validate_evidence_provenance':('Gabriel','MIT','Review locally verified artifact provenance and conflicting assertions.'),
     'analyze_false_negatives':('Gabriel','MIT','Review supplied versioned detection fixtures for missed expected matches.'),
@@ -81,7 +82,7 @@ def manifest(role):
             Path(__file__).with_name('catalog_dfir.py'),Path(__file__).with_name('catalog_detection.py'),
             Path(__file__).with_name('catalog_telemetry.py'),Path(__file__).with_name('catalog_intelligence.py'),
             Path(__file__).with_name('catalog_exposure.py'),Path(__file__).with_name('catalog_cloud.py'),
-            Path(__file__).with_name('catalog_timeline.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
+            Path(__file__).with_name('catalog_timeline.py'),Path(__file__).with_name('catalog_hunting.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
 
 
 def instructions(role):
