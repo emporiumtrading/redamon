@@ -1,0 +1,18 @@
+name: Gabriel sealed release qualification software
+on:
+  pull_request:
+    paths: ['gabriel/identity/**', 'testing/gabriel_identity/test_release_qualification.py', '.github/workflows/gabriel-release-qualification.yml']
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build isolated test image without provider credentials
+        run: docker build --target test -f gabriel/identity/Dockerfile -t gabriel-release-qualification .
+      - name: Reject unsealed, reused, changed and fixture-origin evidence offline
+        run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges --entrypoint python gabriel-release-qualification tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_release_qualification.py --strict --parallel 1

@@ -1,0 +1,11 @@
+# Selected tabs and Hermes
+
+The workbench Hermes page can select one through eight owned active browser sessions and prepare a source-bound snapshot automatically. Readiness performs no inference. Start requires separate explicit export consent and the analyst's selected personal or organization key. Organization keys remain owner/admin controlled. All model configurations must be production-admitted independently.
+
+For unknown dashboards, this path deliberately exports only capture-integrity assertions and explicit missing-coverage facts. Captured text remains local. It does not parse alerts, establish incident semantics, export arbitrary visible text, admit console navigation or claim threat detection. Partial visibility remains partial. Use separately reviewed typed evidence for incident investigation; arbitrary incident assertions attached to partial captures cannot bypass the receipt-only restriction.
+
+Every selected session must belong to the analyst and case, have a current authorization/heartbeat, no pending navigation, and a completed capture received and observed within 120 seconds. The generated snapshot is deterministic for its original capture IDs and retains original receipt time. Preparing it again does not refresh evidence age. Every selected tab contributes source facts; snapshots are never silently truncated. Large selections can require a narrower scope under existing packet limits.
+
+Hermes planning/reporting and each specialist recheck the frozen tab sources before and after provider I/O. New capture, navigation, Stop, disconnect, expired authority or source drift invalidates the root; no stale answer is published and no ambiguous send is retried. After a capture changes, start a separately identified investigation using the fresh snapshot. Six paid calls and the original investigation spending allowance remain shared across Hermes and specialists.
+
+Scheduled extension collection can create a new actual receipt for unchanged text after sixty seconds, within the original finite capture/lease budget. An unchanged hash is never treated as a new receipt or fresh evidence. This does not provide indefinite monitoring, autonomous parsing of unknown dashboards or independent AI quality qualification. The old browser AI text-review path remains separate; it does not gain Hermes authority from this feature.

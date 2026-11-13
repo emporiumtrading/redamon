@@ -17,7 +17,7 @@ from gabriel.identity.specialist_analysis import ROLE_TYPES
 from gabriel.identity.specialist_analysis_runs import verified_input
 from gabriel.identity.specialist_contracts import ROLES
 
-VERSION='gabriel-hermes-supervisor-v1'
+VERSION='gabriel-hermes-supervisor-v2'
 DEFAULT_MODEL=bridge.MODEL
 MAX_SELECTED_ROLES=4
 
@@ -46,6 +46,7 @@ def configuration(stage='plan',model=DEFAULT_MODEL):
         role_catalog_digest=digest({r:sorted(ROLE_TYPES[r]) for r in ROLES}),
         bridge_digest=sha256(Path(bridge.__file__).read_bytes()).hexdigest(),
         supervisor_digest=sha256(Path(__file__).read_bytes()).hexdigest(),
+        browser_snapshot_digest=sha256(Path(__file__).with_name('browser_hermes.py').read_bytes()).hexdigest(),
         max_selected_roles=MAX_SELECTED_ROLES,max_total_calls=6,independent_agent_context=True,local_working_context_tokens=65536)
 
 
@@ -93,6 +94,13 @@ def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
     from gabriel.identity.browser_navigation import BrowserNavigationService
     browser=BrowserNavigationService(service._dsn,service.store)
     checked=[]
+    # Partial captures are eligible only as deterministic receipt/coverage facts.
+    # They cannot authorize manually asserted incident semantics.
+    if lease_ids:
+        from gabriel.identity.browser_hermes import snapshot
+        bounded,_=snapshot(service,conn,p,case_id,lease_ids)
+        bounded_receipts=bounded==document
+    else:bounded_receipts=False
     for lease_id in lease_ids:
         lease_id=identifier(lease_id)
         row=conn.execute('SELECT * FROM gabriel_identity.browser_leases WHERE organization_id=%s AND id=%s',
@@ -106,7 +114,7 @@ def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
             ON (r.organization_id,r.observation_id,r.evidence_id)=(o.organization_id,o.id,o.evidence_id)
             WHERE o.organization_id=%s AND o.lease_id=%s AND o.state='captured'
             ORDER BY o.sequence DESC LIMIT 1''',(p.organization_id,lease_id)).fetchone()
-        if not observation or not 0<=observation['age'].total_seconds()<=120 or not 0<=observation['capture_age'].total_seconds()<=120 or observation['visibility']!='visible_text_only':
+        if not observation or not 0<=observation['age'].total_seconds()<=120 or not 0<=observation['capture_age'].total_seconds()<=120 or observation['visibility']!='visible_text_only' and not bounded_receipts:
             raise AccessDenied('hermes_fresh_tab_read_required')
         if observation['evidence_id'] not in sources:raise AccessDenied('hermes_typed_facts_must_bind_current_tab_read')
         artifact=service._evidence(conn,p,observation['evidence_id'])
@@ -202,9 +210,7 @@ class HermesWorker(ModelWorker):
     def _quote(self,token,model,config):
         return self.budget.quote(token,'openrouter',model,digest(config),500000,3000000,_personal=self.key_scope=='personal')
     def _scope(self,conn,p,run_id,case_id=None,*,_exclude_ingestion=None):
-        root=coordinator.load(conn,p,self.root_id)
-        if root['requested_by']!=p.user_id:raise AccessDenied('hermes_run_not_owned')
-        coordinator.active(self.cases,conn,p,root)
+        root,_,_=active(self.cases,conn,p,self.root_id,self._current_token)
         return super()._scope(conn,p,run_id,root['case_id'],_exclude_ingestion=_exclude_ingestion)
     def _validate_actions(self,decision):validate_actions(decision,self.document,self.stage)
     def _input(self,token,run_id,evidence_id,model):

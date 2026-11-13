@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 repo=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(repo/'tooling/scripts'))
 from gabriel_install import DockerOperationError,Installation,prepare
+from gabriel_acceptance import collect as collect_runtime_acceptance
 
 
 def request(root,port,path,fields=None,cookie=None):
@@ -86,6 +87,9 @@ def main():
         supervisor=json.loads(app.compose('exec','-T','workbench','python','-c',"import json; from gabriel.identity.hermes_bridge import health; print(json.dumps(health()))"))
         assert supervisor['status']=='ready' and supervisor['upstream']=='bf0203a794a07aac3ff764972ab9087baa4e4f4e'
         (directory/'hermes-runtime-readiness.json').write_text(json.dumps(supervisor,indent=2))
+        runtime=collect_runtime_acceptance(root)
+        assert runtime['runtime_checks_passed'] and runtime['production_admitted'] is False
+        (directory/'runtime-acceptance.json').write_text(json.dumps(runtime,indent=2))
         analyst_password=secrets.token_urlsafe(24)
         assert request(root,18444,'/members/create',dict(csrf=csrf,username='generated-install-analyst',password=analyst_password,role='analyst'),cookie)[0]==303
         opened=app.open(analyst_password,username='generated-install-analyst')

@@ -1,7 +1,7 @@
 name: Gabriel required Hermes supervision
 on:
   pull_request:
-    paths: ['gabriel/identity/**', 'gabriel/hermes/**', 'testing/gabriel_identity/test_hermes*', 'compose.gabriel*.yml', '.github/workflows/gabriel-hermes.yml']
+    paths: ['gabriel/identity/**', 'gabriel/hermes/**', 'testing/gabriel_identity/test_hermes*', 'testing/gabriel_identity/test_browser_hermes*', 'testing/gabriel_identity/test_workbench_hermes*', 'compose.gabriel*.yml', '.github/workflows/gabriel-hermes.yml']
 permissions:
   contents: read
 jobs:
@@ -33,9 +33,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/hermes-qualification"
           git rev-parse HEAD > "$RUNNER_TEMP/hermes-qualification/source-sha.txt"
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m gabriel.identity.hermes_qualification --configurations > "$RUNNER_TEMP/hermes-qualification/configurations.json"
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_browser_hermes_integration.py::test_two_partial_tabs_run_native_hermes_and_personal_specialists_reject_stale_replay testing/gabriel_identity/test_browser_hermes_integration.py::test_fresh_partial_tabs_replay_native_hermes_without_provider_resend testing/gabriel_identity/test_browser_hermes_integration.py::test_second_tab_change_during_provider_call_stops_without_child_dispatch
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_hermes_supervisor_integration.py::test_hermes_plans_delegates_two_independent_agents_reports_and_replays
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
-          if ! "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_model_evaluation.py testing/gabriel_identity/test_hermes_qualification.py testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1; then
+          if ! "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_model_evaluation.py testing/gabriel_identity/test_hermes_qualification.py testing/gabriel_identity/test_hermes_supervisor.py testing/gabriel_identity/test_hermes_supervisor_integration.py testing/gabriel_identity/test_browser_hermes_integration.py testing/gabriel_identity/test_workbench_hermes_selection.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1; then
             "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_hermes_supervisor_integration.py::test_hermes_plans_delegates_two_independent_agents_reports_and_replays || true
             "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests -m pytest -q --assert=plain --tb=short testing/gabriel_identity/test_workbench_integration.py::test_https_case_report_custody_and_explicit_content_view || true
             exit 1
