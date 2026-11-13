@@ -51,6 +51,28 @@ def test_unsafe_cross_origin_write_and_sensitive_destinations_are_never_returned
     assert row['observed_link_count']==10
 
 
+@pytest.mark.parametrize('unsafe_url',[
+    'https://@console.example.org/home',
+    'https://console.example.org:invalid/home',
+    'https://console.example.org/%5Cother',
+    'https://console.example.org/%2525252564elete',
+    'https://console.example.org/%FF',
+    'https://console.example.org/authorize',
+    'https://console.example.org/alerts%3Fdelete',
+])
+def test_shared_browser_safety_checks_apply_to_sources_and_candidates(unsafe_url):
+    snapshot = visible(unsafe_url, 'https://console.example.org/events')
+    with pytest.raises(InvalidConsoleOrientation):
+        review(snapshot, source_url=unsafe_url)
+    assert review(snapshot)['read_only_candidates'] == ['https://console.example.org/events']
+
+
+def test_sensitive_route_terms_in_hostname_do_not_filter_read_only_paths():
+    source = 'https://settings.console.example.org/home'
+    destination = 'https://settings.console.example.org/events'
+    assert review(visible(destination), source_url=source)['read_only_candidates'] == [destination]
+
+
 def test_static_visible_links_only_does_not_claim_dynamic_or_iframe_coverage():
     row=review(visible())
     assert row['status']=='no_supported_navigation_candidates'

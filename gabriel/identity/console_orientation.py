@@ -6,11 +6,12 @@ grant browser permissions, authenticate the source, or qualify any AI model.
 """
 from hashlib import sha256
 import re
-from urllib.parse import urlsplit, unquote, urlunsplit
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.browser_navigation import readonly_page
+from gabriel.identity.browser_sessions import VERSION as BROWSER_VERSION, checked_page_url
 from gabriel.identity.service import AccessDenied
 
 VERSION = 'gabriel-console-orientation-v1'
@@ -45,40 +46,30 @@ def valid_uuid(value):
     return value
 
 
-def strict_source(url):
+def checked_orientation_url(url):
     require(type(url) is str and 1 <= len(url) <= 1024)
-    try:
-        parsed = urlsplit(url)
-        require(parsed.scheme == 'https' and parsed.hostname and not parsed.username
-                and not parsed.password and not parsed.query and not parsed.fragment
-                and not any(ord(c) < 33 or ord(c) == 127 for c in url))
-        require(urlunsplit(parsed) == url)
-        readonly_page(url)
-    except (ValueError, AccessDenied, UnicodeError):
-        raise InvalidConsoleOrientation(UUID_ERROR) from None
+    parsed, decoded = checked_page_url(url, BROWSER_VERSION)
+    require(not parsed.query and not parsed.fragment)
+    require(not any(ord(c) < 33 or ord(c) == 127 for c in decoded))
+    decoded_route = urlsplit(decoded)
+    require(not SENSITIVE_ROUTE.search(decoded_route.path + '?' + decoded_route.query + '#' + decoded_route.fragment))
+    readonly_page(url)
     return parsed
+
+
+def strict_source(url):
+    try:
+        return checked_orientation_url(url)
+    except (ValueError, AccessDenied):
+        raise InvalidConsoleOrientation(UUID_ERROR) from None
 
 
 def candidate(url, origin):
     """Candidate for an operator; backend grant still determines navigation."""
-    if type(url) is not str or len(url) > 1024:
-        return False
     try:
-        parsed = urlsplit(url)
-        if (parsed.scheme, parsed.netloc) != origin or parsed.username or parsed.password:
-            return False
-        if parsed.query or parsed.fragment or urlunsplit(parsed) != url:
-            return False
-        route = url
-        for _ in range(4):
-            route = unquote(route)
-        if SENSITIVE_ROUTE.search(route):
-            return False
-        if any(ord(c) < 33 or ord(c) == 127 for c in url) or any(ord(c) < 33 or ord(c) == 127 for c in route):
-            return False
-        readonly_page(url)
-        return True
-    except (ValueError, AccessDenied, UnicodeError):
+        parsed = checked_orientation_url(url)
+        return (parsed.scheme, parsed.netloc) == origin
+    except (ValueError, AccessDenied):
         return False
 
 
