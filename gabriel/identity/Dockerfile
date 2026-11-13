@@ -128,14 +128,3 @@ RUN set -eux; \
 RUN python -m pip uninstall --yes setuptools wheel pip \
     && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
 USER 10001:10001
- > /tmp/gabriel-python-sonames; \
-    test -s /tmp/gabriel-python-sonames; \
-    apk add --no-cache --virtual .gabriel-python-rundeps $(cat /tmp/gabriel-python-sonames); \
-    rm -f /usr/local/lib/python3.11/lib-dynload/_sqlite3*.so; \
-    apk del .python-rundeps sqlite-libs; \
-    ! apk info -e sqlite-libs; \
-    python -c "import gabriel.identity.cli, gabriel.identity.service, psycopg, argon2, cryptography, gunicorn, yara, dpkt"; \
-    rm /tmp/gabriel-python-sonames
-RUN python -m pip uninstall --yes setuptools wheel pip \
-    && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
-USER 10001:10001
