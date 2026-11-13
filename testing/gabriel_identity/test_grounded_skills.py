@@ -227,7 +227,8 @@ def test_all_twelve_roles_have_a_new_grounded_review_and_none_are_model_admitted
         'review_exposure_context', 'review_cloud_change_assertions',
         'review_response_dependencies', 'review_recovery_baselines',
     }
-    assert expanded == grounded_skills.SKILL_NAMES
+    assert expanded.issubset(grounded_skills.SKILL_NAMES)
+    assert len(grounded_skills.SKILL_NAMES - expanded) == 5
     assert len(investigation_tools.TOOLS) == 12
     for role, tools in investigation_tools.TOOLS.items():
         assert expanded.intersection(tools), role

@@ -9,6 +9,7 @@ from itertools import combinations
 
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.specialist_analysis import validate_document
+from gabriel.identity.catalog_skills import SKILLS as CATALOG_SKILLS, evaluate as catalog_evaluate
 
 VERSION = 'gabriel-grounded-skills-v1'
 SKILL_NAMES = frozenset({
@@ -23,6 +24,7 @@ SKILL_NAMES = frozenset({
     'review_cloud_change_assertions',
     'review_response_dependencies',
     'review_recovery_baselines',
+    *CATALOG_SKILLS,
 })
 
 
@@ -50,6 +52,8 @@ def evaluate(name, document):
     """Return de-identified counters and explicit limits, never raw evidence/IDs."""
     if name not in SKILL_NAMES:
         raise ValueError('unknown_grounded_skill')
+    if name in CATALOG_SKILLS:
+        return catalog_evaluate(name, document)
     validate_document(document, document['case_id'])
     facts = document['facts']
     result = _base(facts)
