@@ -20,17 +20,17 @@ SKILLS=Path(__file__).with_name('investigation_skills')
 REMOTE={'scan_artifacts','inspect_packets','inspect_logs'}
 EXTRA={
     'telemetry_health':('correlate_events','inspect_logs','assess_visibility_gaps'),
-    'alert_triage':('inspect_logs','correlate_events','scan_artifacts','find_duplicate_facts'),
-    'incident_scoping':('correlate_events','inspect_logs','inspect_packets','find_duplicate_facts','cross_check_timeline'),
+    'alert_triage':('inspect_logs','correlate_events','scan_artifacts','find_duplicate_facts','prioritize_escalation_queue'),
+    'incident_scoping':('correlate_events','inspect_logs','inspect_packets','find_duplicate_facts','cross_check_timeline','review_incident_evidence_gaps'),
     'threat_intelligence':('scan_artifacts','inspect_packets','review_indicator_freshness'),
     'threat_hunting':('inspect_logs','scan_artifacts','inspect_packets','summarize_hunt_hypotheses'),
     'dfir_evidence':('scan_artifacts','inspect_packets','audit_provenance','cross_check_timeline'),
     'detection_engineering':('scan_artifacts','inspect_logs','review_detection_regression'),
     'exposure_vulnerability':('assess_exposure','review_exposure_context'),
-    'identity_access':('inspect_logs','correlate_events','find_duplicate_facts'),
+    'identity_access':('inspect_logs','correlate_events','find_duplicate_facts','review_privileged_access_changes'),
     'cloud_supply_chain':('scan_artifacts','correlate_events','review_cloud_change_assertions'),
-    'response_remediation':('assess_exposure','correlate_events','review_response_dependencies'),
-    'recovery_learning':('correlate_events','review_recovery_baselines'),
+    'response_remediation':('assess_exposure','correlate_events','review_response_dependencies','analyze_response_dependencies'),
+    'recovery_learning':('correlate_events','review_recovery_baselines','review_incident_closure_evidence'),
 }
 TOOLS={r:('verify_sources','review_rules','review_memory')+(() if r=='recovery_learning' else ('inspect_timeline',))+('inspect_toolkit',)+EXTRA[r] for r in ROLES}
 CATALOG={
@@ -55,6 +55,11 @@ CATALOG={
     'review_cloud_change_assertions':('Gabriel','MIT','Summarize reported cloud and supply-chain changes and authorization uncertainty; no cloud modifications.'),
     'review_response_dependencies':('Gabriel','MIT','Identify incomplete response readiness checks; never contain or remediate without human authorization.'),
     'review_recovery_baselines':('Gabriel','MIT','Compare reported recovery checks against stated baselines; never claim verified recovery.'),
+    'prioritize_escalation_queue':('Gabriel','MIT','Prioritize supplied unresolved alerts by reported severity, age and unknown state; no suppression or automatic escalation.'),
+    'review_incident_evidence_gaps':('Gabriel','MIT','Identify missing entity references and fact categories in case-bound supplied scope; never infer complete visibility.'),
+    'review_privileged_access_changes':('Gabriel','MIT','Review reported privilege grants and MFA changes with uncertain authorization; no account mutation.'),
+    'analyze_response_dependencies':('Gabriel','MIT','Check reported target binding, dependencies and recovery before proposing action; execution remains denied.'),
+    'review_incident_closure_evidence':('Gabriel','MIT','Review reported restore, service and control checks; never independently certify recovery or close incidents.'),
 }
 
 
@@ -65,7 +70,7 @@ def manifest(role):
         input='job_bound_local_sources_no_model_arguments',version=VERSION,
         purpose=CATALOG[n][2],when_to_use=CATALOG[n][2],args_format='requested_actions=[tool_name]; runtime supplies job-bound evidence; no arbitrary arguments',
         description=(SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip(),
-        implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'),Path(__file__).with_name('grounded_skills.py'))])) for n in TOOLS[role]]
+        implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'),Path(__file__).with_name('grounded_skills.py'),Path(__file__).with_name('catalog_skills.py'))])) for n in TOOLS[role]]
 
 
 def instructions(role):
