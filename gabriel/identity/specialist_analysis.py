@@ -12,6 +12,7 @@ from gabriel.identity.catalog_cloud import CLOUD_STORAGE_ACCESS_SCHEMA, validate
 from gabriel.identity.catalog_exposure import VULNERABILITY_SLA_SCHEMA, validate_vulnerability_sla
 from gabriel.identity.catalog_intelligence import INTEL_LIFECYCLE_SCHEMA, validate_intel_lifecycle
 from gabriel.identity.catalog_telemetry import SOURCE_COVERAGE_SCHEMA, validate_source_coverage
+from gabriel.identity.catalog_timeline import CLOCK_LIMIT_MS, TIMELINE_EVENT_SCHEMA, validate_timeline_event
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.service import InvalidIdentityInput
 
@@ -23,6 +24,7 @@ SCHEMAS = {
     'coverage': {'state': {'available', 'stale', 'missing'}},
     'source_coverage': SOURCE_COVERAGE_SCHEMA,
     'alert': {'severity': SEVERITIES, 'state': {'open', 'resolved', 'unknown'}},
+    'timeline_event': TIMELINE_EVENT_SCHEMA,
     'activity': {'category': {'authentication', 'process', 'network', 'file'},
                  'outcome': {'success', 'failure', 'blocked', 'observed', 'unknown'}, 'count': int},
     'intel_lifecycle': INTEL_LIFECYCLE_SCHEMA,
@@ -45,7 +47,7 @@ SCHEMAS = {
 ROLE_TYPES = {
     'telemetry_health': {'coverage', 'source_coverage'},
     'alert_triage': {'alert', 'activity'},
-    'incident_scoping': {'activity', 'alert', 'identity', 'cloud'},
+    'incident_scoping': {'activity', 'alert', 'identity', 'cloud', 'timeline_event'},
     'threat_intelligence': {'intelligence', 'intel_lifecycle'},
     'threat_hunting': {'activity', 'identity', 'cloud'},
     'dfir_evidence': {'artifact'},
@@ -140,9 +142,11 @@ def validate_document(document, case_id):
             uid(fact['entity_id'])
         value = fact['evidence_digest']
         require(type(value) is str and len(value) == 64 and all(c in '0123456789abcdef' for c in value), 'invalid_specialist_fact_digest')
-        require(at(fact['event_time']) <= as_of, 'specialist_fact_after_snapshot')
+        event_time = at(fact['event_time'])
         kind = fact['type']
         require(type(kind) is str and kind in SCHEMAS, 'unknown_specialist_fact_type')
+        if kind != 'timeline_event':
+            require(event_time <= as_of, 'specialist_fact_after_snapshot')
         data, schema = fact['data'], SCHEMAS[kind]
         require(type(data) is dict and set(data) == set(schema), 'invalid_specialist_fact_fields')
         for key, allowed in schema.items():
@@ -153,6 +157,9 @@ def validate_document(document, case_id):
                 require(type(item) is int and 1 <= item <= 1000000, 'invalid_specialist_fact_value')
             elif allowed == 'time':
                 at(item)
+            elif allowed == 'nullable_clock_ms':
+                require(item is None or type(item) is int and abs(item) <= CLOCK_LIMIT_MS,
+                        'invalid_timeline_clock_bounds')
             elif allowed == 'uuid':
                 uid(item)
             elif allowed == 'digest':
@@ -166,6 +173,8 @@ def validate_document(document, case_id):
             validate_intel_lifecycle(fact, as_of)
         if kind == 'vulnerability_sla':
             validate_vulnerability_sla(fact)
+        if kind == 'timeline_event':
+            validate_timeline_event(fact, as_of)
         if kind == 'source_coverage':
             validate_source_coverage(fact)
     require(len({fact['evidence_id'] for fact in facts}) <= 32, 'specialist_fact_source_limit')
@@ -207,10 +216,13 @@ def analyze(role, document, input_ref):
         concern('Reported high/critical alert severity warrants prompt analyst review; compromise is unestablished.', unresolved)
     elif role == 'incident_scoping':
         entities = {r['entity_id'] for r in selected if r['entity_id'] is not None}
-        ordered = sorted(selected, key=lambda r: (at(r['event_time']), r['id']))
+        ordered = sorted((r for r in selected if r['type'] != 'timeline_event'),
+                         key=lambda r: (at(r['event_time']), r['id']))
         note(f'Reported scope: {len(entities)} supplied entity keys across {len(selected)} facts; keys do not verify identity.')
         if ordered:
             note('Reported event interval: ' + ordered[0]['event_time'] + ' to ' + ordered[-1]['event_time'] + '.', [ordered[0], ordered[-1]])
+        if timeline := of('timeline_event'):
+            note('Review supplied source clock bounds before ordering timeline events.', timeline)
     elif role == 'threat_intelligence':
         matches = [r for r in of('intelligence') if r['data']['match']]
         current = [r for r in matches if at(r['data']['valid_until']) > at(document['as_of'])]

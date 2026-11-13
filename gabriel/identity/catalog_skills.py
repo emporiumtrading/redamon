@@ -10,6 +10,7 @@ from gabriel.identity import catalog_cloud, catalog_dfir, catalog_intelligence
 from gabriel.identity.catalog_detection import analyze_false_negatives
 from gabriel.identity.catalog_exposure import review_vulnerability_sla
 from gabriel.identity.catalog_telemetry import map_source_coverage
+from gabriel.identity.catalog_timeline import normalize_incident_timeline
 from gabriel.identity.specialist_analysis import validate_document
 
 VERSION='gabriel-catalog-tranche-1-v1'
@@ -18,6 +19,7 @@ SKILLS={
     **catalog_dfir.SKILLS,
     **catalog_intelligence.SKILLS,
     'review_vulnerability_sla': 'exposure_vulnerability',
+    'normalize_incident_timeline': 'incident_scoping',
     'map_source_coverage': 'telemetry_health',
     'analyze_false_negatives': 'detection_engineering',
     'prioritize_escalation_queue':'alert_triage',
@@ -43,6 +45,8 @@ def evaluate(name, document, *, verified_refs=None):
         return catalog_dfir.evaluate(name, document, verified_refs=verified_refs)
     if name == 'review_vulnerability_sla':
         return review_vulnerability_sla(document)
+    if name == 'normalize_incident_timeline':
+        return normalize_incident_timeline(document)
     if name == 'map_source_coverage':
         return map_source_coverage(document)
     case_id = document.get('case_id') if type(document) is dict else None

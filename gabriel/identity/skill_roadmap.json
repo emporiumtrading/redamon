@@ -603,9 +603,9 @@
       "owner_specialist": "incident_scoping",
       "catalog_index": 15,
       "name": "Incident timeline normalization",
-      "implementation_status": "candidate_not_implemented",
+      "implementation_status": "implemented_unqualified",
       "qualification_status": "not_evaluated",
-      "accepted_implementation": null,
+      "accepted_implementation": "gabriel.identity.catalog_skills.evaluate:normalize_incident_timeline",
       "evidence_contract": "case-bound typed source refs and digests required",
       "external_actions_allowed": false
     },
