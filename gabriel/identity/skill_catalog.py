@@ -14,7 +14,7 @@ from gabriel.identity.catalog_skills import SKILLS as IMPLEMENTED
 
 VERSION = 'gabriel-skill-catalog-v1'
 CATALOG = Path(__file__).with_name('skill_roadmap.json')
-STATES = frozenset({'candidate_not_implemented', 'implemented_unqualified', 'qualified_for_review'})
+STATES = frozenset({'candidate_not_implemented', 'implemented_unqualified'})
 SKILL_ID = re.compile(r'[a-z_]+\.(?:0[1-9]|1[0-9]|20)-[a-z0-9]+(?:-[a-z0-9]+)*\Z')
 
 
@@ -29,7 +29,8 @@ def load():
     doc = json.loads(raw)
     if type(doc) is not dict or set(doc) != {'schema_version', 'source_document', 'catalog_total', 'roles', 'skills'}:
         raise InvalidSkillCatalog('invalid_catalog_schema')
-    if doc['schema_version'] != VERSION or doc['catalog_total'] != 240 or doc['roles'] != 12:
+    if (doc['schema_version'] != VERSION or doc['catalog_total'] != 240 or doc['roles'] != 12
+            or doc['source_document'] != 'docs/readmes/GABRIEL_SPECIALIST_SKILL_EXPANSION.md'):
         raise InvalidSkillCatalog('invalid_catalog_count')
     rows = doc['skills']
     if type(rows) is not list or len(rows) != 240:
@@ -54,7 +55,7 @@ def load():
         per_role[(role, n)] += 1
         if type(row['name']) is not str or not 3 <= len(row['name']) <= 120:
             raise InvalidSkillCatalog('invalid_skill_name')
-        if row['implementation_status'] not in STATES or row['external_actions_allowed'] is not False:
+        if type(row['implementation_status']) is not str or row['implementation_status'] not in STATES or row['external_actions_allowed'] is not False:
             raise InvalidSkillCatalog('unsafe_skill_status')
         if row['qualification_status'] != 'not_evaluated':
             raise InvalidSkillCatalog('unsupported_qualification_claim')
