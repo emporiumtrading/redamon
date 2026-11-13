@@ -101,6 +101,7 @@ def main():
             assert ('db_tls_key' in secrets_for_service)==(name=='identity-db')
             assert ('db_tls_certificate' in secrets_for_service)==(name=='identity-db')
         app.start_db()
+        (directory/'installation-network.json').write_text(json.dumps(app.check_network(),indent=2))
         identity=app.operator('initialize',dict(organization='Generated installation lab',username='owner',password=secret))
         verify_database_tls(app)
         assert set(identity)=={'organization_id','user_id','username'}

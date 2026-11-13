@@ -18,6 +18,28 @@ from gabriel_provider_keys import prepare as keyring
 
 REPO=Path(__file__).resolve().parents[2]
 COMPOSE=REPO/'compose.gabriel-installation.yml'
+NETWORK_CHECK="""import json,socket
+result={'version':'gabriel-install-network-v1','dns_resolves':False,'tcp_reachable':False}
+try:
+    addresses=socket.getaddrinfo('identity-db',5432,socket.AF_INET,socket.SOCK_STREAM)
+    result['dns_resolves']=bool(addresses)
+    if addresses:
+        with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as client:
+            client.settimeout(3)
+            client.connect(addresses[0][4])
+        result['tcp_reachable']=True
+except OSError:
+    pass
+print(json.dumps(result))
+"""
+
+
+class InstallationNetworkError(ValueError):
+    def __init__(self,phase):
+        self.phase=phase
+        super().__init__('installation_network_check_failed: '+phase)
+
+
 DB_TLS_COMPOSE=REPO/'compose.gabriel-installation-db-tls.yml'
 DB_TLS_RECEIPT='database-tls.json'
 
@@ -33,9 +55,9 @@ class DockerOperationError(ValueError):
         self.stderr=completed.stderr
 
 
-def run(command,*,env=None,payload=None,output=None):
+def run(command,*,env=None,payload=None,output=None,timeout=None):
     completed=subprocess.run(command,cwd=REPO,env=env,input=payload,stdout=output if output is not None else subprocess.PIPE,
-        stderr=subprocess.PIPE,check=False)
+        stderr=subprocess.PIPE,check=False,timeout=timeout)
     if completed.returncode:
         try:
             diagnostic=json.loads(completed.stdout or b'{}')
@@ -151,8 +173,30 @@ class Installation:
         self.database_tls=receipt is not None
         self.command=self.base_command.copy()
 
-    def compose(self,*args,payload=None,output=None):
-        return run(self.command+list(args),env=self.env,payload=payload,output=output)
+    def compose(self,*args,payload=None,output=None,timeout=None):
+        return run(self.command+list(args),env=self.env,payload=payload,output=output,timeout=timeout)
+
+    def check_network(self):
+        name=self.config['project']+'-network-check'
+        try:
+            raw=self.compose('run','--rm','--no-deps','-T','--name',name,
+                'network-check','-c',NETWORK_CHECK,timeout=30)
+        except subprocess.TimeoutExpired:
+            try: run(['docker','rm','--force',name],timeout=10)
+            except (OSError,ValueError,subprocess.SubprocessError): pass
+            raise InstallationNetworkError('probe_timeout') from None
+        except DockerOperationError:
+            raise InstallationNetworkError('probe_execution') from None
+        try: report=json.loads(raw)
+        except (ValueError,UnicodeError): raise InstallationNetworkError('invalid_probe_result') from None
+        if (type(report) is not dict or set(report)!={'version','dns_resolves','tcp_reachable'}
+                or report['version']!='gabriel-install-network-v1'
+                or type(report['dns_resolves']) is not bool or type(report['tcp_reachable']) is not bool
+                or (report['tcp_reachable'] and not report['dns_resolves'])):
+            raise InstallationNetworkError('invalid_probe_result')
+        if not report['dns_resolves']: raise InstallationNetworkError('database_dns')
+        if not report['tcp_reachable']: raise InstallationNetworkError('database_tcp')
+        return report
 
     def operator(self,command,payload=None):
         raw=self.compose('run','--rm','--no-deps','-T','operator',command,
@@ -186,6 +230,7 @@ class Installation:
         if ai_egress:self.command.extend(['--file',str(REPO/'compose.gabriel-specialist-ai.yml')])
         self.stop_entry()
         self.start_db()
+        self.check_network()
         payload=dict(password=password,port=self.config['port'])
         if username is not None:payload['username']=username
         ticket=self.operator('open',payload)
@@ -251,6 +296,7 @@ class Installation:
         finally: os.close(parent)
         rebuilt=Installation(self.root)
         rebuilt.start_db()
+        rebuilt.check_network()
         program="""import os,json
 from gabriel.identity.cli import read_secret
 from gabriel.identity.service import migrate
@@ -289,6 +335,7 @@ print(json.dumps({'migrated':True}))
             with target.open('wb') as stream: stream.write((keys/name/'keyring.json').read_bytes())
             target.chmod(0o444)
         self.start_db()
+        self.check_network()
         self.compose('exec','-T','identity-db','pg_restore','-U','postgres','--dbname=gabriel','--exit-on-error','--single-transaction',payload=(backup/'database.dump').read_bytes())
         raw=self.compose('run','--rm','--no-deps','-T','operator','restore-objects',payload=(backup/'evidence.tar.gz').read_bytes())
         if json.loads(raw).get('status')!='ok': raise ValueError('object_restore_denied')
@@ -331,7 +378,7 @@ def password(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','renew-database-tls'))
+    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','renew-database-tls','diagnose'))
     parser.add_argument('directory')
     parser.add_argument('--port',type=int,default=8444)
     parser.add_argument('--image')
@@ -355,8 +402,12 @@ def main():
                 installation=Installation(root)
                 if args.command=='initialize':
                     installation.start_db()
+                    installation.check_network()
                     secret=password(args)
                     result=installation.operator('initialize',dict(organization=args.organization,username=args.username or 'owner',password=secret))
+                elif args.command=='diagnose':
+                    installation.start_db()
+                    result=dict(network=installation.check_network(),production_admitted=False)
                 elif args.command=='open':
                     installation.require_database_tls()
                     result=installation.open(password(args),ai_egress=args.ai_egress,username=args.username)
@@ -373,6 +424,10 @@ def main():
         return 0
     except InstallationDatabaseTlsRequired as exc:
         print(json.dumps({'status':'denied','code':str(exc),'guidance':'Rebuild the installation with a current image or prepare a fresh lab.'}))
+        return 1
+    except InstallationNetworkError as exc:
+        print(json.dumps({'status':'denied','code':'installation_network_check_failed','phase':exc.phase,
+            'probe_uses_credentials':False,'guidance':'Inspect Docker DNS, bridge connectivity and firewall backend consistency; preserve internal networks and loopback listeners.'}))
         return 1
     except (OSError,ValueError,TypeError,KeyError,RuntimeError,subprocess.SubprocessError):
         print(json.dumps({'status':'denied','code':'installation_command_failed; existing state retained for inspection'}))
