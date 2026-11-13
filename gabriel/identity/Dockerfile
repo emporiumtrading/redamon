@@ -1,7 +1,12 @@
-ARG IDENTITY_BASE=python@sha256:5fb4bc53dd0180955e31e5245b648bbb24a4ac4ab03a1de81513642325220bcd
+ARG IDENTITY_BASE=python:3.11.18-alpine3.24@sha256:8b92101d156b060d6999d3382bbe98f6851fbbf7c4bddbe3833818f3565d2b4c
 FROM ${IDENTITY_BASE} AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
+# Upgrade Alpine v3.24 security packages after pinning the multi-arch base.
+# Keep the Grype high/critical release threshold unchanged.
+RUN apk upgrade --no-cache \
+    && apk info -e zlib \
+    && apk info -e krb5-libs
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY gabriel/__init__.py gabriel/capabilities.py /app/gabriel/
@@ -106,6 +111,20 @@ ENTRYPOINT ["timeout", "--kill-after=10", "420", "bash", "testing/gabriel_browse
 FROM runtime AS production
 USER 0:0
 # Production installs dependencies at build time; bundled build tools add attack surface.
+# This production image uses PostgreSQL, not the CPython optional sqlite3
+# extension. The upstream Python image binds sqlite-libs through a virtual
+# .python-rundeps APK. Preserve all the other runtime SONAME dependencies as a
+# new explicit virtual package BEFORE removing the SQLite-dependent virtual.
+# Never force-remove dependencies; fail the build if SQLite is still needed.
+RUN set -eux; \
+    apk info -R .python-rundeps | sed '1d' | grep -v -F 'so:libsqlite3.so.0' > /tmp/gabriel-python-sonames; \
+    test -s /tmp/gabriel-python-sonames; \
+    apk add --no-cache --virtual .gabriel-python-rundeps $(cat /tmp/gabriel-python-sonames); \
+    rm -f /usr/local/lib/python3.11/lib-dynload/_sqlite3*.so; \
+    apk del .python-rundeps sqlite-libs; \
+    ! apk info -e sqlite-libs; \
+    python -c "import gabriel.identity.cli, gabriel.identity.service, psycopg, argon2, cryptography, gunicorn, yara, dpkt"; \
+    rm /tmp/gabriel-python-sonames
 RUN python -m pip uninstall --yes setuptools wheel pip \
     && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
 USER 10001:10001
