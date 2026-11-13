@@ -5,6 +5,8 @@ let requestGeneration = 0;
 const field = (id) => byId(id).value;
 async function run(operation, extra = {}) {
   const revision = ++requestGeneration;
+  if (["stop","stop-tab","pause","select","channel-select","navigation-run","console-orientation"].includes(operation))
+    byId("orientation-paths").replaceChildren();
   byId("message").textContent = operation === "stop" ? "Stopping locally…" : "Working…";
   try {
     if (["select","stop"].includes(operation)) {
@@ -51,6 +53,15 @@ async function run(operation, extra = {}) {
       byId("account").value = result.context.account_label;
     }
     if (result.content) { byId("preview-text").value = result.content; observedAt = result.observed_at; byId("approved").checked = false; }
+    if (result.orientation_paths) {
+      const paths = result.orientation_paths.length ? result.orientation_paths : ["No visible read-only section candidates."];
+      const items = paths.map(path => {
+        const item = document.createElement("li");
+        item.textContent = path;
+        return item;
+      });
+      byId("orientation-paths").replaceChildren(...items);
+    }
     if (result.plan) byId("navigation-sections").textContent = result.plan.destinations.join(" → ") + "; expires " + result.plan.expires_at;
     if (["stop","select"].includes(operation)) byId("navigation-sections").textContent = "";
     if (operation === "share" || operation === "stop") { byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null; }
@@ -72,6 +83,7 @@ byId("refresh-tabs").onclick = () => run("state");
 byId("stop-tab").onclick = () => run("stop-tab").then(()=>run("state"));
 byId("monitor-start").onclick = () => run("monitor-start", {mode: field("monitor-mode"), approved: byId("monitor-approved").checked, ai_approved: byId("ai-approved").checked});
 byId("monitor-stop").onclick = () => run("monitor-stop");
+byId("console-orientation").onclick = () => run("console-orientation");
 byId("navigation-plan").onclick = () => run("navigation-plan");
 byId("navigation-run").onclick = () => run("navigation-run", {approved: byId("navigation-approved").checked});
 byId("permission").onclick = async () => {
@@ -82,7 +94,7 @@ byId("permission").onclick = async () => {
     byId("message").textContent = accepted ? "Permission granted only for this Gabriel origin. Pairing is still required." : "Permission declined.";
   } catch { byId("message").textContent = "Endpoint permission was not granted."; }
 };
-document.addEventListener("visibilitychange", () => { if (document.hidden) { byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false; byId("navigation-approved").checked = false; } });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { byId("orientation-paths").replaceChildren(); byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false; byId("navigation-approved").checked = false; } });
 setInterval(() => { if (paired && !document.hidden) run("status"); }, 20000);
 document.body.dataset.gabrielReady = "true";
 run("state");

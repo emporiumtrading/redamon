@@ -1,5 +1,5 @@
 import {inspectPage} from "./collector.js";
-import {inspectNavigationIdentity, validatePlan, approvedURL, readOnlyURL, inspectConsole} from "./navigator.js";
+import {inspectNavigationIdentity, validatePlan, approvedURL, readOnlyURL, inspectConsole, orientationPaths} from "./navigator.js";
 import {inspectEventSection} from "./events.js";
 
 export function createChannel(storage, tabId) {
@@ -80,7 +80,7 @@ async function stop() {
 }
 
 async function handle(message) {
-  if (!message || typeof message !== "object" || !["state","select","pair","preview","share","status","receipts","pause","resume","stop","navigation-plan","navigation-run","monitor-start","monitor-stop"].includes(message.operation)) throw new Error("Unsupported operation.");
+  if (!message || typeof message !== "object" || !["state","select","pair","preview","console-orientation","share","status","receipts","pause","resume","stop","navigation-plan","navigation-run","monitor-start","monitor-stop"].includes(message.operation)) throw new Error("Unsupported operation.");
   if (message.operation === "stop") return stop();
   if (message.operation === "state") {
     const {selected, session, paused, navigation, tour, monitoring} = await storage.get(["selected","session","paused","navigation","tour","monitoring"]);
@@ -137,7 +137,21 @@ async function handle(message) {
     }
     if (!session || Date.parse(session.expires_at) <= Date.now()) throw new Error("Pairing is missing or expired. Obtain fresh approval.");
     if (navigation) throw new Error("Navigation outcome unresolved. Stop and pair again before continuing.");
-    if (paused && ["preview","share","navigation-plan","navigation-run"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
+    if (paused && ["preview","console-orientation","share","navigation-plan","navigation-run"].includes(message.operation)) throw new Error("Sharing is paused. Resume and recheck scope first.");
+    if (message.operation === "console-orientation") {
+      await current(selected);
+      await request(session, "heartbeat", {context: wireContext(selected)});
+      stillCurrent(revision);
+      const values = await chrome.scripting.executeScript({
+        target: {tabId: selected.tab_id, documentIds: [selected.document_id]}, func: inspectConsole
+      });
+      if (values.length !== 1 || values[0].frameId !== 0 || values[0].documentId !== selected.document_id)
+        throw new Error("Console changed during orientation. Select the page again.");
+      await current(selected);
+      stillCurrent(revision);
+      return {orientation_paths: orientationPaths(selected.page_url, values[0].result.links),
+        message: "Local orientation ready. Visible top-frame links only."};
+    }
     if (message.operation === "monitor-start") {
       if (message.approved !== true || !session.sharing_approved || !session.scheduled_review_enabled || pending || paused || navigation)
         throw new Error("Approve scheduled sharing with a current, unpaused pairing and resolved receipts first.");
