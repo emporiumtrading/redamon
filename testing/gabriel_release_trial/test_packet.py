@@ -38,6 +38,18 @@ class ProposedPacket(unittest.TestCase):
             if name == 'map_source_coverage':
                 fact.update(type='source_coverage', data=dict(source_kind='network',
                             state='missing', window_start='2026-10-27T10:00:00Z'))
+            if name == 'assess_cloud_storage_exposure':
+                fact.update(type='cloud_storage_access', data=dict(path_id=str(UUID(int=60000)),
+                            path='resource_policy', audience='anonymous', network='public',
+                            guard='does_not_block', read='allow', list='deny', write='deny',
+                            policy_digest='d'*64, valid_until='2026-10-28T10:00:00Z'))
+            if name == 'review_intelligence_lifecycle':
+                fact.update(type='intel_lifecycle', data=dict(feed_id=str(UUID(int=50000)),
+                            feed_version=1, state='revoked', retrieved_at='2026-10-27T11:30:00Z',
+                            valid_until='2026-10-27T10:00:00Z'))
+            if name == 'review_vulnerability_sla':
+                fact.update(type='vulnerability_sla', data=dict(first_seen='2026-10-10T10:00:00Z',
+                            due_at='2026-10-27T10:00:00Z', state='open'))
             if name == 'analyze_false_negatives':
                 fact.update(type='detection_trial', data=dict(fact['data'], rule_digest='a'*64,
                             engine_digest='b'*64, fixture_digest='c'*64))
@@ -59,6 +71,15 @@ class ProposedPacket(unittest.TestCase):
             self.assertLessEqual(len(wire), 7000, name)
             for key in ('id', 'evidence_id', 'evidence_digest', 'entity_id'):
                 self.assertNotIn(fact[key].encode(), wire, name)
+            if fact['type'] == 'cloud_storage_access':
+                for field in ('path_id','policy_digest'):
+                    private = fact['data'][field].encode()
+                    self.assertNotIn(private, wire)
+                    self.assertNotIn(private, canonical(hermes.project(doc, 'plan')['packet']))
+            if fact['type'] == 'intel_lifecycle':
+                private = fact['data']['feed_id'].encode()
+                self.assertNotIn(private, wire)
+                self.assertNotIn(private, canonical(hermes.project(doc, 'plan')['packet']))
             if fact['type'] == 'detection_trial':
                 for stage in ('plan','report'):
                     supervisor_wire = canonical(hermes.project(doc, stage)['packet'])
