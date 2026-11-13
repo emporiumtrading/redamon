@@ -53,3 +53,18 @@ Complete native Mac UAT, operational/security review, final image scanning/SBOM/
 
 ## Current status statement
 The repository contains meaningful specialist and Hermes infrastructure, but the expanded 240-skill catalog is a design backlog, not 240 implemented capabilities. The next engineering step is a small, tested tranche integrated into the existing runtime skill/tool manifest without weakening current isolation, evidence, authorization or qualification controls.
+
+
+## 13 November 2026 implementation update (feature branch)
+
+Source changes prepared for review on `feature/gabriel-grounded-skills-20261113`:
+- `gabriel/identity/grounded_skills.py`: five bounded pure local review kernels.
+- `gabriel/identity/investigation_tools.py`: role-bound dispatch, explicit tool catalog and skill/configuration digest inclusion, toolkit v2.
+- Five packaged runtime `SKILL.md` files under `gabriel/identity/investigation_skills/`.
+- Generated-only behavior, negative/role-bound contract and PostgreSQL/custody integration tests under `testing/gabriel_identity/`.
+- `docs/readmes/GABRIEL_KNOWLEDGE_GROUNDED_AGENTS_ROADMAP.md`: public University of Oslo research inspiration, OCSF/STIX/MITRE references and future graph/normalization/evaluation plan.
+
+The first tranche reuses current typed facts. Repeat candidates are **not** cross-source event deduplication; window overlap is **not** clock validation or causality; detection-test disagreements are **not** proven versioned regressions. No external action or model activation is added. Test and merge outcomes must be checked on the exact proposed branch before updating any production claim.
+
+### Next engineering gate
+Run and record PR checks for identity component, investigation-tool contract and supported architectures. Repair failures before merge. Revalidate the exact runtime skill hash and model-qualification records, then conduct authorized lab and native Mac UAT. The feature branch itself does not make Gabriel production ready.

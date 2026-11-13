@@ -4,8 +4,19 @@ Gabriel's twelve designated specialists have a role-bound tool catalog and execu
 
 ## Installed tools
 
+The five additional grounded local skills on the feature branch are:
+- `audit_provenance` — bounded artifact integrity/custody assertion audit for DFIR.
+- `find_duplicate_facts` — exact same-source typed-fact repeat candidates for alert triage, incident scoping and identity/access; **not event deduplication**.
+- `cross_check_timeline` — pairwise event-time window overlap for incident scoping and DFIR; **not verified clocks or causality**.
+- `assess_visibility_gaps` — reported stale/missing/available coverage for telemetry health; **not continuous monitoring proof**.
+- `review_detection_regression` — supplied detection-test disagreement/cohort counts; **not a versioned regression without a rule baseline**.
+
+These are Gabriel-authored local read-only kernels, not isolated parser-service commands. They use the same verified case-bound facts and are registered in the role-bound manifest and model configuration digest. No new external tool permissions, AI production admission or response execution are provided. New integration tests must pass on x86/ARM before merge. See [the research-informed architecture roadmap](GABRIEL_KNOWLEDGE_GROUNDED_AGENTS_ROADMAP.md).
+
+
 | Tool | Implementation and license | What it actually does |
 | --- | --- | --- |
+| audit_provenance / find_duplicate_facts / cross_check_timeline / assess_visibility_gaps / review_detection_regression | Gabriel, MIT | Analyze checked typed facts into de-identified counters and explicit limitations; no external actions or independently verified event semantics. |
 | scan_artifacts | yara-python 4.5.4, Apache-2.0; bundled libyara, BSD-3-Clause | Scans supplied source-file bytes against three bundled behavioral text rules: encoded PowerShell, shadow-copy deletion and a credential-dumping command reference. Matches are hypotheses, not malware verdicts. |
 | inspect_packets | dpkt 1.9.8, BSD-3-Clause | Reads supplied Ethernet PCAP/PCAPNG files and returns protocol, endpoint/flow-cardinality, SYN/reset and malformed-packet counts. No live capture or traffic generation. |
 | inspect_logs | Python standard library, PSF-2.0 | Parses normalized JSONL exports and finds five failures within 300 seconds, including a subsequent success. Duplicate records are not deduplicated; this requires analyst review. |
