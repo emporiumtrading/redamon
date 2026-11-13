@@ -216,3 +216,20 @@ def test_expired_ioc_remains_a_reported_match_not_proof_of_attribution():
     assert result['reported_matched_unexpired_count'] == 0
     assert result['threat_actor_attribution'] == 'unknown'
     assert result['external_enrichment_performed'] is False
+
+
+
+def test_all_twelve_roles_have_a_new_grounded_review_and_none_are_model_admitted():
+    expanded = {
+        'audit_provenance', 'find_duplicate_facts', 'cross_check_timeline',
+        'assess_visibility_gaps', 'review_detection_regression',
+        'review_indicator_freshness', 'summarize_hunt_hypotheses',
+        'review_exposure_context', 'review_cloud_change_assertions',
+        'review_response_dependencies', 'review_recovery_baselines',
+    }
+    assert expanded == grounded_skills.SKILL_NAMES
+    assert len(investigation_tools.TOOLS) == 12
+    for role, tools in investigation_tools.TOOLS.items():
+        assert expanded.intersection(tools), role
+        assert specialist_agents.readiness(role)['model_enabled'] is False
+        assert specialist_agents.readiness(role)['qualification'] == 'qualification_pending'
