@@ -7,6 +7,7 @@ import pytest
 from gabriel.identity import investigation_tools as tools
 from gabriel.identity.service import AccessDenied
 from testing.gabriel_identity.test_identity_integration import tenant
+from testing.gabriel_identity.test_browser_monitoring_integration import database
 from testing.gabriel_identity.test_cases_integration import cases, case, evidence
 from testing.gabriel_identity.test_specialist_analysis_integration import intake
 
