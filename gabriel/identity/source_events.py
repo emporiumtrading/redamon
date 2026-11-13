@@ -190,6 +190,9 @@ def project_attack_pattern_document(events, *, as_of, missing_sources):
     horizon = _instant(as_of)
     report = review_source_events(events)
     _require(report['same_source_identity_conflict_groups'] == 0)
+    # The existing persisted attack-review service binds at most 32 distinct
+    # source evidence records. Do not emit a projection that it cannot admit.
+    _require(len({event['evidence_id'] for event in events}) <= 32)
     _require(type(missing_sources) is list and len(missing_sources) <= 6)
     allowed = frozenset(('authentication', 'process', 'network', 'file', 'kernel', 'boot'))
     _require(all(type(x) is str and x in allowed for x in missing_sources))
