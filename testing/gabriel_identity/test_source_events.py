@@ -179,3 +179,17 @@ def test_projection_requires_explicit_bounded_source_gaps_and_snapshot_clock():
         missing_sources=['authentication'])
     assert projection['missing_sources']==['authentication']
     assert projection['events'][0]['authorization']=='unknown'
+
+
+
+def test_projection_stays_within_persisted_attack_review_source_budget():
+    case,source=str(uuid4()),str(uuid4())
+    records=[]
+    for i in range(33):
+        record=sample()
+        record['event_id']='1792800000.'+str(11000+i)
+        records.append(normalized(record,case_id=case,source_id=source))
+    assert review_source_events(records)['event_count']==33
+    with pytest.raises(UnsupportedSourceEvent):
+        project_attack_pattern_document(records,
+            as_of='2026-10-24T12:10:00Z',missing_sources=[])
