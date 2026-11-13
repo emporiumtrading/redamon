@@ -22,15 +22,15 @@ EXTRA={
     'telemetry_health':('correlate_events','inspect_logs','assess_visibility_gaps'),
     'alert_triage':('inspect_logs','correlate_events','scan_artifacts','find_duplicate_facts'),
     'incident_scoping':('correlate_events','inspect_logs','inspect_packets','find_duplicate_facts','cross_check_timeline'),
-    'threat_intelligence':('scan_artifacts','inspect_packets'),
-    'threat_hunting':('inspect_logs','scan_artifacts','inspect_packets'),
+    'threat_intelligence':('scan_artifacts','inspect_packets','review_indicator_freshness'),
+    'threat_hunting':('inspect_logs','scan_artifacts','inspect_packets','summarize_hunt_hypotheses'),
     'dfir_evidence':('scan_artifacts','inspect_packets','audit_provenance','cross_check_timeline'),
     'detection_engineering':('scan_artifacts','inspect_logs','review_detection_regression'),
-    'exposure_vulnerability':('assess_exposure',),
+    'exposure_vulnerability':('assess_exposure','review_exposure_context'),
     'identity_access':('inspect_logs','correlate_events','find_duplicate_facts'),
-    'cloud_supply_chain':('scan_artifacts','correlate_events'),
-    'response_remediation':('assess_exposure','correlate_events'),
-    'recovery_learning':('correlate_events',),
+    'cloud_supply_chain':('scan_artifacts','correlate_events','review_cloud_change_assertions'),
+    'response_remediation':('assess_exposure','correlate_events','review_response_dependencies'),
+    'recovery_learning':('correlate_events','review_recovery_baselines'),
 }
 TOOLS={r:('verify_sources','review_rules','review_memory')+(() if r=='recovery_learning' else ('inspect_timeline',))+('inspect_toolkit',)+EXTRA[r] for r in ROLES}
 CATALOG={
@@ -49,6 +49,12 @@ CATALOG={
     'cross_check_timeline':('Gabriel','MIT','Compare bounded event-time windows across supplied evidence sources without assuming clock sync or causality.'),
     'assess_visibility_gaps':('Gabriel','MIT','Summarize typed missing/stale coverage and reject conclusions from an unobserved period.'),
     'review_detection_regression':('Gabriel','MIT','Compare supplied expected and observed detection-test outcomes; do not assert versioned regression without baseline.'),
+    'review_indicator_freshness':('Gabriel','MIT','Flag expired supplied indicator matches without assuming independent IOC validity or actor attribution.'),
+    'summarize_hunt_hypotheses':('Gabriel','MIT','Count supplied authentication, identity and cloud hunt signals; require benign review before conclusions.'),
+    'review_exposure_context':('Gabriel','MIT','Prioritize supplied unmitigated reachable exposures without asserting exploitation or current inventory.'),
+    'review_cloud_change_assertions':('Gabriel','MIT','Summarize reported cloud and supply-chain changes and authorization uncertainty; no cloud modifications.'),
+    'review_response_dependencies':('Gabriel','MIT','Identify incomplete response readiness checks; never contain or remediate without human authorization.'),
+    'review_recovery_baselines':('Gabriel','MIT','Compare reported recovery checks against stated baselines; never claim verified recovery.'),
 }
 
 
