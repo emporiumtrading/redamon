@@ -177,3 +177,49 @@ def review_source_events(events):
         external_actions_authorized=False,
         model_used=False,
     )
+
+
+def project_attack_pattern_document(events, *, as_of, missing_sources):
+    """Build an existing security-events-v1 document; never perform detection.
+
+    The caller supplies source-coverage gaps explicitly. All source events and
+    their evidence must belong to one case; each timestamp must be within the
+    caller's snapshot. The existing attack-pattern engine remains responsible
+    for review candidates and its own source/case revalidation.
+    """
+    horizon = _instant(as_of)
+    report = review_source_events(events)
+    _require(report['same_source_identity_conflict_groups'] == 0)
+    _require(type(missing_sources) is list and len(missing_sources) <= 6)
+    allowed = frozenset(('authentication', 'process', 'network', 'file', 'kernel', 'boot'))
+    _require(all(type(x) is str and x in allowed for x in missing_sources))
+    _require(len(set(missing_sources)) == len(missing_sources))
+    _require(all(_instant(event['reported_event_time']) <= horizon for event in events))
+    document = dict(
+        version='security-events-v1',
+        case_id=events[0]['case_id'],
+        as_of=as_of,
+        missing_sources=list(missing_sources),
+        events=[dict(
+            source_id=event['source_id'],
+            event_id=event['native_event_id'],
+            evidence_id=event['evidence_id'],
+            evidence_digest=event['evidence_digest'],
+            event_time=event['reported_event_time'],
+            kind='auth_failure',
+            actor_id=event['actor_alias'],
+            asset_id=event['asset_alias'],
+            source_asset_id=event['origin_alias'],
+            process_sha256=None,
+            object_id=None,
+            authorization='unknown',
+        ) for event in events],
+    )
+    # Do not return anything the existing attack engine cannot verify.
+    from gabriel.identity.attack_patterns import normalized
+    from gabriel.identity.service import InvalidIdentityInput
+    try:
+        normalized(document, document['case_id'])
+    except InvalidIdentityInput:
+        raise UnsupportedSourceEvent('invalid_or_unsupported_source_event') from None
+    return document
