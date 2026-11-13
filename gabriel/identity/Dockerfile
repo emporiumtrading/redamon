@@ -2,6 +2,11 @@ ARG IDENTITY_BASE=python:3.11.18-alpine3.24@sha256:8b92101d156b060d6999d3382bbe9
 FROM ${IDENTITY_BASE} AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
+# Upgrade Alpine v3.24 security packages after pinning the multi-arch base.
+# Keep the Grype high/critical release threshold unchanged.
+RUN apk upgrade --no-cache \
+    && apk info -e zlib \
+    && apk info -e krb5-libs
 COPY gabriel/identity/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY gabriel/__init__.py gabriel/capabilities.py /app/gabriel/
@@ -106,6 +111,12 @@ ENTRYPOINT ["timeout", "--kill-after=10", "420", "bash", "testing/gabriel_browse
 FROM runtime AS production
 USER 0:0
 # Production installs dependencies at build time; bundled build tools add attack surface.
+# Production is PostgreSQL-based. Remove dormant SQLite libraries to eliminate
+# an unneeded vulnerable native dependency without suppressing Grype findings.
+# Fail closed if any Alpine runtime package requires sqlite-libs.
+RUN apk del sqlite-libs \
+    && ! apk info -e sqlite-libs \
+    && python -c "import gabriel.identity.cli, gabriel.identity.service, psycopg, argon2, cryptography, gunicorn, yara, dpkt"
 RUN python -m pip uninstall --yes setuptools wheel pip \
     && python -c "from importlib.util import find_spec; assert all(find_spec(name) is None for name in ('setuptools','wheel','pip')); import psycopg, argon2, cryptography, gunicorn, yara, dpkt"
 USER 10001:10001
