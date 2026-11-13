@@ -8,7 +8,7 @@ import pytest
 
 from gabriel.identity import model_routes,model_worker,personal_providers,specialist_agents as agents
 from gabriel.identity.model_protocol import ProbeError
-from gabriel.identity.service import AccessDenied,AuthenticationDenied
+from gabriel.identity.service import AccessDenied,AuthenticationDenied,connection
 from gabriel.identity.vault import ProviderVault,ProviderKeyRing
 from testing.gabriel_identity.test_browser_monitoring_integration import database
 from testing.gabriel_identity.test_identity_integration import tenant,owner_connection
@@ -84,6 +84,29 @@ def test_every_specialist_reasons_uses_local_tool_and_persists_answer(tenant,cas
     from gabriel.identity.model_budget import ModelBudgetService
     usage=ModelBudgetService(cases._dsn).status(setup['token'])['usage']
     assert usage['held_slots']==0 and usage['day_used']==12608
+
+
+def test_over_budget_followup_reports_scope_review_and_preserves_first_round(
+        tenant,cases,case,evidence,setup,monkeypatch):
+    _,holder=intake(tenant,cases,case,evidence)
+    setup['client'].chosen_tool='review_rules'
+    execute=agents.tool
+
+    def oversized_tool(*args):
+        result=execute(*args)
+        return dict(result,result=dict(result['result'],fixture_padding='x'*3800))
+
+    monkeypatch.setattr(agents,'tool',oversized_tool)
+    result=start(setup,cases,case,holder)
+    assert result['state']=='input_scope_requires_analyst_review'
+    assert result['model_used'] and not result['quality_qualified']
+    assert len(result['steps'])==len(setup['posts'])==1
+    assert result['steps'][0]['requested_tools']==['review_rules']
+    with connection(cases._dsn) as conn:
+        principal=cases._human(conn,setup['token'])
+        count=conn.execute('SELECT count(*) AS n FROM gabriel_identity.model_reservations WHERE organization_id=%s',
+                           (principal.organization_id,)).fetchone()['n']
+        assert count==1
 
 
 def test_personal_keys_are_user_scoped_and_no_fallback_exists(tenant,cases,case,evidence,setup,monkeypatch):

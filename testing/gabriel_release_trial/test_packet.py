@@ -71,8 +71,7 @@ class ProposedPacket(unittest.TestCase):
             tools = [reviewed, dict(tool=name, result=result)]
             packet = agents.project(doc, role, UUID(int=index), tools)['packet']
             config = agents.configuration(role)
-            body = dict(model=config['model'], messages=[dict(role='system', content=agents.prompt(role)),
-                        dict(role='user', content=canonical(packet).decode())], **config['parameters'])
+            body = agents.provider_body(role, config['model'], config, dict(packet=packet))
             wire = canonical(body)
             self.assertLessEqual(len(wire), 7000, name)
             for key in ('id', 'evidence_id', 'evidence_digest', 'entity_id'):
