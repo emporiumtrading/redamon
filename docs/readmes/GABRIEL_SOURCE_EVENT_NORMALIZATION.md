@@ -2,6 +2,14 @@
 
 **Status:** Implemented pure adapter/review module with generated-data tests. Not yet a live-console ingestion endpoint or production-qualified detection engine.
 
+## Vendor-agnostic first: analyst-selected consoles
+
+Gabriel's primary path is **vendor-neutral browser observation and navigation**, not a list of hard-coded SIEM/EDR products. With an analyst-selected tab and active scoped browser consent, the already implemented browser companion can observe visible headings and links and the backend can enforce reviewed same-origin HTTPS read-only navigation grants. The new local `gabriel.identity.console_orientation.orient` accepts that generic visible snapshot plus explicit case/evidence bindings. It emits up to 20 candidates for **analyst review only**; it does not navigate, infer event meanings from unfamiliar labels, identify account authority, authenticate the source, inspect hidden frames, or qualify AI detection. Malformed snapshots, cross-origin links, encoded write routes, authentication routes, and risky URLs are rejected or omitted. The Docker CI tests six different vendor/unbranded labels against the **same** rule set.
+
+Gabriel must continue to inspect selected tabs without requiring that a vendor is supported in advance. When a source exposes unknown fields or dynamic navigation, it should report unsupported semantics/coverage gaps and seek analyst-approved narrower exploration, not fabricate a source-specific event interpretation or grant itself new permissions. The next steps are a richer visual/DOM discovery model, source-specific evidence grounding when verified, Hermes supervised case-bound orchestration, and independent real-console qualification.
+
+**Wazuh below is only one optional, pinned example of semantic interpretation**, not Gabriel's default console-selection, navigation, or data-ingestion requirement.
+
 ## Scope
 
 The first strictly admitted adapter maps the **existing, pinned Wazuh 4.14.9 invalid-user SSH-failure native event** into `gabriel-source-events-v1`. It reuses the source-specific validation already implemented in `gabriel/identity/wazuh_events.py`. The new entrypoint is `gabriel.identity.source_events.normalize_wazuh_invalid_user`.
