@@ -28,7 +28,7 @@ def _base(facts):
     return dict(
         source_count=len({f['evidence_id'] for f in facts}),
         fact_count=len(facts),
-        stored_bytes_verified_by_caller=True,
+        source_integrity_contract='verified_by_entrypoint_not_by_pure_kernel',
         source_authenticity='unverified',
         asserted_semantics='unverified',
         source_independence='unestablished',
