@@ -36,6 +36,8 @@ def load():
         raise InvalidSkillCatalog('invalid_catalog_rows')
     ids = set()
     per_role = Counter()
+    from gabriel.identity.investigation_tools import TOOLS
+    registered = set()
     required = {'skill_id','owner_specialist','catalog_index','name','implementation_status',
                 'qualification_status','accepted_implementation','evidence_contract','external_actions_allowed'}
     for row in rows:
@@ -64,12 +66,15 @@ def load():
             if type(provenance) is not str or not provenance.startswith('gabriel.identity.catalog_skills.evaluate:'):
                 raise InvalidSkillCatalog('missing_implementation_provenance')
             implementation_name = provenance.rsplit(':', 1)[-1]
-            if IMPLEMENTED.get(implementation_name) != role:
+            if IMPLEMENTED.get(implementation_name) != role or implementation_name not in TOOLS[role]:
                 raise InvalidSkillCatalog('unbound_skill_implementation')
+            registered.add(implementation_name)
         if row['evidence_contract'] != 'case-bound typed source refs and digests required':
             raise InvalidSkillCatalog('unsupported_evidence_contract')
     if set(role for role, _ in per_role) != set(ROLE_TYPES) or len(per_role) != 240:
         raise InvalidSkillCatalog('incomplete_specialist_catalog')
+    if registered != set(IMPLEMENTED):
+        raise InvalidSkillCatalog('missing_or_unmapped_implementation')
     return doc
 
 
