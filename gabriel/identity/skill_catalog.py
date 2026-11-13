@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 
 from gabriel.identity.specialist_analysis import ROLE_TYPES
+from gabriel.identity.catalog_skills import SKILLS as IMPLEMENTED
 
 VERSION = 'gabriel-skill-catalog-v1'
 CATALOG = Path(__file__).with_name('skill_roadmap.json')
@@ -58,8 +59,13 @@ def load():
         if row['implementation_status'] == 'candidate_not_implemented':
             if row['accepted_implementation'] is not None:
                 raise InvalidSkillCatalog('unimplemented_claims_code')
-        elif not isinstance(row['accepted_implementation'], str) or not row['accepted_implementation']:
-            raise InvalidSkillCatalog('missing_implementation_provenance')
+        else:
+            provenance = row['accepted_implementation']
+            if type(provenance) is not str or not provenance.startswith('gabriel.identity.catalog_skills.evaluate:'):
+                raise InvalidSkillCatalog('missing_implementation_provenance')
+            implementation_name = provenance.rsplit(':', 1)[-1]
+            if IMPLEMENTED.get(implementation_name) != role:
+                raise InvalidSkillCatalog('unbound_skill_implementation')
         if row['evidence_contract'] != 'case-bound typed source refs and digests required':
             raise InvalidSkillCatalog('unsupported_evidence_contract')
     if set(role for role, _ in per_role) != set(ROLE_TYPES) or len(per_role) != 240:
