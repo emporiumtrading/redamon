@@ -17,6 +17,12 @@ SKILL_NAMES = frozenset({
     'cross_check_timeline',
     'assess_visibility_gaps',
     'review_detection_regression',
+    'review_indicator_freshness',
+    'summarize_hunt_hypotheses',
+    'review_exposure_context',
+    'review_cloud_change_assertions',
+    'review_response_dependencies',
+    'review_recovery_baselines',
 })
 
 
@@ -131,5 +137,96 @@ def evaluate(name, document):
             regression_established=False,
             deployment_authorized=False,
             test_truth='supplied_assertions_only',
+        )
+    elif name == 'review_indicator_freshness':
+        rows = [f['data'] for f in facts if f['type'] == 'intelligence']
+        at = _instant(document['as_of'])
+        current = sum(r['match'] and _instant(r['valid_until']) >= at for r in rows)
+        expired = sum(r['match'] and _instant(r['valid_until']) < at for r in rows)
+        result.update(
+            status='analyzed' if rows else 'no_intelligence_facts',
+            reported_indicator_count=len(rows),
+            reported_matched_unexpired_count=current,
+            reported_matched_expired_count=expired,
+            reported_unmatched_count=sum(not r['match'] for r in rows),
+            external_enrichment_performed=False,
+            feed_source_reliability_verified=False,
+            threat_actor_attribution='unknown',
+            indicator_validity='supplied_expiry_only',
+        )
+    elif name == 'summarize_hunt_hypotheses':
+        activities = [f['data'] for f in facts if f['type'] == 'activity']
+        identities = [f['data'] for f in facts if f['type'] == 'identity']
+        clouds = [f['data'] for f in facts if f['type'] == 'cloud']
+        result.update(
+            status='analyzed' if (activities or identities or clouds) else 'no_hunt_facts',
+            reported_activity_count=len(activities),
+            reported_failed_activity_count=sum(r['outcome'] == 'failure' for r in activities),
+            reported_authentication_activity_count=sum(r['category'] == 'authentication' for r in activities),
+            reported_sensitive_identity_change_count=sum(r['event'] in ('privilege_grant', 'mfa_disabled') for r in identities),
+            reported_present_cloud_change_count=sum(r['state'] == 'present' for r in clouds),
+            hunt_hypotheses_require_analyst_scope=True,
+            benign_admin_explanation_unresolved=True,
+            authorized_live_search_performed=False,
+            compromise_established=False,
+        )
+    elif name == 'review_exposure_context':
+        rows = [f['data'] for f in facts if f['type'] == 'exposure']
+        urgent = [r for r in rows if r['severity'] in ('high', 'critical') and r['reachable'] == 'yes' and r['mitigated'] == 'no']
+        result.update(
+            status='analyzed' if rows else 'no_exposure_facts',
+            reported_exposure_count=len(rows),
+            urgent_review_count=len(urgent),
+            uncertain_reachability_count=sum(r['reachable'] == 'unknown' for r in rows),
+            unknown_mitigation_count=sum(r['mitigated'] == 'unknown' for r in rows),
+            lower_severity_count=sum(r['severity'] not in ('critical', 'high') for r in rows),
+            exploitation_established=False,
+            inventory_freshness_verified=False,
+            remediation_authorized=False,
+        )
+    elif name == 'review_cloud_change_assertions':
+        rows = [f['data'] for f in facts if f['type'] == 'cloud']
+        types = ('public_access', 'privileged_workload', 'unsigned_component', 'policy_drift')
+        present = Counter(r['finding'] for r in rows if r['state'] == 'present')
+        result.update(
+            status='analyzed' if rows else 'no_cloud_facts',
+            reported_cloud_finding_count=len(rows),
+            reported_present_by_type={t: present[t] for t in types},
+            reported_present_unauthorized_count=sum(r['state'] == 'present' and r['authorized'] == 'no' for r in rows),
+            authorization_unknown_count=sum(r['authorized'] == 'unknown' for r in rows),
+            baseline_provenance_verified=False,
+            component_signature_independently_verified=False,
+            cloud_mutation_performed=False,
+        )
+    elif name == 'review_response_dependencies':
+        rows = [f['data'] for f in facts if f['type'] == 'response_check']
+        types = ('target_binding', 'dependencies', 'recovery')
+        fail = Counter(r['check'] for r in rows if r['passed'] == 'no')
+        unknown = Counter(r['check'] for r in rows if r['passed'] == 'unknown')
+        result.update(
+            status='analyzed' if rows else 'no_response_checks',
+            reported_check_count=len(rows),
+            failed_by_check={t: fail[t] for t in types},
+            unknown_by_check={t: unknown[t] for t in types},
+            unmet_dependency_count=sum(fail.values()) + sum(unknown.values()),
+            action_request='human_review_required',
+            target_identity_independently_verified=False,
+            containment_performed=False,
+            rollback_performed=False,
+        )
+    elif name == 'review_recovery_baselines':
+        rows = [f['data'] for f in facts if f['type'] == 'recovery']
+        types = ('restore', 'service_health', 'security_control')
+        failed = Counter(r['check'] for r in rows if r['result'] == 'fail')
+        result.update(
+            status='analyzed' if rows else 'no_recovery_facts',
+            reported_recovery_check_count=len(rows),
+            reported_failed_by_type={t: failed[t] for t in types},
+            stale_or_unknown_baselines=sum(r['baseline'] != 'current' for r in rows),
+            unknown_check_results=sum(r['result'] == 'unknown' for r in rows),
+            reported_pass_with_current_baseline=sum(r['result'] == 'pass' and r['baseline'] == 'current' for r in rows),
+            end_to_end_recovery_independently_verified=False,
+            recovery_complete_established=False,
+            lesson_published=False,
         )
     return result

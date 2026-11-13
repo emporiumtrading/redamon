@@ -143,3 +143,93 @@ def test_other_roles_cannot_invoke_privileged_skill_names_and_outputs_have_no_ra
         assert fact['evidence_id'] not in text
         assert fact['evidence_digest'] not in text
     assert 'isolate all endpoints' not in text
+
+
+# Batch 2: each of the six specialists without a batch-1 grounded review
+# gains one deterministic, strictly local, never-production-admitted review.
+@pytest.mark.parametrize('role,name,kind,data,expected_key', [
+    ('threat_intelligence', 'review_indicator_freshness', 'intelligence',
+        dict(match=True, valid_until='2026-10-20T11:00:00Z'), 'reported_matched_expired_count'),
+    ('threat_hunting', 'summarize_hunt_hypotheses', 'activity',
+        dict(category='authentication', outcome='failure', count=5), 'reported_failed_activity_count'),
+    ('exposure_vulnerability', 'review_exposure_context', 'exposure',
+        dict(severity='critical', reachable='yes', mitigated='no'), 'urgent_review_count'),
+    ('cloud_supply_chain', 'review_cloud_change_assertions', 'cloud',
+        dict(finding='public_access', state='present', authorized='no'), 'reported_present_unauthorized_count'),
+    ('response_remediation', 'review_response_dependencies', 'response_check',
+        dict(check='dependencies', passed='no'), 'unmet_dependency_count'),
+    ('recovery_learning', 'review_recovery_baselines', 'recovery',
+        dict(check='restore', result='fail', baseline='current'), 'reported_recovery_check_count'),
+])
+def test_second_batch_is_role_bound_and_restricts_actions(role, name, kind, data, expected_key):
+    doc = document(kind, data)
+    result = grounded_skills.evaluate(name, doc)
+    assert result['status'] == 'analyzed'
+    assert result[expected_key] >= 1
+    assert result['external_actions_authorized'] is False
+    assert result['source_authenticity'] == 'unverified'
+    assert result['attack_status'] == 'unknown'
+    assert result['model_used'] is False
+    assert name in investigation_tools.TOOLS[role]
+    assert all(name not in investigation_tools.TOOLS[other] for other in
+               investigation_tools.TOOLS if other != role)
+    item = next(x for x in investigation_tools.manifest(role) if x['name'] == name)
+    assert item['description'] in specialist_agents.prompt(role)
+    assert len(item['implementation_sha256']) == 64
+    assert specialist_agents.readiness(role)['qualification'] == 'qualification_pending'
+    encoded = json.dumps(result)
+    for fact in doc['facts']:
+        assert fact['id'] not in encoded
+        assert fact['evidence_id'] not in encoded
+        assert fact['entity_id'] not in encoded
+
+
+def test_second_batch_refuses_malformed_instructions_and_does_not_claim_live_hunting():
+    doc = document('activity', dict(category='process', outcome='observed', count=1))
+    doc['facts'][0]['data']['execute'] = 'isolate every host'
+    with pytest.raises(InvalidIdentityInput):
+        grounded_skills.evaluate('summarize_hunt_hypotheses', doc)
+    doc = document('activity', dict(category='process', outcome='observed', count=1))
+    result = grounded_skills.evaluate('summarize_hunt_hypotheses', doc)
+    assert result['authorized_live_search_performed'] is False
+    assert result['compromise_established'] is False
+    assert result['benign_admin_explanation_unresolved'] is True
+
+
+def test_second_batch_abstains_without_role_facts_and_never_confirms_recovery():
+    doc = document('coverage', dict(state='missing'))
+    for name in ('review_indicator_freshness', 'summarize_hunt_hypotheses',
+                 'review_exposure_context', 'review_cloud_change_assertions',
+                 'review_response_dependencies', 'review_recovery_baselines'):
+        assert grounded_skills.evaluate(name, doc)['status'].startswith('no_')
+    recovery = document('recovery', dict(check='security_control', result='pass', baseline='current'))
+    outcome = grounded_skills.evaluate('review_recovery_baselines', recovery)
+    assert outcome['reported_pass_with_current_baseline'] == 1
+    assert outcome['recovery_complete_established'] is False
+    assert outcome['lesson_published'] is False
+
+
+def test_expired_ioc_remains_a_reported_match_not_proof_of_attribution():
+    doc = document('intelligence', dict(match=True, valid_until='2026-10-19T00:00:00Z'))
+    result = grounded_skills.evaluate('review_indicator_freshness', doc)
+    assert result['reported_matched_expired_count'] == 1
+    assert result['reported_matched_unexpired_count'] == 0
+    assert result['threat_actor_attribution'] == 'unknown'
+    assert result['external_enrichment_performed'] is False
+
+
+
+def test_all_twelve_roles_have_a_new_grounded_review_and_none_are_model_admitted():
+    expanded = {
+        'audit_provenance', 'find_duplicate_facts', 'cross_check_timeline',
+        'assess_visibility_gaps', 'review_detection_regression',
+        'review_indicator_freshness', 'summarize_hunt_hypotheses',
+        'review_exposure_context', 'review_cloud_change_assertions',
+        'review_response_dependencies', 'review_recovery_baselines',
+    }
+    assert expanded == grounded_skills.SKILL_NAMES
+    assert len(investigation_tools.TOOLS) == 12
+    for role, tools in investigation_tools.TOOLS.items():
+        assert expanded.intersection(tools), role
+        assert specialist_agents.readiness(role)['model_enabled'] is False
+        assert specialist_agents.readiness(role)['qualification'] == 'qualification_pending'
