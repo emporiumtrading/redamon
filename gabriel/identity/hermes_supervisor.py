@@ -4,6 +4,8 @@ from pathlib import Path
 from uuid import uuid5
 
 from gabriel.identity import coordinator,hermes_bridge as bridge,model_routes
+from gabriel.identity import browser_hermes
+from gabriel.identity.cases import timestamp
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.investigation_tools import remote
 from gabriel.identity.model_budget import limits,usage,now
@@ -17,7 +19,7 @@ from gabriel.identity.specialist_analysis import ROLE_TYPES
 from gabriel.identity.specialist_analysis_runs import verified_input
 from gabriel.identity.specialist_contracts import ROLES
 
-VERSION='gabriel-hermes-supervisor-v1'
+VERSION='gabriel-hermes-supervisor-v2'
 DEFAULT_MODEL=bridge.MODEL
 MAX_SELECTED_ROLES=4
 
@@ -46,6 +48,7 @@ def configuration(stage='plan',model=DEFAULT_MODEL):
         role_catalog_digest=digest({r:sorted(ROLE_TYPES[r]) for r in ROLES}),
         bridge_digest=sha256(Path(bridge.__file__).read_bytes()).hexdigest(),
         supervisor_digest=sha256(Path(__file__).read_bytes()).hexdigest(),
+        browser_snapshot_digest=sha256(Path(browser_hermes.__file__).read_bytes()).hexdigest(),
         max_selected_roles=MAX_SELECTED_ROLES,max_total_calls=6,independent_agent_context=True,local_working_context_tokens=65536)
 
 
@@ -86,44 +89,29 @@ def validate_actions(decision,document,stage):
         raise ProbeError('hermes_urgent_exposure_review_required')
 
 
-def browser_preflight(service,conn,p,token,case_id,lease_ids,document):
-    if type(lease_ids) not in {list,tuple} or len(lease_ids)>8 or len(set(map(str,lease_ids)))!=len(lease_ids):
-        raise InvalidIdentityInput('invalid_hermes_tab_selection')
-    sources={identifier(f['evidence_id']) for f in document['facts']}
-    from gabriel.identity.browser_navigation import BrowserNavigationService
-    browser=BrowserNavigationService(service._dsn,service.store)
-    checked=[]
-    for lease_id in lease_ids:
-        lease_id=identifier(lease_id)
-        row=conn.execute('SELECT * FROM gabriel_identity.browser_leases WHERE organization_id=%s AND id=%s',
-            (p.organization_id,lease_id)).fetchone()
-        if not row or row['case_id']!=case_id or row['issued_by']!=p.user_id:raise AccessDenied('hermes_selected_tab_not_owned')
-        state=browser._browser_lease_status(conn,p,row)
-        if not state['authorization_current'] or not state['heartbeat_fresh'] or row['state']!='active' or not row['intake_enabled']:
-            raise AccessDenied('hermes_selected_tab_not_current')
-        observation=conn.execute('''SELECT o.*,clock_timestamp()-o.observed_at AS age,clock_timestamp()-r.created_at AS capture_age
-            FROM gabriel_identity.browser_observations o JOIN gabriel_identity.browser_observation_receipts r
-            ON (r.organization_id,r.observation_id,r.evidence_id)=(o.organization_id,o.id,o.evidence_id)
-            WHERE o.organization_id=%s AND o.lease_id=%s AND o.state='captured'
-            ORDER BY o.sequence DESC LIMIT 1''',(p.organization_id,lease_id)).fetchone()
-        if not observation or not 0<=observation['age'].total_seconds()<=120 or not 0<=observation['capture_age'].total_seconds()<=120 or observation['visibility']!='visible_text_only':
+def browser_preflight(service,conn,p,token,case_id,lease_ids,document,*,receipt_only=False):
+    leases=browser_hermes.selection(lease_ids)
+    if not leases:
+        if receipt_only:raise AccessDenied('hermes_selected_tabs_required')
+        return []
+    captures=browser_hermes.current_captures(service,conn,p,token,case_id,leases)
+    if receipt_only:
+        if browser_hermes.receipt_document(case_id,captures)!=document:
+            raise AccessDenied('hermes_typed_facts_must_bind_current_tab_read')
+    else:
+        if any(row['visibility']!='visible_text_only' for row in captures):
             raise AccessDenied('hermes_fresh_tab_read_required')
-        if observation['evidence_id'] not in sources:raise AccessDenied('hermes_typed_facts_must_bind_current_tab_read')
-        artifact=service._evidence(conn,p,observation['evidence_id'])
-        content=service._verify(conn,artifact).decode('utf-8')
-        import re
-        if re.search(r'(?im)^\s*(?:sign in to continue|session expired|access denied|authentication required)\s*$',content):
-            raise AccessDenied('hermes_dashboard_access_wall')
-        checked.append(str(lease_id))
-    if lease_ids:
-        from gabriel.identity.cases import timestamp
-        sampled=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
-        if not 0<=(sampled-timestamp(document['as_of'])).total_seconds()<=120:raise AccessDenied('hermes_fresh_dashboard_facts_required')
-    return checked
+        sources={identifier(f['evidence_id']) for f in document['facts']}
+        if any(row['evidence_id'] not in sources for row in captures):
+            raise AccessDenied('hermes_typed_facts_must_bind_current_tab_read')
+    sampled=conn.execute('SELECT clock_timestamp() AS t').fetchone()['t']
+    if not 0<=(sampled-timestamp(document['as_of'])).total_seconds()<=120:
+        raise AccessDenied('hermes_fresh_dashboard_facts_required')
+    return list(map(str,leases))
 
 
-def check_tabs(service,conn,p,token,case_id,lease_ids,document):
-    return browser_preflight(service,conn,p,token,case_id,lease_ids,document)
+def check_tabs(service,conn,p,token,case_id,lease_ids,document,*,receipt_only=False):
+    return browser_preflight(service,conn,p,token,case_id,lease_ids,document,receipt_only=receipt_only)
 
 
 def preflight(service,vault,token,case_id,input_evidence_id,*,model=DEFAULT_MODEL,specialist_model=DEFAULT_MODEL,key_scope='personal',lease_ids=()):
@@ -132,8 +120,9 @@ def preflight(service,vault,token,case_id,input_evidence_id,*,model=DEFAULT_MODE
         p=service._human(conn,token,write=True,content=True)
         case=service._case(conn,p,case_id,open_only=True)
         if key_scope=='organization' and p.role not in {'owner','admin'}:raise AccessDenied('organization_provider_admin_required')
-        _,document,_=verified_input(service,conn,p,case,identifier(input_evidence_id))
-        tabs=check_tabs(service,conn,p,token,case['id'],lease_ids,document)
+        source,document,_=verified_input(service,conn,p,case,identifier(input_evidence_id))
+        tabs=check_tabs(service,conn,p,token,case['id'],lease_ids,document,
+            receipt_only=source['source_label']==browser_hermes.SOURCE_LABEL)
         policy=limits(conn,p.organization_id);used=usage(conn,p.organization_id,now(conn))
         budget_ready=bool(policy['enabled'] and used['held_slots']<2 and used['day_used']+6304<=policy['day_microusd']
             and used['month_used']+6304<=policy['month_microusd'] and policy['investigation_microusd']>=6304)
@@ -172,8 +161,9 @@ def active(service,conn,p,run_id,token):
         (p.organization_id,identifier(run_id))).fetchone()
     if not meta:raise AccessDenied('hermes_run_required')
     case=service._case(conn,p,root['case_id'],open_only=True)
-    _,document,_=verified_input(service,conn,p,case,meta['input_evidence_id'])
-    check_tabs(service,conn,p,token,case['id'],list(meta['selected_leases']),document)
+    source,document,_=verified_input(service,conn,p,case,meta['input_evidence_id'])
+    check_tabs(service,conn,p,token,case['id'],list(meta['selected_leases']),document,
+        receipt_only=source['source_label']==browser_hermes.SOURCE_LABEL)
     return root,meta,document
 
 
@@ -202,9 +192,7 @@ class HermesWorker(ModelWorker):
     def _quote(self,token,model,config):
         return self.budget.quote(token,'openrouter',model,digest(config),500000,3000000,_personal=self.key_scope=='personal')
     def _scope(self,conn,p,run_id,case_id=None,*,_exclude_ingestion=None):
-        root=coordinator.load(conn,p,self.root_id)
-        if root['requested_by']!=p.user_id:raise AccessDenied('hermes_run_not_owned')
-        coordinator.active(self.cases,conn,p,root)
+        root,_,_=active(self.cases,conn,p,self.root_id,self._current_token)
         return super()._scope(conn,p,run_id,root['case_id'],_exclude_ingestion=_exclude_ingestion)
     def _validate_actions(self,decision):validate_actions(decision,self.document,self.stage)
     def _input(self,token,run_id,evidence_id,model):
