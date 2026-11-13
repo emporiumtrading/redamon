@@ -74,7 +74,7 @@ def candidate(url, origin):
             route = unquote(route)
         if SENSITIVE_ROUTE.search(route):
             return False
-        if any(ord(c) < 33 or ord(c) == 127 for c in url):
+        if any(ord(c) < 33 or ord(c) == 127 for c in url) or any(ord(c) < 33 or ord(c) == 127 for c in route):
             return False
         readonly_page(url)
         return True
