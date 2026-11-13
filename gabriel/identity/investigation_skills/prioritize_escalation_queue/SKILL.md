@@ -3,4 +3,4 @@ name: prioritize_escalation_queue
 version: 1
 license: MIT
 ---
-Alert Triage: Review unresolved alert priority; no automatic action.
+Review unresolved alerts by reported severity and age. Flag unknown state. Never escalate or suppress alerts.

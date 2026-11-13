@@ -3,4 +3,4 @@ name: review_incident_evidence_gaps
 version: 1
 license: MIT
 ---
-Incident Scoping: Review missing supplied references; no scope verdict.
+Check supplied evidence for missing entity references and fact types. Never claim complete incident scope.

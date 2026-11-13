@@ -3,4 +3,4 @@ name: review_incident_closure_evidence
 version: 1
 license: MIT
 ---
-Recovery: Review supplied checks; never close cases.
+Review reported restore, service and control checks. Flag stale baselines. Never certify recovery or close cases.
