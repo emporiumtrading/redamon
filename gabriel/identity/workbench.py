@@ -82,6 +82,37 @@ def table(columns,rows):
         '<tr>'+''.join('<td>'+value+'</td>' for value in row)+'</tr>' for row in rows)+'</tbody></table></div>'
 
 
+def metrics(items,label='Summary of the records displayed'):
+    return '<dl class="summary-grid" aria-label="'+e(label)+'">'+''.join(
+        '<div class="metric"><dt>'+e(title)+'</dt><dd>'+e(value)+'</dd><dd class="metric-detail">'+e(detail)+'</dd></div>'
+        for title,value,detail in items)+'</dl>'
+
+
+def structure_draft_view(value):
+    body='<div class="notice"><strong>Unreviewed historical structural draft.</strong> Source bytes and recorded parent lineage were checked for this view. Page authenticity, authenticated account, field meanings and incident status remain unverified. This is not a successful processing receipt or current source-health assessment.</div>'
+    body+='<p>Approved scope label (operator-declared): '+e(value['structure']['account']['text'])+'</p>'
+    body+='<p>Original observation '+e(value['source']['observation_id'])+' · Capture receipt '+e(value['source']['capture_received_at'])+' · Client time '+e(value['source']['client_observed_at'])+' (unverified)</p>'
+    body+=metrics([('Captured headings',value['counts']['headings'],'Observed text; meaning unknown'),
+        ('Captured tables',value['counts']['tables'],'Visible structures only'),
+        ('Visible table rows',value['counts']['visible_table_rows'],'Never an event or attack count'),
+        ('Event count','Unknown','Documentation and aggregates may resemble events')])
+    body+='<h2>Quoted headings</h2>'+table(['Local source reference','Observed text'],[(e(r['id']),e(r['text'])) for r in value['structure']['headings']])
+    for item in value['structure']['tables']:
+        headers={h['id']:h['text'] for h in item['headers']}
+        rows=[]
+        for row in item['rows']:
+            for cell in row['cells']:
+                column=cell['id'].rsplit('/c',1)[1];header=item['id']+'/h'+column
+                rows.append((e(cell['id']),e(cell['text']),e(header+' — '+headers[header] if header in headers else 'No visible header captured; field meaning unknown')))
+        body+='<h2>Quoted table '+e(item['id'])+'</h2>'+table(['Header source reference','Observed header text'],[(e(k),e(v)) for k,v in headers.items()])
+        body+=table(['Cell source reference','Observed cell text','Header in the same recorded DOM column; meaning unknown'],rows)
+    body+='<h2>Explicit label and value pairs</h2>'+table(['Local source references','Observed label','Observed value'],[
+        (e(r['label']['id'])+' · '+e(r['value']['id']),e(r['label']['text']),e(r['value']['text'])) for r in value['structure']['pairs']])
+    body+='<h2>Coverage and unknowns</h2><ul>'+''.join('<li>'+e(g.replace('_',' '))+'</li>' for g in value['structure']['gaps'])+'</ul>'
+    body+='<ul>'+''.join('<li>'+e(note)+'</li>' for note in value['limitations'])+'</ul>'
+    return body
+
+
 class Workbench:
     def __init__(self,service,token,configuration,*,provider_vault=None):
         if not isinstance(service,CaseService): raise ValueError('case_service_required')
@@ -661,7 +692,9 @@ class Workbench:
             if content:
                 if method!='POST' or set(fields)!={'csrf'}: raise AccessDenied('explicit_content_view_required')
                 bundle=self.service.read_evidence(self._token,evidence_id)
-                body='<p class="notice">Stored content integrity verified on this read. Source authenticity remains unverified.</p><pre id="evidence-content">'+e(bundle.reveal().decode('utf-8'))+'</pre>'
+                from gabriel.identity.browser_semantics import LABEL,historical
+                body=structure_draft_view(historical(self.service,self._token,evidence_id)) if artifact['source_label']==LABEL else ''
+                body+='<p class="notice">Stored content integrity verified on this read. Source authenticity remains unverified.</p><pre id="evidence-content">'+e(bundle.reveal().decode('utf-8'))+'</pre>'
             else:
                 if method!='GET': raise AccessDenied('workbench_route_denied')
                 chain=self.service.custody(self._token,evidence_id)
@@ -701,6 +734,10 @@ class Workbench:
                     body+=self._form(path+'/answer','Record analyst answer','<input type="hidden" name="question_id" value="'+e(question['id'])+'"><label>Supporting evidence<select name="evidence_id" required>'+options+'</select></label><label>Analyst answer<input name="answer" maxlength="1024" required></label>')
             body+='</section>'
         body+='<h2>Evidence</h2>'+table(['Artifact','Source','Storage'],[(f'<a href="{path}/evidence/{e(row["id"])}">{e(row["id"])}</a>',e(row['source_label']),e(row['storage_state'])) for row in snapshot['evidence']])
+        from gabriel.identity.browser_semantics import LABEL
+        structural=[row for row in snapshot['evidence'] if row['source_label']==LABEL]
+        if structural:
+            body+='<h2>Unreviewed historical page structure</h2><p>Stored draft metadata only. Open a record, then explicitly view its quoted content. These records do not establish current scope, field meanings or incident findings.</p>'+table(['Draft evidence','Storage'],[('<a href="'+path+'/evidence/'+e(row['id'])+'">'+e(row['id'])+'</a>',e(row['storage_state'])) for row in structural])
         text_reviews=[row for row in snapshot['evidence'] if row['source_label']=='Browser text candidate passages - unqualified']
         if text_reviews:
             body+='<h2>Browser candidate reviews</h2><p>These source-linked local reviews identify candidate passages, not confirmed incidents. Open a review to inspect its quoted evidence and limitations.</p>'+table(['Review evidence','Source','Storage'],[('<a href="'+path+'/evidence/'+e(row['id'])+'">'+e(row['id'])+'</a>',e(row['source_label']),e(row['storage_state'])) for row in text_reviews])
