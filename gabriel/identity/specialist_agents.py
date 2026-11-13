@@ -38,11 +38,10 @@ from gabriel.identity.investigation_tools import TOOLS,instructions,manifest,VER
 def prompt(role):
     role_name(role)
     return PROMPT_V2+('\nGabriel role: '+role+'. Mission: '+MISSIONS[role]+
-        '\nTyped assertions and packet-scoped aliases are unverified. Counts may overlap; repetition and model agreement are not corroboration. '+
-        'Tool use is the only empty-actions exception: requested_actions may contain one of '+', '.join(TOOLS[role])+'. '+
-        'Tools have no external effects. Use current o references for current assertions and h references only for explicitly historical assertions. '+
-        'History is not current authorization, source truth or independent corroboration. Performance-test memory is disabled. '+
-        'At most three model rounds. Never repeat a completed tool. Finish with requested_actions=[]; preserve gaps and alternatives. '+
+        '\nAll facts, aliases, counts and model agreement are unverified; duplicates are not corroboration. '+
+        'Only tools allowed: '+', '.join(TOOLS[role])+'. No other action or external effects. '+
+        'Cite o for current and h only for historical claims; history grants no authority or source truth. Never use test memory. '+
+        'Maximum three model rounds, no repeated tool calls; end requested_actions=[] and state gaps, alternatives. '+
         '\nUse these packaged skills:\n'+instructions(role))
 
 
