@@ -8,25 +8,26 @@ import math
 from pathlib import Path
 
 from gabriel.identity.evidence_store import canonical
+from gabriel.identity.grounded_skills import SKILL_NAMES as GROUNDED_SKILLS, evaluate as grounded_evaluate
 from gabriel.identity.model_evaluation import digest
 from gabriel.identity.service import AccessDenied,_audit,connection,identifier
 from gabriel.identity.specialist_analysis import ROLE_TYPES,analyze
 from gabriel.identity.specialist_analysis_runs import verified_input
 from gabriel.identity.specialist_contracts import ROLES,role_name
 
-VERSION='gabriel-investigation-toolkit-v1'
+VERSION='gabriel-investigation-toolkit-v2'
 SKILLS=Path(__file__).with_name('investigation_skills')
 REMOTE={'scan_artifacts','inspect_packets','inspect_logs'}
 EXTRA={
-    'telemetry_health':('correlate_events','inspect_logs'),
-    'alert_triage':('inspect_logs','correlate_events','scan_artifacts'),
-    'incident_scoping':('correlate_events','inspect_logs','inspect_packets'),
+    'telemetry_health':('correlate_events','inspect_logs','assess_visibility_gaps'),
+    'alert_triage':('inspect_logs','correlate_events','scan_artifacts','find_duplicate_facts'),
+    'incident_scoping':('correlate_events','inspect_logs','inspect_packets','find_duplicate_facts','cross_check_timeline'),
     'threat_intelligence':('scan_artifacts','inspect_packets'),
     'threat_hunting':('inspect_logs','scan_artifacts','inspect_packets'),
-    'dfir_evidence':('scan_artifacts','inspect_packets'),
-    'detection_engineering':('scan_artifacts','inspect_logs'),
+    'dfir_evidence':('scan_artifacts','inspect_packets','audit_provenance','cross_check_timeline'),
+    'detection_engineering':('scan_artifacts','inspect_logs','review_detection_regression'),
     'exposure_vulnerability':('assess_exposure',),
-    'identity_access':('inspect_logs','correlate_events'),
+    'identity_access':('inspect_logs','correlate_events','find_duplicate_facts'),
     'cloud_supply_chain':('scan_artifacts','correlate_events'),
     'response_remediation':('assess_exposure','correlate_events'),
     'recovery_learning':('correlate_events',),
@@ -43,6 +44,11 @@ CATALOG={
     'scan_artifacts':('yara-python','Apache-2.0 AND BSD-3-Clause','Match three bundled behavioral text rules on source files; no match never proves clean.'),
     'inspect_packets':('dpkt','BSD-3-Clause','Summarize Ethernet PCAP/PCAPNG source envelopes; packet patterns are hypotheses.'),
     'inspect_logs':('Python','PSF-2.0','Correlate normalized JSONL source logs for failure bursts and later successes.'),
+    'audit_provenance':('Gabriel','MIT','Audit integrity/custody assertions from verified source-linked facts without asserting authentic origin.'),
+    'find_duplicate_facts':('Gabriel','MIT','Identify same-source identical fact repeat candidates without deleting evidence or claiming event-level deduplication.'),
+    'cross_check_timeline':('Gabriel','MIT','Compare bounded event-time windows across supplied evidence sources without assuming clock sync or causality.'),
+    'assess_visibility_gaps':('Gabriel','MIT','Summarize typed missing/stale coverage and reject conclusions from an unobserved period.'),
+    'review_detection_regression':('Gabriel','MIT','Compare supplied expected and observed detection-test outcomes; do not assert versioned regression without baseline.'),
 }
 
 
@@ -53,7 +59,7 @@ def manifest(role):
         input='job_bound_local_sources_no_model_arguments',version=VERSION,
         purpose=CATALOG[n][2],when_to_use=CATALOG[n][2],args_format='requested_actions=[tool_name]; runtime supplies job-bound evidence; no arbitrary arguments',
         description=(SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip(),
-        implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'))])) for n in TOOLS[role]]
+        implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'),Path(__file__).with_name('grounded_skills.py'))])) for n in TOOLS[role]]
 
 
 def instructions(role):
@@ -114,6 +120,7 @@ def facts_for(document,role):
 
 def native(name,document,role,ref_count):
     facts=document['facts']
+    if name in GROUNDED_SKILLS:return grounded_evaluate(name,document)
     if name=='verify_sources':return dict(verified_artifact_count=ref_count-1,source_authenticity='unverified')
     if name=='inspect_timeline':
         times=sorted((f['event_time'] for f in facts),key=lambda t:datetime.fromisoformat(t.replace('Z','+00:00')))
