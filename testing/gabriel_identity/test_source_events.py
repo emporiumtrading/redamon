@@ -6,7 +6,7 @@ import pytest
 
 from gabriel.identity.source_events import (
     UnsupportedSourceEvent, VERSION, normalize_wazuh_invalid_user,
-    review_source_events, validate_event,
+    review_source_events, validate_event, project_attack_pattern_document,
 )
 from testing.gabriel_identity.test_wazuh_events import sample
 
@@ -129,3 +129,53 @@ def test_bounded_batch_size_and_record_count_are_enforced():
     report=review_source_events([row]*128)
     assert report['event_count'] == 128
     assert report['same_source_repeat_candidates'] == 127
+
+
+
+def test_normalization_projects_to_existing_bounded_candidate_engine_without_verdict():
+    from gabriel.identity.attack_patterns import investigate, normalized as validate_attack_document
+    case,source=str(uuid4()),str(uuid4())
+    rows=[]
+    for i in range(10):
+        record=sample()
+        record['event_id']='1792800000.'+str(12345+i)
+        rows.append(normalized(record,case_id=case,source_id=source))
+    document=project_attack_pattern_document(rows,as_of='2026-10-24T12:10:00Z',
+        missing_sources=['process','network','file','kernel','boot'])
+    assert len(validate_attack_document(document,case))==10
+    report=investigate(document,case)
+    assert report['unique_event_count']==10
+    assert any(f['family']=='brute_force' for f in report['findings'])
+    assert not report['quality_qualified']
+    assert not report['live_detection_accepted']
+    assert not report['external_actions_authorized']
+    assert all(f['status']=='suspected_requires_review' and not f['source_verified']
+        for f in report['findings'])
+
+
+def test_projection_refuses_conflicting_event_id_and_cross_case_sources():
+    case,source=str(uuid4()),str(uuid4())
+    first=normalized(case_id=case,source_id=source)
+    other=sample()
+    other['full_log']=other['full_log'].replace('generated-account','other-generated-account')
+    conflicting=normalized(other,case_id=case,source_id=source)
+    with pytest.raises(UnsupportedSourceEvent):
+        project_attack_pattern_document([first,conflicting],
+            as_of='2026-10-24T12:10:00Z',missing_sources=[])
+    with pytest.raises(UnsupportedSourceEvent):
+        project_attack_pattern_document([first,normalized()],
+            as_of='2026-10-24T12:10:00Z',missing_sources=[])
+
+
+def test_projection_requires_explicit_bounded_source_gaps_and_snapshot_clock():
+    row=normalized()
+    with pytest.raises(UnsupportedSourceEvent):
+        project_attack_pattern_document([row],as_of='2026-10-24T11:00:00Z',missing_sources=[])
+    for gaps in ([ 'unknown_sensor' ], ['network','network'], ['process'] * 7):
+        with pytest.raises(UnsupportedSourceEvent):
+            project_attack_pattern_document([row],
+                as_of='2026-10-24T12:10:00Z',missing_sources=gaps)
+    projection=project_attack_pattern_document([row],as_of='2026-10-24T12:10:00Z',
+        missing_sources=['authentication'])
+    assert projection['missing_sources']==['authentication']
+    assert projection['events'][0]['authorization']=='unknown'
