@@ -48,12 +48,12 @@ def _base(facts):
     )
 
 
-def evaluate(name, document):
+def evaluate(name, document, *, verified_refs=None):
     """Return de-identified counters and explicit limits, never raw evidence/IDs."""
     if name not in SKILL_NAMES:
         raise ValueError('unknown_grounded_skill')
     if name in CATALOG_SKILLS:
-        return catalog_evaluate(name, document)
+        return catalog_evaluate(name, document, verified_refs=verified_refs)
     validate_document(document, document['case_id'])
     facts = document['facts']
     result = _base(facts)

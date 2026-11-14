@@ -1,7 +1,7 @@
 name: Gabriel open-source investigation tools and skills
 on:
   pull_request:
-    paths: ['gabriel/identity/**', 'gabriel/toolbox/**', 'testing/gabriel_identity/test_investigation_tools*.py', 'testing/gabriel_identity/test_grounded_skills*.py', 'compose.gabriel*.yml', '.github/workflows/gabriel-investigation-tools.yml']
+    paths: ['gabriel/identity/**', 'gabriel/toolbox/**', 'testing/gabriel_identity/test_investigation_tools*.py', 'testing/gabriel_identity/test_grounded_skills*.py', 'testing/gabriel_identity/test_catalog_*.py', 'testing/gabriel_identity/test_skill_catalog.py', 'compose.gabriel*.yml', '.github/workflows/gabriel-investigation-tools.yml']
 permissions:
   contents: read
 jobs:
@@ -31,7 +31,7 @@ jobs:
           "${compose[@]}" --profile test build identity-tests investigation-tools
           "${compose[@]}" up -d --wait identity-db investigation-tools
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
-          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_investigation_tools.py testing/gabriel_identity/test_investigation_tools_integration.py testing/gabriel_identity/test_grounded_skills.py testing/gabriel_identity/test_grounded_skills_integration.py testing/gabriel_identity/test_skill_catalog.py testing/gabriel_identity/test_catalog_skills.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1
+          "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_investigation_tools.py testing/gabriel_identity/test_investigation_tools_integration.py testing/gabriel_identity/test_grounded_skills.py testing/gabriel_identity/test_grounded_skills_integration.py testing/gabriel_identity/test_skill_catalog.py testing/gabriel_identity/test_catalog_skills.py testing/gabriel_identity/test_catalog_dfir.py testing/gabriel_identity/test_catalog_dfir_integration.py testing/gabriel_identity/test_catalog_detection.py testing/gabriel_identity/test_catalog_telemetry.py testing/gabriel_identity/test_specialist_agents.py testing/gabriel_identity/test_specialist_agents_integration.py testing/gabriel_identity/test_workbench_integration.py --strict --parallel 1
           "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests tooling/scripts/pytest_isolated.py all testing/gabriel_identity/test_machine_integration.py --strict --parallel 1
           docker inspect gabriel-tool-check-investigation-tools-1 > "$RUNNER_TEMP/toolbox-inspect.json"
           python3 testing/gabriel_toolbox/assert_isolation.py "$RUNNER_TEMP/toolbox-inspect.json"

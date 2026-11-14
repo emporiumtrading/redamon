@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import re
 from uuid import UUID
 
+from gabriel.identity.catalog_telemetry import SOURCE_COVERAGE_SCHEMA, validate_source_coverage
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.service import InvalidIdentityInput
 
@@ -17,12 +18,15 @@ SEVERITIES = {'informational', 'low', 'medium', 'high', 'critical'}
 YES_NO = {'yes', 'no', 'unknown'}
 SCHEMAS = {
     'coverage': {'state': {'available', 'stale', 'missing'}},
+    'source_coverage': SOURCE_COVERAGE_SCHEMA,
     'alert': {'severity': SEVERITIES, 'state': {'open', 'resolved', 'unknown'}},
     'activity': {'category': {'authentication', 'process', 'network', 'file'},
                  'outcome': {'success', 'failure', 'blocked', 'observed', 'unknown'}, 'count': int},
     'intelligence': {'match': bool, 'valid_until': 'time'},
     'artifact': {'integrity': {'match', 'mismatch', 'unknown'}, 'custody': {'complete', 'gap', 'unknown'}},
     'detection': {'cohort': {'malicious', 'benign', 'adversarial'}, 'matched': bool, 'expected_match': bool},
+    'detection_trial': {'cohort': {'malicious', 'benign', 'adversarial'}, 'matched': bool, 'expected_match': bool,
+                        'rule_digest': 'digest', 'engine_digest': 'digest', 'fixture_digest': 'digest'},
     'exposure': {'severity': SEVERITIES, 'reachable': YES_NO, 'mitigated': YES_NO},
     'identity': {'event': {'privilege_grant', 'session_revocation', 'mfa_disabled', 'login_failure', 'login_success'},
                  'authorized': YES_NO},
@@ -33,13 +37,13 @@ SCHEMAS = {
                  'result': {'pass', 'fail', 'unknown'}, 'baseline': {'current', 'stale', 'unknown'}},
 }
 ROLE_TYPES = {
-    'telemetry_health': {'coverage'},
+    'telemetry_health': {'coverage', 'source_coverage'},
     'alert_triage': {'alert', 'activity'},
     'incident_scoping': {'activity', 'alert', 'identity', 'cloud'},
     'threat_intelligence': {'intelligence'},
     'threat_hunting': {'activity', 'identity', 'cloud'},
     'dfir_evidence': {'artifact'},
-    'detection_engineering': {'detection'},
+    'detection_engineering': {'detection', 'detection_trial'},
     'exposure_vulnerability': {'exposure'},
     'identity_access': {'identity', 'activity'},
     'cloud_supply_chain': {'cloud'},
@@ -99,6 +103,13 @@ def at(value):
         raise InvalidIdentityInput('invalid_specialist_fact_time') from None
 
 
+def fact_data_for_model(fact):
+    data = fact['data']
+    if fact['type'] == 'detection_trial':
+        return {key: data[key] for key in ('cohort', 'matched', 'expected_match')}
+    return data
+
+
 def validate_document(document, case_id):
     require(type(document) is dict and set(document) == {'version', 'case_id', 'as_of', 'facts'}
             and document['version'] == 'specialist-facts-v1', 'invalid_specialist_facts')
@@ -132,8 +143,13 @@ def validate_document(document, case_id):
                 require(type(item) is int and 1 <= item <= 1000000, 'invalid_specialist_fact_value')
             elif allowed == 'time':
                 at(item)
+            elif allowed == 'digest':
+                require(type(item) is str and re.fullmatch(r'[a-f0-9]{64}', item) is not None,
+                        'invalid_specialist_fact_digest')
             else:
                 require(type(item) is str and item in allowed, 'invalid_specialist_fact_value')
+        if kind == 'source_coverage':
+            validate_source_coverage(fact)
     require(len({fact['evidence_id'] for fact in facts}) <= 32, 'specialist_fact_source_limit')
     return document
 
@@ -192,10 +208,13 @@ def analyze(role, document, input_ref):
         note(f'Reported artifact checks: {len(selected)}; integrity/custody discrepancies: {len(bad)}.')
         concern('Reported artifact discrepancies require collection and custody review before reliance.', bad)
     elif role == 'detection_engineering':
-        failed = [r for r in selected if r['data']['matched'] != r['data']['expected_match']]
+        legacy_tests = of('detection')
+        failed = [r for r in legacy_tests if r['data']['matched'] != r['data']['expected_match']]
         missed = [r for r in failed if r['data']['expected_match']]
         false = [r for r in failed if not r['data']['expected_match']]
-        note(f'Supplied detection-test records: {len(selected)}; expected matches missed: {len(missed)}; unexpected matches: {len(false)}.')
+        note(f'Supplied detection-test records: {len(legacy_tests)}; expected matches missed: {len(missed)}; unexpected matches: {len(false)}.', legacy_tests)
+        if versioned_trials := of('detection_trial'):
+            note('Review supplied versioned fixture trials using false-negative analysis.', versioned_trials)
         if failed:
             claim(contradictions, 'Supplied observed and expected detection outcomes disagree; this does not qualify the rule.', failed)
     elif role == 'exposure_vulnerability':
@@ -232,7 +251,8 @@ def analyze(role, document, input_ref):
                    'Repeated supplied records are not independent corroboration; reported counts may overlap.']
     if not selected:
         uncertainty.append('No facts relevant to this specialist were supplied; the role abstains from assessment.')
-    gaps = [r for r in document['facts'] if r['type'] == 'coverage' and r['data']['state'] != 'available']
+    gaps = [r for r in document['facts'] if (r['type'] == 'coverage' or
+            role == 'telemetry_health' and r['type'] == 'source_coverage') and r['data']['state'] != 'available']
     if gaps:
         uncertainty.append('The supplied packet reports stale or missing collection; absent observations cannot exclude activity.')
         claim(observations, 'Reported stale or missing coverage affects interpretation.', gaps)

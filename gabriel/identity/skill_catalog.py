@@ -69,6 +69,8 @@ def load():
             implementation_name = provenance.rsplit(':', 1)[-1]
             if IMPLEMENTED.get(implementation_name) != role or implementation_name not in TOOLS[role]:
                 raise InvalidSkillCatalog('unbound_skill_implementation')
+            if implementation_name in registered:
+                raise InvalidSkillCatalog('duplicate_skill_implementation')
             registered.add(implementation_name)
         if row['evidence_contract'] != 'case-bound typed source refs and digests required':
             raise InvalidSkillCatalog('unsupported_evidence_contract')
