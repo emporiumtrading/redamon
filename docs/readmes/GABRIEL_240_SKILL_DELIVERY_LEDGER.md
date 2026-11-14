@@ -1,8 +1,8 @@
-# Gabriel — 240-skill delivery ledger and first executable tranche
+# Gabriel — 240-skill delivery ledger
 
 **Source of truth:** `gabriel/identity/skill_roadmap.json`; validate using `gabriel.identity.skill_catalog.load`.
 
-The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **5 implemented-unqualified entries and 235 not yet implemented** in this tranche. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
+The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **11 implemented-unqualified entries and 229 not yet implemented** across three tranches. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
 
 ## Tranche 1: implemented and connected to the exact authorized role
 
@@ -15,6 +15,26 @@ The engineering specification has **240 candidate skills, 20 for each of 12 role
 | `recovery_learning.20-incident-closure-evidence-validation` | `review_incident_closure_evidence` | Recovery & Learning | Reported restore/health/security checks against baselines; no incident closure or lesson publication |
 
 These kernels use `specialist-facts-v1` and the existing verified-entrypoint/case-role-bound tool execution. Their selection strings, skill text and implementation source are included in specialist runtime digests. They remain **unqualified for model admission** and require independent held-out review. A locally passing test does not verify customer evidence provenance.
+
+## Tranche 2: evidence-bound coverage, provenance, and detection review
+
+| Catalog slot | Executable local tool | Owner | Scope |
+|---|---|---|---|
+| `telemetry_health.07-data-source-coverage-mapping` | `map_source_coverage` | Telemetry Health | Maps supplied source aliases, time windows, reported gaps and overlapping conflicts. Expected inventory and continuous visibility remain unknown. |
+| `dfir_evidence.18-evidence-provenance-validation` | `validate_evidence_provenance` | DFIR Evidence | Checks stored bytes and custody through verified case references, and reports conflicting artifact assertions. External collection authenticity remains unknown. |
+| `detection_engineering.12-false-negative-analysis` | `analyze_false_negatives` | Detection Engineering | Groups reported fixture trials by rule, engine and fixture digests, deduplicates outcomes and excludes contradictory trials from miss counts. It does not replay rules. |
+
+Coverage mapping consumes typed `source_coverage` facts with an opaque source alias and a bounded UTC interval. Detection review consumes typed `detection_trial` facts with case-bound evidence and separate rule, engine and fixture digests. Those three digests stay local. Forensic timeline cross-validation still requires shared event identifiers and source clock calibration.
+
+## Tranche 3: indicator lifecycle, remediation deadlines, and storage access
+
+| Catalog slot | Executable local tool | Owner | Scope |
+|---|---|---|---|
+| `threat_intelligence.20-threat-intelligence-lifecycle-management` | `review_intelligence_lifecycle` | Threat Intelligence | Groups versioned indicator reports by supplied feed and indicator aliases. Flags expiry, revocation, reactivation and conflicting states for analyst review. |
+| `exposure_vulnerability.06-vulnerability-age-and-remediation-sla-tracking` | `review_vulnerability_sla` | Exposure & Vulnerability | Computes age and provisional deadline status from supplied dates. Preserves conflicting deadlines or lifecycle states. |
+| `cloud_supply_chain.15-cloud-storage-exposure-assessment` | `assess_cloud_storage_exposure` | Cloud & Supply Chain | Reviews supplied external access paths against network, guard, and read/list/write assertions. Preserves stale and conflicting evidence. |
+
+The case tool verifies the stored source before the local review. Source authenticity and policy authority remain unverified. Feed and storage path identifiers and policy digests stay local.
 
 ## Release gates
 

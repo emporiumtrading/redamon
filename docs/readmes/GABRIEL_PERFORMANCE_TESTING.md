@@ -16,6 +16,20 @@ Case isolation cannot detect someone manually copying test text into a new opera
 - Keep scenario answer keys, grading panels, walkthroughs and analyst labels outside Gabriel's browser scope and inference context. An independent evaluator retains the scoring key.
 - Establish an explicit scenario manifest with expected attack/benign/visibility cases, critical cases, observable opportunities, time limits and a fixed scoring rubric. An unobserved event is a visibility gap, not evidence of a successful detection.
 
+## TryHackMe round record
+
+Record one of two round types before opening the scenario. A **visibility rehearsal** verifies pairing, scope, capture freshness, visible fields, original receipts and Stop on the installed browser. Record inaccessible frames, canvas and remote desktops as gaps. A **scored investigation** begins after the relevant interpretation and specialist paths are admitted and an independent evaluator has sealed the rubric and answer key.
+
+| Private record | What to retain |
+|---|---|
+| Baseline | Source commit, image IDs, extension version, exact model configuration digests and budget |
+| Scope | Fresh performance-test case, approved tabs and account, scenario set identifier, time limit and allowed operations |
+| Outcome | Original classification, escalation, evidence references, gaps and abstention before revealing labels |
+| Human review | Analyst review of final classification and report before any platform submission |
+| Comparison | Independent score, scenario denominators, incomplete outcomes and analyst time |
+
+Keep hints, walkthroughs, grading panels and answers outside the approved tabs. Record simulator feedback with its platform provenance. Use an independent analyst score for release decisions.
+
 ## Observe and score
 
 Retain the original evidence-linked output, references, disposition, abstention and gaps for each case. Record capture, alert and analyst-review times; visible pages and failed navigation; specialist/tool execution; inference usage/cost; scope/Stop/revocation events; crashes, unresolved outcomes and analyst effort. Preserve platform outcomes as separately sourced evaluator evidence, not source truth supplied to Gabriel.
