@@ -2,7 +2,7 @@
 
 **Source of truth:** `gabriel/identity/skill_roadmap.json`; validate using `gabriel.identity.skill_catalog.load`.
 
-The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **14 implemented-unqualified entries and 226 not yet implemented** across six tranches. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
+The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **15 implemented-unqualified entries and 225 not yet implemented** across seven tranches. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
 
 ## Tranche 1: implemented and connected to the exact authorized role
 
@@ -47,6 +47,10 @@ The case tool verifies the stored source before the local review. Source authent
 ## Tranche 6: recovery point objective review
 
 `recovery_learning.04-recovery-point-objective-rpo-validation` maps to `review_recovery_point`. It compares reported restored data age at disruption with the supplied recovery objective. Conflicting points or objectives remain unresolved for analyst review. The tool keeps clock calibration, policy authority and actual restore verification open.
+
+## Tranche 7: recovery time objective review
+
+`recovery_learning.05-recovery-time-objective-rto-validation` maps to `review_recovery_time`. It compares elapsed time from disruption to reported service restoration with the supplied objective. Conflicting reports remain visible for analyst review. Clock accuracy, policy authority and service restoration require independent verification.
 
 ## Release gates
 
