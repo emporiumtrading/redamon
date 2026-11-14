@@ -6,7 +6,7 @@ These kernels do not receive credentials, access live systems or authorize actio
 from collections import Counter
 from datetime import datetime
 
-from gabriel.identity import catalog_cloud, catalog_dfir, catalog_intelligence
+from gabriel.identity import catalog_cloud, catalog_dfir, catalog_identity, catalog_intelligence
 from gabriel.identity.catalog_detection import analyze_false_negatives
 from gabriel.identity.catalog_exposure import review_vulnerability_sla
 from gabriel.identity.catalog_hunting import review_powershell_activity
@@ -19,6 +19,7 @@ VERSION='gabriel-catalog-tranche-1-v1'
 SKILLS={
     **catalog_cloud.SKILLS,
     **catalog_dfir.SKILLS,
+    **catalog_identity.SKILLS,
     **catalog_intelligence.SKILLS,
     'review_vulnerability_sla': 'exposure_vulnerability',
     'normalize_incident_timeline': 'incident_scoping',
@@ -48,6 +49,8 @@ def evaluate(name, document, *, verified_refs=None):
         return catalog_intelligence.evaluate(name, document, verified_refs=verified_refs)
     if name in catalog_dfir.SKILLS:
         return catalog_dfir.evaluate(name, document, verified_refs=verified_refs)
+    if name in catalog_identity.SKILLS:
+        return catalog_identity.evaluate(name, document)
     if name == 'review_vulnerability_sla':
         return review_vulnerability_sla(document)
     if name == 'normalize_incident_timeline':

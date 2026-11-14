@@ -41,6 +41,13 @@ SCHEMAS = {
     'exposure': {'severity': SEVERITIES, 'reachable': YES_NO, 'mitigated': YES_NO},
     'identity': {'event': {'privilege_grant', 'session_revocation', 'mfa_disabled', 'login_failure', 'login_success'},
                  'authorized': YES_NO},
+    'identity_account': {'kind': {'human', 'service', 'workload'}, 'enabled': bool,
+                         'last_used': 'time', 'owner': {'active', 'inactive', 'unknown'},
+                         'mfa': {'enforced', 'bypassed', 'unenrolled', 'unknown'}, 'privileged': bool},
+    'identity_group_change': {'change': {'grant', 'revoke'}, 'approved': YES_NO,
+                              'privileged': bool, 'membership_state': {'present', 'absent', 'unknown'}},
+    'identity_location': {'latitude_millidegrees': int, 'longitude_millidegrees': int,
+                          'login': {'success', 'failure'}},
     'cloud_storage_access': CLOUD_STORAGE_ACCESS_SCHEMA,
     'cloud': {'finding': {'public_access', 'privileged_workload', 'unsigned_component', 'policy_drift'},
               'state': {'present', 'absent', 'unknown'}, 'authorized': YES_NO},
@@ -59,7 +66,7 @@ ROLE_TYPES = {
     'dfir_evidence': {'artifact'},
     'detection_engineering': {'detection', 'detection_trial'},
     'exposure_vulnerability': {'exposure', 'vulnerability_sla'},
-    'identity_access': {'identity', 'activity'},
+    'identity_access': {'identity', 'activity', 'identity_account', 'identity_group_change', 'identity_location'},
     'cloud_supply_chain': {'cloud', 'cloud_storage_access'},
     'response_remediation': {'response_check'},
     'recovery_learning': {'recovery', 'recovery_point', 'recovery_time'},
@@ -119,6 +126,8 @@ def at(value):
 
 def fact_data_for_model(fact):
     data = fact['data']
+    if fact['type'] == 'identity_location':
+        return {'login': data['login'], 'location_supplied': True}
     if fact['type'] == 'detection_trial':
         return {key: data[key] for key in ('cohort', 'matched', 'expected_match')}
     if fact['type'] == 'cloud_storage_access':
@@ -162,7 +171,11 @@ def validate_document(document, case_id):
             if allowed is bool:
                 require(type(item) is bool, 'invalid_specialist_fact_value')
             elif allowed is int:
-                require(type(item) is int and 1 <= item <= 1000000, 'invalid_specialist_fact_value')
+                if kind == 'identity_location':
+                    limit = 90000 if key == 'latitude_millidegrees' else 180000
+                    require(type(item) is int and -limit <= item <= limit, 'invalid_specialist_fact_value')
+                else:
+                    require(type(item) is int and 1 <= item <= 1000000, 'invalid_specialist_fact_value')
             elif allowed == 'time':
                 at(item)
             elif allowed == 'recovery_objective_seconds':
@@ -193,6 +206,8 @@ def validate_document(document, case_id):
             validate_recovery_time(fact)
         if kind == 'source_coverage':
             validate_source_coverage(fact)
+        if kind == 'identity_account':
+            require(at(data['last_used']) <= as_of, 'specialist_fact_after_snapshot')
     require(len({fact['evidence_id'] for fact in facts}) <= 32, 'specialist_fact_source_limit')
     return document
 

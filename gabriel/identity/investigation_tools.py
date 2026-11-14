@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 
 from gabriel.identity.evidence_store import canonical
+from gabriel.identity.catalog_identity import SKILLS as IDENTITY_SKILLS
 from gabriel.identity.grounded_skills import SKILL_NAMES as GROUNDED_SKILLS, evaluate as grounded_evaluate
 from gabriel.identity.model_evaluation import digest
 from gabriel.identity.service import AccessDenied,_audit,connection,identifier
@@ -27,7 +28,7 @@ EXTRA={
     'dfir_evidence':('scan_artifacts','inspect_packets','audit_provenance','cross_check_timeline','validate_evidence_provenance'),
     'detection_engineering':('scan_artifacts','inspect_logs','review_detection_regression','analyze_false_negatives'),
     'exposure_vulnerability':('assess_exposure','review_exposure_context','review_vulnerability_sla'),
-    'identity_access':('inspect_logs','correlate_events','find_duplicate_facts','review_privileged_access_changes'),
+    'identity_access':('inspect_logs','correlate_events','find_duplicate_facts','review_privileged_access_changes')+tuple(IDENTITY_SKILLS),
     'cloud_supply_chain':('scan_artifacts','correlate_events','review_cloud_change_assertions','assess_cloud_storage_exposure'),
     'response_remediation':('assess_exposure','correlate_events','review_response_dependencies','analyze_response_dependencies'),
     'recovery_learning':('correlate_events','review_recovery_baselines','review_incident_closure_evidence','review_recovery_point','review_recovery_time'),
@@ -73,6 +74,8 @@ CATALOG={
 }
 
 
+CATALOG.update({name:('Gabriel','MIT','Review supplied identity evidence for '+name.replace('_',' ')+'; no access changes.') for name in IDENTITY_SKILLS})
+
 def manifest(role):
     role_name(role)
     return [dict(name=n,engine=CATALOG[n][0],license=CATALOG[n][1],selection=CATALOG[n][2],
@@ -81,7 +84,7 @@ def manifest(role):
         purpose=CATALOG[n][2],when_to_use=CATALOG[n][2],args_format='requested_actions=[tool_name]; runtime supplies job-bound evidence; no arbitrary arguments',
         description=(SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip(),
         implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'),Path(__file__).with_name('grounded_skills.py'),Path(__file__).with_name('catalog_skills.py'),
-            Path(__file__).with_name('catalog_dfir.py'),Path(__file__).with_name('catalog_detection.py'),
+            Path(__file__).with_name('catalog_dfir.py'),Path(__file__).with_name('catalog_identity.py'),Path(__file__).with_name('catalog_detection.py'),
             Path(__file__).with_name('catalog_telemetry.py'),Path(__file__).with_name('catalog_intelligence.py'),
             Path(__file__).with_name('catalog_exposure.py'),Path(__file__).with_name('catalog_cloud.py'),
             Path(__file__).with_name('catalog_timeline.py'),Path(__file__).with_name('catalog_hunting.py'),Path(__file__).with_name('catalog_recovery.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
