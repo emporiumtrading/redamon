@@ -900,9 +900,9 @@
       "owner_specialist": "threat_hunting",
       "catalog_index": 2,
       "name": "Suspicious PowerShell activity investigation",
-      "implementation_status": "candidate_not_implemented",
+      "implementation_status": "implemented_unqualified",
       "qualification_status": "not_evaluated",
-      "accepted_implementation": null,
+      "accepted_implementation": "gabriel.identity.catalog_skills.evaluate:review_powershell_activity",
       "evidence_contract": "case-bound typed source refs and digests required",
       "external_actions_allowed": false
     },

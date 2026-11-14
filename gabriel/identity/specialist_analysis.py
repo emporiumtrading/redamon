@@ -10,6 +10,7 @@ from uuid import UUID
 
 from gabriel.identity.catalog_cloud import CLOUD_STORAGE_ACCESS_SCHEMA, validate_cloud_storage_access
 from gabriel.identity.catalog_exposure import VULNERABILITY_SLA_SCHEMA, validate_vulnerability_sla
+from gabriel.identity.catalog_hunting import POWERSHELL_EXECUTION_SCHEMA
 from gabriel.identity.catalog_intelligence import INTEL_LIFECYCLE_SCHEMA, validate_intel_lifecycle
 from gabriel.identity.catalog_telemetry import SOURCE_COVERAGE_SCHEMA, validate_source_coverage
 from gabriel.identity.catalog_timeline import CLOCK_LIMIT_MS, TIMELINE_EVENT_SCHEMA, validate_timeline_event
@@ -25,6 +26,7 @@ SCHEMAS = {
     'source_coverage': SOURCE_COVERAGE_SCHEMA,
     'alert': {'severity': SEVERITIES, 'state': {'open', 'resolved', 'unknown'}},
     'timeline_event': TIMELINE_EVENT_SCHEMA,
+    'powershell_execution': POWERSHELL_EXECUTION_SCHEMA,
     'activity': {'category': {'authentication', 'process', 'network', 'file'},
                  'outcome': {'success', 'failure', 'blocked', 'observed', 'unknown'}, 'count': int},
     'intel_lifecycle': INTEL_LIFECYCLE_SCHEMA,
@@ -49,7 +51,7 @@ ROLE_TYPES = {
     'alert_triage': {'alert', 'activity'},
     'incident_scoping': {'activity', 'alert', 'identity', 'cloud', 'timeline_event'},
     'threat_intelligence': {'intelligence', 'intel_lifecycle'},
-    'threat_hunting': {'activity', 'identity', 'cloud'},
+    'threat_hunting': {'activity', 'identity', 'cloud', 'powershell_execution'},
     'dfir_evidence': {'artifact'},
     'detection_engineering': {'detection', 'detection_trial'},
     'exposure_vulnerability': {'exposure', 'vulnerability_sla'},
@@ -117,6 +119,8 @@ def fact_data_for_model(fact):
         return {key: data[key] for key in ('cohort', 'matched', 'expected_match')}
     if fact['type'] == 'cloud_storage_access':
         return {key: value for key, value in data.items() if key not in {'path_id', 'policy_digest'}}
+    if fact['type'] == 'powershell_execution':
+        return {key: value for key, value in data.items() if key != 'process_instance_id'}
     if fact['type'] == 'intel_lifecycle':
         return {key: value for key, value in data.items() if key != 'feed_id'}
     return data
@@ -173,6 +177,8 @@ def validate_document(document, case_id):
             validate_intel_lifecycle(fact, as_of)
         if kind == 'vulnerability_sla':
             validate_vulnerability_sla(fact)
+        if kind == 'powershell_execution':
+            require(fact['entity_id'] is not None, 'powershell_host_alias_required')
         if kind == 'timeline_event':
             validate_timeline_event(fact, as_of)
         if kind == 'source_coverage':
