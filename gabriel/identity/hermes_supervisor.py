@@ -13,7 +13,7 @@ from gabriel.identity.model_worker import ModelWorker,configuration as base_conf
 from gabriel.identity.personal_providers import PersonalProviders
 from gabriel.identity.provider_onboarding import CustomerProviders,require_checked
 from gabriel.identity.service import AccessDenied,InvalidIdentityInput,_audit,connection,identifier
-from gabriel.identity.specialist_analysis import ROLE_TYPES
+from gabriel.identity.specialist_analysis import ROLE_TYPES,fact_data_for_model
 from gabriel.identity.specialist_analysis_runs import verified_input
 from gabriel.identity.specialist_contracts import ROLES
 
@@ -67,7 +67,7 @@ def project(document,stage,progress=()):
     observations=[];lineage={}
     for i,f in enumerate(facts,1):
         ref='o'+str(i)
-        observations.append(dict(id=ref,type=f['type'],event_time=f['event_time'],entity=entities.get(f['entity_id']),data=f['data']))
+        observations.append(dict(id=ref,type=f['type'],event_time=f['event_time'],entity=entities.get(f['entity_id']),data=fact_data_for_model(f)))
         lineage[ref]=dict(record_id=f['id'],evidence_id=f['evidence_id'],evidence_digest=f['evidence_digest'])
     packet=dict(stage=stage,as_of=document['as_of'],observations=observations,eligible_roles=eligible(document),
         specialist_progress=list(progress),source_authenticity='unverified',coverage='partial',external_actions_authorized=False)
