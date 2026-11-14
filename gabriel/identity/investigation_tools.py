@@ -19,6 +19,7 @@ from gabriel.identity.specialist_contracts import ROLES,role_name
 VERSION='gabriel-investigation-toolkit-v2'
 SKILLS=Path(__file__).with_name('investigation_skills')
 REMOTE={'scan_artifacts','inspect_packets','inspect_logs'}
+IDENTITY_RUNTIME_GUIDANCE=('Identity catalog tools review only supplied case-bound facts. Verify sources, clocks, entity binding, policy baselines and authorization. Never change access or assert current tenant posture.')
 EXTRA={
     'telemetry_health':('correlate_events','inspect_logs','assess_visibility_gaps','map_source_coverage'),
     'alert_triage':('inspect_logs','correlate_events','scan_artifacts','find_duplicate_facts','prioritize_escalation_queue'),
@@ -82,9 +83,9 @@ def manifest(role):
         skill_sha256=sha256((SKILLS/n/'SKILL.md').read_bytes()).hexdigest(),
         input='job_bound_local_sources_no_model_arguments',version=VERSION,
         purpose=CATALOG[n][2],when_to_use=CATALOG[n][2],args_format='requested_actions=[tool_name]; runtime supplies job-bound evidence; no arbitrary arguments',
-        description=(SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip(),
+        description=(IDENTITY_RUNTIME_GUIDANCE if n in IDENTITY_SKILLS else (SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip()),
         implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'),Path(__file__).with_name('grounded_skills.py'),Path(__file__).with_name('catalog_skills.py'),
-            Path(__file__).with_name('catalog_dfir.py'),Path(__file__).with_name('catalog_identity.py'),Path(__file__).with_name('catalog_detection.py'),
+            Path(__file__).with_name('catalog_dfir.py'),Path(__file__).with_name('catalog_identity.py'),Path(__file__).with_name('catalog_identity_extended.py'),Path(__file__).with_name('catalog_detection.py'),
             Path(__file__).with_name('catalog_telemetry.py'),Path(__file__).with_name('catalog_intelligence.py'),
             Path(__file__).with_name('catalog_exposure.py'),Path(__file__).with_name('catalog_cloud.py'),
             Path(__file__).with_name('catalog_timeline.py'),Path(__file__).with_name('catalog_hunting.py'),Path(__file__).with_name('catalog_recovery.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
@@ -92,7 +93,9 @@ def manifest(role):
 
 def instructions(role):
     # The actual packaged skill is model context, not a decorative documentation link.
-    return '\n'.join((SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip() for n in TOOLS[role])
+    names=tuple(n for n in TOOLS[role] if n not in IDENTITY_SKILLS)
+    value='\n'.join((SKILLS/n/'SKILL.md').read_text().split('---',2)[-1].strip() for n in names)
+    return value+('\n'+IDENTITY_RUNTIME_GUIDANCE if role=='identity_access' else '')
 
 
 def remote(name,data=None):

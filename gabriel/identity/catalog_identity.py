@@ -2,9 +2,10 @@
 from collections import Counter, defaultdict
 from datetime import datetime
 from math import asin, cos, radians, sin, sqrt
+from gabriel.identity import catalog_identity_extended
 from gabriel.identity.specialist_analysis import validate_document
 VERSION='gabriel-identity-catalog-v2'
-SKILLS={name:'identity_access' for name in ('identify_dormant_accounts','identify_orphaned_accounts','review_mfa_coverage_bypass','review_impossible_travel_candidates','monitor_privileged_group_membership')}
+SKILLS={**catalog_identity_extended.SKILLS,**{name:'identity_access' for name in ('identify_dormant_accounts','identify_orphaned_accounts','review_mfa_coverage_bypass','review_impossible_travel_candidates','monitor_privileged_group_membership')}}
 def _at(value):return datetime.fromisoformat(value.replace('Z','+00:00'))
 def _distance_km(a,b):
     lat1,lon1=map(lambda x:radians(x/1000),(a['latitude_millidegrees'],a['longitude_millidegrees']))
@@ -13,6 +14,7 @@ def _distance_km(a,b):
     return 12742*asin(min(1.0,sqrt(chord)))
 def evaluate(name,document):
     if name not in SKILLS:raise ValueError('unknown_catalog_skill')
+    if name in catalog_identity_extended.SKILLS:return catalog_identity_extended.evaluate(name,document)
     validate_document(document,document.get('case_id') if type(document) is dict else None)
     facts=document['facts'];accounts=[f for f in facts if f['type']=='identity_account']
     result=dict(version=VERSION,skill=name,role='identity_access',source_authenticity='unverified',

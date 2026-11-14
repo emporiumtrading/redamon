@@ -48,6 +48,27 @@ SCHEMAS = {
                               'privileged': bool, 'membership_state': {'present', 'absent', 'unknown'}},
     'identity_location': {'latitude_millidegrees': int, 'longitude_millidegrees': int,
                           'login': {'success', 'failure'}},
+    'directory_control': {'platform': {'active_directory', 'entra_id'},
+                          'control': {'ldap_signing','legacy_auth','privileged_review','password_protection',
+                                      'conditional_access','app_consent','mfa_registration'},
+                          'state': {'enforced','gap','unknown'}, 'baseline': {'current','stale','unknown'}},
+    'identity_workload': {'kind': {'service','workload'}, 'enabled': bool, 'owner': {'active','inactive','unknown'},
+                          'last_rotated': 'time', 'interactive_login': bool, 'workload_bound': bool},
+    'identity_policy': {'mode': {'enforced','report_only','disabled'}, 'scope': {'all','privileged','scoped','unknown'},
+                        'requires_mfa': YES_NO, 'requires_healthy_device': YES_NO, 'exception': YES_NO},
+    'identity_edge': {'target_id': 'uuid','grant': {'can_grant','can_assume','membership'},
+                      'privileged_target': bool,'active': bool},
+    'identity_permission': {'level': {'reader','writer','admin'}, 'needed': YES_NO, 'active': bool},
+    'identity_oauth': {'scope': {'read','write','manage'},'consent': YES_NO,'publisher_verified': YES_NO,
+                       'resource_scope': {'all','scoped','unknown'},'state': {'active','revoked'}},
+    'identity_token': {'token_id': 'uuid','state': {'active','revoked','unknown'},
+                       'audience': {'expected','unexpected','unknown'},'outcome': {'success','denied','unknown'}},
+    'identity_session': {'session_id': 'uuid','device': {'known','new','unknown'},
+                         'mfa': YES_NO,'outcome': {'success','denied'}},
+    'identity_lifecycle': {'event': {'join','move','leave','grant','revoke'},
+                           'approved': YES_NO,'state': {'active','inactive','unknown'}},
+    'identity_federation': {'mode': {'active','inactive'},'metadata_signed': YES_NO,
+                            'certificate': {'current','expired','unknown'},'endpoint_verified': YES_NO},
     'cloud_storage_access': CLOUD_STORAGE_ACCESS_SCHEMA,
     'cloud': {'finding': {'public_access', 'privileged_workload', 'unsigned_component', 'policy_drift'},
               'state': {'present', 'absent', 'unknown'}, 'authorized': YES_NO},
@@ -66,7 +87,9 @@ ROLE_TYPES = {
     'dfir_evidence': {'artifact'},
     'detection_engineering': {'detection', 'detection_trial'},
     'exposure_vulnerability': {'exposure', 'vulnerability_sla'},
-    'identity_access': {'identity', 'activity', 'identity_account', 'identity_group_change', 'identity_location'},
+    'identity_access': {'identity', 'activity', 'identity_account', 'identity_group_change', 'identity_location',
+                        'directory_control','identity_workload','identity_policy','identity_edge','identity_permission',
+                        'identity_oauth','identity_token','identity_session','identity_lifecycle','identity_federation'},
     'cloud_supply_chain': {'cloud', 'cloud_storage_access'},
     'response_remediation': {'response_check'},
     'recovery_learning': {'recovery', 'recovery_point', 'recovery_time'},
@@ -128,6 +151,8 @@ def fact_data_for_model(fact):
     data = fact['data']
     if fact['type'] == 'identity_location':
         return {'login': data['login'], 'location_supplied': True}
+    if fact['type'] in {'identity_edge','identity_token','identity_session'}:
+        return {key:value for key,value in data.items() if key not in {'target_id','token_id','session_id'}}
     if fact['type'] == 'detection_trial':
         return {key: data[key] for key in ('cohort', 'matched', 'expected_match')}
     if fact['type'] == 'cloud_storage_access':
@@ -188,6 +213,8 @@ def validate_document(document, case_id):
             elif allowed == 'digest':
                 require(type(item) is str and re.fullmatch(r'[a-f0-9]{64}', item) is not None,
                         'invalid_specialist_fact_digest')
+            elif allowed == 'uuid':
+                uid(item)
             else:
                 require(type(item) is str and item in allowed, 'invalid_specialist_fact_value')
         if kind == 'cloud_storage_access':
@@ -208,6 +235,12 @@ def validate_document(document, case_id):
             validate_source_coverage(fact)
         if kind == 'identity_account':
             require(at(data['last_used']) <= as_of, 'specialist_fact_after_snapshot')
+        if kind == 'identity_workload':
+            require(at(data['last_rotated']) <= as_of, 'specialist_fact_after_snapshot')
+        if kind == 'directory_control':
+            allowed={'active_directory': {'ldap_signing','legacy_auth','privileged_review','password_protection'},
+                     'entra_id': {'legacy_auth','conditional_access','app_consent','mfa_registration'}}
+            require(data['control'] in allowed[data['platform']], 'invalid_directory_control')
     require(len({fact['evidence_id'] for fact in facts}) <= 32, 'specialist_fact_source_limit')
     return document
 
