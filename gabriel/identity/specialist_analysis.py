@@ -10,6 +10,7 @@ from uuid import UUID
 
 from gabriel.identity.catalog_cloud import CLOUD_STORAGE_ACCESS_SCHEMA, validate_cloud_storage_access
 from gabriel.identity.catalog_exposure import VULNERABILITY_SLA_SCHEMA, validate_vulnerability_sla
+from gabriel.identity.catalog_hardening import SCHEMAS as HARDENING_SCHEMAS, ROLE_TYPES as HARDENING_TYPES, validate_fact as validate_hardening_fact
 from gabriel.identity.catalog_hunting import POWERSHELL_EXECUTION_SCHEMA
 from gabriel.identity.catalog_intelligence import INTEL_LIFECYCLE_SCHEMA, validate_intel_lifecycle
 from gabriel.identity.catalog_recovery import (RECOVERY_POINT_SCHEMA, RECOVERY_TIME_SCHEMA,
@@ -24,6 +25,7 @@ CONTRACT = 'specialist-analysis-v2'
 SEVERITIES = {'informational', 'low', 'medium', 'high', 'critical'}
 YES_NO = {'yes', 'no', 'unknown'}
 SCHEMAS = {
+    **HARDENING_SCHEMAS,
     'coverage': {'state': {'available', 'stale', 'missing'}},
     'source_coverage': SOURCE_COVERAGE_SCHEMA,
     'alert': {'severity': SEVERITIES, 'state': {'open', 'resolved', 'unknown'}},
@@ -64,6 +66,8 @@ ROLE_TYPES = {
     'response_remediation': {'response_check'},
     'recovery_learning': {'recovery', 'recovery_point', 'recovery_time'},
 }
+for _role, _types in HARDENING_TYPES.items():
+    ROLE_TYPES[_role] |= _types
 NEXT_STEPS = {
     'telemetry_health': ['review_source_visibility'],
     'alert_triage': ['review_alert_context', 'review_benign_administration'],
@@ -172,6 +176,8 @@ def validate_document(document, case_id):
                         'invalid_timeline_clock_bounds')
             elif allowed == 'uuid':
                 uid(item)
+            elif allowed == 'zero_to_million':
+                require(type(item) is int and 0 <= item <= 1000000, 'invalid_specialist_fact_value')
             elif allowed == 'digest':
                 require(type(item) is str and re.fullmatch(r'[a-f0-9]{64}', item) is not None,
                         'invalid_specialist_fact_digest')
@@ -183,6 +189,8 @@ def validate_document(document, case_id):
             validate_intel_lifecycle(fact, as_of)
         if kind == 'vulnerability_sla':
             validate_vulnerability_sla(fact)
+        if kind in HARDENING_SCHEMAS:
+            validate_hardening_fact(fact)
         if kind == 'powershell_execution':
             require(fact['entity_id'] is not None, 'powershell_host_alias_required')
         if kind == 'timeline_event':
