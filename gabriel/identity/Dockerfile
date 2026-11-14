@@ -1,5 +1,6 @@
 ARG IDENTITY_BASE=python:3.11.18-alpine3.24@sha256:8b92101d156b060d6999d3382bbe98f6851fbbf7c4bddbe3833818f3565d2b4c
 FROM ${IDENTITY_BASE} AS runtime
+LABEL org.gabriel.installation-db-tls="v1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 # Upgrade Alpine v3.24 security packages after pinning the multi-arch base.

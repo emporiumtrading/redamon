@@ -7,8 +7,8 @@ import sys
 
 repo=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(repo))
-from testing.gabriel_identity.installation_journey import connect,request
-from tooling.scripts.gabriel_install import Installation,prepare,digest
+from testing.gabriel_identity.installation_journey import connect,request,verify_database_tls
+from tooling.scripts.gabriel_install import DB_TLS_RECEIPT,Installation,InstallationDatabaseTlsRequired,prepare,digest
 
 
 def main():
@@ -53,10 +53,18 @@ with connection(read_secret(os.environ['GABRIEL_MIGRATION_DSN_FILE']),runtime=Fa
  assert c.execute('SELECT max(version) AS n FROM gabriel_identity.migrations').fetchone()['n']==28
 """
         app.compose('run','--rm','--no-deps','-T','--entrypoint','python','operator','-c',historical)
+        # Rehearse upgrade from the older installer using its original Compose profile.
+        app.compose('stop','local-entry','workbench','identity-db')
+        (directory/DB_TLS_RECEIPT).unlink()
+        app=Installation(directory)
+        try: app.start_db()
+        except InstallationDatabaseTlsRequired: pass
+        else: raise AssertionError('old installation restarted without verified database TLS')
         rebuilt=app.rebuild(root/'before-rebuild',image)
         assert rebuilt['rebuilt'] and rebuilt['original_identity_retained'] and rebuilt['original_keys_retained']
         assert not rebuilt['browser_ai']['production_admitted']
         app=Installation(directory)
+        verify_database_tls(app)
         assert {name:digest(directory/name/'keyring.json') for name in keys}==keys
         fresh,_=connect(directory,app,password)
         assert request(directory,18446,'/cases',cookie=cookie)[0]==403

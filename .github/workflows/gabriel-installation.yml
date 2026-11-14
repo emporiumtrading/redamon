@@ -4,6 +4,7 @@ on:
     paths:
       - 'gabriel/identity/**'
       - 'compose.gabriel-installation.yml'
+      - 'compose.gabriel-installation-db-tls.yml'
       - 'tooling/scripts/gabriel_install.py'
       - 'tooling/scripts/gabriel_identity_prepare.py'
       - 'tooling/scripts/gabriel_provider_keys.py'
@@ -26,7 +27,7 @@ jobs:
           persist-credentials: false
       - name: Build the exact non-root installation image
         run: docker build -f gabriel/identity/Dockerfile --target production -t gabriel-installation-check .
-      - name: Fresh install, actual HTTPS, persistent evidence and fresh-project restore
+      - name: Fresh install, browser and PostgreSQL TLS, persistent evidence and fresh-project restore
         run: |
           image_id="$(docker image inspect gabriel-installation-check --format '{{.Id}}')"
           python3 testing/gabriel_identity/installation_journey.py "$RUNNER_TEMP/gabriel-installation-journey" "$image_id"
@@ -36,7 +37,7 @@ jobs:
           git rev-parse HEAD > "$RUNNER_TEMP/gabriel-installation-evidence/source-sha.txt"
           docker image inspect gabriel-installation-check --format '{{.Id}}' > "$RUNNER_TEMP/gabriel-installation-evidence/image-id.txt"
           cp "$RUNNER_TEMP/gabriel-installation-journey/browser-ai-readiness.json" "$RUNNER_TEMP/gabriel-installation-evidence/browser-ai-readiness.json"
-          printf '%s\n' 'PASS: generated-data local Docker installation and fresh-project restore; production and native OS acceptance pending' > "$RUNNER_TEMP/gabriel-installation-evidence/result.txt"
+          printf '%s\n' 'PASS: generated-data local Docker installation, verified PostgreSQL TLS and plaintext denial, and fresh-project restore; production and native OS acceptance pending' > "$RUNNER_TEMP/gabriel-installation-evidence/result.txt"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gabriel-installation-${{ matrix.runner }}
