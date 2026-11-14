@@ -34,6 +34,8 @@ Concrete remaining evidence: authorized/licensed artifacts with verified hashes 
 
 ## Integrated deployment acceptance
 
+An explicit [local visible-page structure draft](GABRIEL_VISIBLE_STRUCTURE.md) can retain source-linked headings, table cells and label/value pairs without vendor-specific markers. It performs no inference, assigns no field meanings and does not admit incident facts or background Hermes work. Its generated-page and content-permission checks require their own recorded Docker results.
+
 Use the owner's Apple Silicon/Docker Desktop host with the checked images and separately retained keys. Record actual Mac certificate trust, extension pairing, selected-tab scope, visible capture/privacy, Stop/logout/revocation, source drift, spending exhaustion and restart behavior. Repeat the supported consumer-browser/OS and guest-VM matrix before advertising those combinations. Linux ARM CI does not substitute for Mac or Windows UAT.
 
 Exercise Wazuh and DFIR-IRIS under authorized lab accounts, with human-only login. Record versioned read/navigation semantics, account/target binding, missing/partial/stale visibility and UI drift. The current Hermes case path requires typed facts bound to current captures; it does not establish autonomous understanding of arbitrary dashboards or indefinite unattended monitoring. Close that implementation/acceptance gap before promising the broader product requirement.

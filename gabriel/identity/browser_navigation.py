@@ -79,6 +79,10 @@ class BrowserNavigationService(BrowserObservationService):
         from gabriel.identity.browser_events import process
         return process(self,human,peer,context,observation_id)
 
+    def review_browser_structure(self,human,peer,context,observation_id):
+        from gabriel.identity.browser_semantics import process
+        return process(self,human,peer,context,observation_id)
+
     def navigation_plan(self,human,peer,context):
         with connection(self._dsn) as conn:
             p,lease=self._actor(conn,human,peer)
