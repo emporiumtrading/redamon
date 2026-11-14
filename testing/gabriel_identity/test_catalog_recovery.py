@@ -65,3 +65,34 @@ def test_references_follow_case_observation_order_and_role_admission():
     projected = specialist_agents.project(packet, ROLE, uuid4(), [])['packet']
     assert result['events'][0]['references'] == [projected['observations'][1]['id']] == ['o2']
     assert all(NAME not in tools for role, tools in investigation_tools.TOOLS.items() if role != ROLE)
+
+
+def recovery_time(restored='2026-10-20T11:15:00Z', objective=900):
+    packet = document('recovery_time', dict(disrupted_at='2026-10-20T11:00:00Z',
+                      service_restored_at=restored, objective_seconds=objective))
+    packet['facts'][0]['event_time'] = packet['as_of']
+    return packet
+
+
+@pytest.mark.parametrize('restored,status', [
+    ('2026-10-20T11:15:00Z', 'reported_within_objective'),
+    ('2026-10-20T11:15:00.000001Z', 'reported_outside_objective'),
+])
+def test_recovery_time_objective_boundary(restored, status):
+    packet = recovery_time(restored)
+    result = catalog_skills.evaluate('review_recovery_time', packet)
+    assert result['counts'] == {status: 1}
+    assert result['events'][0]['references'] == ['o1']
+    assert not result['service_restoration_independently_verified']
+    assert catalog_skills.evaluate(NAME, packet)['status'] == 'no_recovery_point_facts'
+
+
+def test_recovery_time_rejects_invalid_chronology_and_keeps_conflicting_reports():
+    for restored in ('2026-10-20T10:59:59Z', '2026-10-20T12:00:01Z'):
+        with pytest.raises(InvalidIdentityInput, match='invalid_recovery_time_chronology'):
+            catalog_skills.evaluate('review_recovery_time', recovery_time(restored))
+    packet = recovery_time()
+    fact = packet['facts'][0]
+    packet['facts'].append(dict(fact, id=str(uuid4()), data=dict(fact['data'], objective_seconds=30)))
+    assert catalog_skills.evaluate('review_recovery_time', packet)['events'] == [
+        dict(status='conflicting_reports', references=['o1', 'o2'])]

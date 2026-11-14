@@ -50,6 +50,9 @@ class ProposedPacket(unittest.TestCase):
             if name == 'review_vulnerability_sla':
                 fact.update(type='vulnerability_sla', data=dict(first_seen='2026-10-10T10:00:00Z',
                             due_at='2026-10-27T10:00:00Z', state='open'))
+            if name == 'review_recovery_time':
+                fact.update(type='recovery_time', data=dict(disrupted_at='2026-10-27T10:00:00Z',
+                            service_restored_at='2026-10-27T10:30:00Z', objective_seconds=1800))
             if name == 'review_recovery_point':
                 fact.update(type='recovery_point', data=dict(disrupted_at='2026-10-27T10:30:00Z',
                             restored_data_at='2026-10-27T10:00:00Z', objective_seconds=900))

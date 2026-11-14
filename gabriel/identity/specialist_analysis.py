@@ -12,7 +12,8 @@ from gabriel.identity.catalog_cloud import CLOUD_STORAGE_ACCESS_SCHEMA, validate
 from gabriel.identity.catalog_exposure import VULNERABILITY_SLA_SCHEMA, validate_vulnerability_sla
 from gabriel.identity.catalog_hunting import POWERSHELL_EXECUTION_SCHEMA
 from gabriel.identity.catalog_intelligence import INTEL_LIFECYCLE_SCHEMA, validate_intel_lifecycle
-from gabriel.identity.catalog_recovery import RECOVERY_POINT_SCHEMA, validate_recovery_point
+from gabriel.identity.catalog_recovery import (RECOVERY_POINT_SCHEMA, RECOVERY_TIME_SCHEMA,
+                                               validate_recovery_point, validate_recovery_time)
 from gabriel.identity.catalog_telemetry import SOURCE_COVERAGE_SCHEMA, validate_source_coverage
 from gabriel.identity.catalog_timeline import CLOCK_LIMIT_MS, TIMELINE_EVENT_SCHEMA, validate_timeline_event
 from gabriel.identity.evidence_store import canonical
@@ -45,6 +46,7 @@ SCHEMAS = {
               'state': {'present', 'absent', 'unknown'}, 'authorized': YES_NO},
     'response_check': {'check': {'target_binding', 'dependencies', 'recovery'}, 'passed': YES_NO},
     'recovery_point': RECOVERY_POINT_SCHEMA,
+    'recovery_time': RECOVERY_TIME_SCHEMA,
     'recovery': {'check': {'restore', 'service_health', 'security_control'},
                  'result': {'pass', 'fail', 'unknown'}, 'baseline': {'current', 'stale', 'unknown'}},
 }
@@ -60,7 +62,7 @@ ROLE_TYPES = {
     'identity_access': {'identity', 'activity'},
     'cloud_supply_chain': {'cloud', 'cloud_storage_access'},
     'response_remediation': {'response_check'},
-    'recovery_learning': {'recovery', 'recovery_point'},
+    'recovery_learning': {'recovery', 'recovery_point', 'recovery_time'},
 }
 NEXT_STEPS = {
     'telemetry_health': ['review_source_visibility'],
@@ -187,6 +189,8 @@ def validate_document(document, case_id):
             validate_timeline_event(fact, as_of)
         if kind == 'recovery_point':
             validate_recovery_point(fact)
+        if kind == 'recovery_time':
+            validate_recovery_time(fact)
         if kind == 'source_coverage':
             validate_source_coverage(fact)
     require(len({fact['evidence_id'] for fact in facts}) <= 32, 'specialist_fact_source_limit')
@@ -298,6 +302,8 @@ def analyze(role, document, input_ref):
 
         if points := of('recovery_point'):
             note('Review supplied restored data points against the recovery objective.', points)
+        if recovery_times := of('recovery_time'):
+            note('Review supplied service restoration times against the recovery objective.', recovery_times)
     uncertainty = ['Supplied facts and entity keys are unverified assertions; byte integrity does not establish source truth.',
                    'Coverage is partial and historical at the supplied snapshot time; no clean-environment conclusion is supported.',
                    'Adapter semantics and specialist decision quality require independent acceptance.',
