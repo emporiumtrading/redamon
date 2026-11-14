@@ -5,6 +5,7 @@ effects. A caller must verify the referenced evidence and current case authority
 """
 from collections import Counter
 from datetime import datetime, timezone
+from hashlib import sha256
 import re
 from uuid import UUID
 
@@ -37,6 +38,15 @@ SCHEMAS = {
     'detection': {'cohort': {'malicious', 'benign', 'adversarial'}, 'matched': bool, 'expected_match': bool},
     'detection_trial': {'cohort': {'malicious', 'benign', 'adversarial'}, 'matched': bool, 'expected_match': bool,
                         'rule_digest': 'digest', 'engine_digest': 'digest', 'fixture_digest': 'digest'},
+    'detection_spec': {'format': {'sigma', 'yara', 'kql', 'spl', 'eql', 'behavioral', 'correlation'},
+                       'rule_digest': 'digest', 'parent_digest': 'digest', 'technique_id': 'technique',
+                       'threshold': int, 'field_count': int, 'dependency_count': int, 'enabled': bool},
+    'detection_benchmark': {'rule_digest': 'digest', 'engine_digest': 'digest',
+                            'fixture_digest': 'digest', 'latency_ms': int, 'event_count': int},
+    'detection_source': {'format': {'sigma', 'yara', 'kql', 'spl', 'eql', 'behavioral', 'correlation'},
+                         'source': 'source', 'rule_digest': 'digest'},
+    'detection_event': {'event_type': {'authentication', 'process', 'network', 'file'},
+                        'outcome': {'success', 'failure', 'blocked', 'observed'}, 'count': int},
     'vulnerability_sla': VULNERABILITY_SLA_SCHEMA,
     'exposure': {'severity': SEVERITIES, 'reachable': YES_NO, 'mitigated': YES_NO},
     'identity': {'event': {'privilege_grant', 'session_revocation', 'mfa_disabled', 'login_failure', 'login_success'},
@@ -57,7 +67,8 @@ ROLE_TYPES = {
     'threat_intelligence': {'intelligence', 'intel_lifecycle'},
     'threat_hunting': {'activity', 'identity', 'cloud', 'powershell_execution'},
     'dfir_evidence': {'artifact'},
-    'detection_engineering': {'detection', 'detection_trial'},
+    'detection_engineering': {'detection', 'detection_trial', 'detection_spec', 'detection_benchmark',
+                              'detection_source', 'detection_event'},
     'exposure_vulnerability': {'exposure', 'vulnerability_sla'},
     'identity_access': {'identity', 'activity'},
     'cloud_supply_chain': {'cloud', 'cloud_storage_access'},
@@ -119,7 +130,9 @@ def at(value):
 
 def fact_data_for_model(fact):
     data = fact['data']
-    if fact['type'] == 'detection_trial':
+    if fact['type'] in {'detection_trial', 'detection_spec', 'detection_benchmark', 'detection_source'}:
+        if fact['type'] != 'detection_trial':
+            return {'metadata_type': fact['type'], 'metadata_only': True}
         return {key: data[key] for key in ('cohort', 'matched', 'expected_match')}
     if fact['type'] == 'cloud_storage_access':
         return {key: value for key, value in data.items() if key not in {'path_id', 'policy_digest'}}
@@ -175,8 +188,18 @@ def validate_document(document, case_id):
             elif allowed == 'digest':
                 require(type(item) is str and re.fullmatch(r'[a-f0-9]{64}', item) is not None,
                         'invalid_specialist_fact_digest')
+            elif allowed == 'technique':
+                require(type(item) is str and re.fullmatch(r'T\d{4}(?:\.\d{3})?', item) is not None,
+                        'invalid_detection_technique_id')
+            elif allowed == 'source':
+                require(type(item) is str and 1 <= len(item.encode('utf-8')) <= 2048
+                        and all(c == '\n' or 32 <= ord(c) <= 126 for c in item),
+                        'invalid_detection_source')
             else:
                 require(type(item) is str and item in allowed, 'invalid_specialist_fact_value')
+        if kind == 'detection_source':
+            require(sha256(data['source'].encode('utf-8')).hexdigest() == data['rule_digest'],
+                    'detection_source_digest_mismatch')
         if kind == 'cloud_storage_access':
             validate_cloud_storage_access(fact)
         if kind == 'intel_lifecycle':

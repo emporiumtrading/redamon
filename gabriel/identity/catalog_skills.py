@@ -7,7 +7,10 @@ from collections import Counter
 from datetime import datetime
 
 from gabriel.identity import catalog_cloud, catalog_dfir, catalog_intelligence
-from gabriel.identity.catalog_detection import analyze_false_negatives
+from gabriel.identity.catalog_detection import (METADATA_SKILLS, analyze_false_negatives,
+    review_detection_metadata, review_false_positive_fixtures,
+    review_detection_fixture_divergence, review_detection_engine_drift)
+from gabriel.identity.catalog_detection_sources import FORMAT_NAMES, evaluate as evaluate_detection_source
 from gabriel.identity.catalog_exposure import review_vulnerability_sla
 from gabriel.identity.catalog_hunting import review_powershell_activity
 from gabriel.identity.catalog_recovery import review_recovery_point, review_recovery_time
@@ -27,6 +30,10 @@ SKILLS={
     'review_recovery_time': 'recovery_learning',
     'map_source_coverage': 'telemetry_health',
     'analyze_false_negatives': 'detection_engineering',
+    **{name: 'detection_engineering' for name in METADATA_SKILLS | FORMAT_NAMES.keys()},
+    'review_false_positive_fixtures': 'detection_engineering',
+    'review_detection_fixture_divergence': 'detection_engineering',
+    'review_detection_engine_drift': 'detection_engineering',
     'prioritize_escalation_queue':'alert_triage',
     'review_incident_evidence_gaps':'incident_scoping',
     'review_privileged_access_changes':'identity_access',
@@ -64,6 +71,16 @@ def evaluate(name, document, *, verified_refs=None):
     validate_document(document, case_id)
     if name == 'analyze_false_negatives':
         return analyze_false_negatives(document)
+    if name in METADATA_SKILLS:
+        return review_detection_metadata(name, document)
+    if name in FORMAT_NAMES:
+        return evaluate_detection_source(name, document)
+    if name == 'review_false_positive_fixtures':
+        return review_false_positive_fixtures(document)
+    if name == 'review_detection_fixture_divergence':
+        return review_detection_fixture_divergence(document)
+    if name == 'review_detection_engine_drift':
+        return review_detection_engine_drift(document)
     rows=document['facts']
     asof=_at(document['as_of'])
     result=dict(
