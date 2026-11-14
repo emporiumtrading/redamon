@@ -58,3 +58,8 @@ The resulting document can be passed to Gabriel's existing `gabriel.identity.att
 Case-evidence service integration and source authentication, persistent normalized-event storage, ingestion adapters for other products, generic OCSF transformation, graph entity resolution, response automation, independently verified brute-force detection, or real-world held-out qualification.
 
 **Next step:** integrate case-owned verified normalized events into a read-only temporal observation graph and then add vendor adapters one at a time. Never treat inferred graph edges as confirmed compromise or authorization.
+
+
+### Analyst console preview
+
+After pairing a current console tab, choose **Preview visible console sections** in the extension. The extension checks the active lease and exact document, then shows up to 20 same-origin, read-only candidate paths from visible top-frame links. The preview sends only the existing pairing heartbeat to the gateway. It does not upload the inspected links or headings, store a capture, navigate the console, or grant navigation permission. It excludes routes with queries or fragments. The existing approved tour and scheduled review controls handle navigation.

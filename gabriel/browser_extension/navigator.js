@@ -77,6 +77,20 @@ export function readOnlyURL(value) {
   return value;
 }
 
+export function orientationPaths(source, links) {
+  const selected = new URL(approvedURL(source));
+  const paths = new Set();
+  for (const link of links) {
+    try {
+      const page = new URL(readOnlyURL(link));
+      if (page.origin === selected.origin && !page.search && !page.hash &&
+          page.pathname !== selected.pathname && page.pathname.length <= 160) paths.add(page.pathname);
+    } catch { /* Unsupported destinations stay outside the preview. */ }
+    if (paths.size >= 20) break;
+  }
+  return [...paths];
+}
+
 export function inspectConsole() {
   const headings=Array.from(document.querySelectorAll("h1,h2,[role=heading]")).slice(0,12).map(x=>x.textContent.trim().slice(0,160));
   const nodes=document.querySelectorAll("a[href]");
