@@ -50,6 +50,9 @@ class ProposedPacket(unittest.TestCase):
             if name == 'review_vulnerability_sla':
                 fact.update(type='vulnerability_sla', data=dict(first_seen='2026-10-10T10:00:00Z',
                             due_at='2026-10-27T10:00:00Z', state='open'))
+            if name == 'normalize_incident_timeline':
+                fact.update(type='timeline_event', data=dict(offset_status='measured',
+                            clock_offset_ms=4000, uncertainty_ms=1000))
             if name == 'analyze_false_negatives':
                 fact.update(type='detection_trial', data=dict(fact['data'], rule_digest='a'*64,
                             engine_digest='b'*64, fixture_digest='c'*64))

@@ -2,7 +2,7 @@
 
 **Source of truth:** `gabriel/identity/skill_roadmap.json`; validate using `gabriel.identity.skill_catalog.load`.
 
-The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **11 implemented-unqualified entries and 229 not yet implemented** across three tranches. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
+The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **12 implemented-unqualified entries and 228 not yet implemented** across four tranches. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
 
 ## Tranche 1: implemented and connected to the exact authorized role
 
@@ -35,6 +35,10 @@ Coverage mapping consumes typed `source_coverage` facts with an opaque source al
 | `cloud_supply_chain.15-cloud-storage-exposure-assessment` | `assess_cloud_storage_exposure` | Cloud & Supply Chain | Reviews supplied external access paths against network, guard, and read/list/write assertions. Preserves stale and conflicting evidence. |
 
 The case tool verifies the stored source before the local review. Source authenticity and policy authority remain unverified. Feed and storage path identifiers and policy digests stay local.
+
+## Tranche 4: incident timeline normalization
+
+`incident_scoping.15-incident-timeline-normalization` maps to `normalize_incident_timeline`. It subtracts the reported source clock offset from the UTC-encoded event time, applies the reported uncertainty bounds, and compares disjoint intervals within the snapshot. It preserves conflicting calibration assertions and leaves unknown, overlapping, and snapshot-crossing intervals unordered. The result does not verify the clocks, actual chronology, or causality.
 
 ## Release gates
 

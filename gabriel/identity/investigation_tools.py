@@ -21,7 +21,7 @@ REMOTE={'scan_artifacts','inspect_packets','inspect_logs'}
 EXTRA={
     'telemetry_health':('correlate_events','inspect_logs','assess_visibility_gaps','map_source_coverage'),
     'alert_triage':('inspect_logs','correlate_events','scan_artifacts','find_duplicate_facts','prioritize_escalation_queue'),
-    'incident_scoping':('correlate_events','inspect_logs','inspect_packets','find_duplicate_facts','cross_check_timeline','review_incident_evidence_gaps'),
+    'incident_scoping':('correlate_events','inspect_logs','inspect_packets','find_duplicate_facts','cross_check_timeline','review_incident_evidence_gaps','normalize_incident_timeline'),
     'threat_intelligence':('scan_artifacts','inspect_packets','review_indicator_freshness','review_intelligence_lifecycle'),
     'threat_hunting':('inspect_logs','scan_artifacts','inspect_packets','summarize_hunt_hypotheses'),
     'dfir_evidence':('scan_artifacts','inspect_packets','audit_provenance','cross_check_timeline','validate_evidence_provenance'),
@@ -58,6 +58,7 @@ CATALOG={
     'assess_cloud_storage_exposure':('Gabriel','MIT','Review reported external cloud-storage grants, reachability and controls.'),
     'review_intelligence_lifecycle':('Gabriel','MIT','Review supplied indicator versions, expiry, revocation and conflicts.'),
     'review_vulnerability_sla':('Gabriel','MIT','Review supplied finding ages, remediation deadlines and lifecycle conflicts.'),
+    'normalize_incident_timeline':('Gabriel','MIT','Apply reported clock offsets and compare bounded incident intervals.'),
     'map_source_coverage':('Gabriel','MIT','Map supplied source coverage windows and report gaps or conflicts.'),
     'validate_evidence_provenance':('Gabriel','MIT','Review locally verified artifact provenance and conflicting assertions.'),
     'analyze_false_negatives':('Gabriel','MIT','Review supplied versioned detection fixtures for missed expected matches.'),
@@ -79,7 +80,8 @@ def manifest(role):
         implementation_sha256=digest([sha256(p.read_bytes()).hexdigest() for p in (Path(__file__),Path(__file__).parents[1]/'toolbox'/'engine.py',Path(__file__).parents[1]/'toolbox'/'server.py',Path(__file__).with_name('reviewed_memory.py'),Path(__file__).with_name('memory.py'),Path(__file__).with_name('grounded_skills.py'),Path(__file__).with_name('catalog_skills.py'),
             Path(__file__).with_name('catalog_dfir.py'),Path(__file__).with_name('catalog_detection.py'),
             Path(__file__).with_name('catalog_telemetry.py'),Path(__file__).with_name('catalog_intelligence.py'),
-            Path(__file__).with_name('catalog_exposure.py'),Path(__file__).with_name('catalog_cloud.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
+            Path(__file__).with_name('catalog_exposure.py'),Path(__file__).with_name('catalog_cloud.py'),
+            Path(__file__).with_name('catalog_timeline.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
 
 
 def instructions(role):
