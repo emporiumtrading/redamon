@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import pytest
 
+from gabriel.identity import catalog_skills
+
 from gabriel.identity import grounded_skills, investigation_tools, specialist_agents
 from gabriel.identity.service import InvalidIdentityInput
 from testing.gabriel_identity.test_specialist_analysis import document
@@ -227,7 +229,8 @@ def test_all_twelve_roles_have_a_new_grounded_review_and_none_are_model_admitted
         'review_exposure_context', 'review_cloud_change_assertions',
         'review_response_dependencies', 'review_recovery_baselines',
     }
-    assert expanded == grounded_skills.SKILL_NAMES
+    assert expanded.issubset(grounded_skills.SKILL_NAMES)
+    assert grounded_skills.SKILL_NAMES - expanded == catalog_skills.SKILLS.keys()
     assert len(investigation_tools.TOOLS) == 12
     for role, tools in investigation_tools.TOOLS.items():
         assert expanded.intersection(tools), role

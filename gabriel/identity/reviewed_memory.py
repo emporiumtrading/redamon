@@ -3,7 +3,7 @@ from gabriel.identity import memory
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.model_protocol import decode
 from gabriel.identity.service import AccessDenied,InvalidIdentityInput,identifier
-from gabriel.identity.specialist_analysis import ROLE_TYPES,at,validate_document
+from gabriel.identity.specialist_analysis import ROLE_TYPES,at,fact_data_for_model,validate_document
 from gabriel.identity.specialist_analysis_runs import verified_input
 
 VERSION='reviewed-typed-reference-v1'
@@ -57,7 +57,7 @@ def build(service,conn,p,case,document,role,*,snapshot=None):
             if len(assertions)>=MAX_FACTS:break
             seen.add(signature);ref='h'+str(len(assertions)+1)
             assertions.append(dict(id=ref,type=fact['type'],event_time=fact['event_time'],
-                entity=aliases[fact['entity_id']],data=fact['data']))
+                entity=aliases[fact['entity_id']],data=fact_data_for_model(fact)))
             lineage[ref]=dict(record_id=fact['id'],evidence_id=fact['evidence_id'],
                 evidence_digest=fact['evidence_digest'],historical_reviewed_memory=True)
         if len(assertions)>before:records.append(str(row['id']))
