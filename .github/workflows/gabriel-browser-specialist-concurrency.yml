@@ -1,0 +1,44 @@
+name: Gabriel browser specialist concurrency
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gabriel-browser-specialist-concurrency.yml'
+      - 'gabriel/identity/browser_specialists.py'
+      - 'testing/gabriel_identity/test_browser_specialists_integration.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reproduce concurrent specialist reviews on the evaluated Alpine base
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull python:3.11-alpine
+          export GABRIEL_IDENTITY_BASE="$(docker image inspect python:3.11-alpine --format '{{index .RepoDigests 0}}')"
+          export GABRIEL_IDENTITY_SECRET_DIR="$RUNNER_TEMP/concurrency-db"
+          export GABRIEL_PROVIDER_KEY_DIR="$RUNNER_TEMP/concurrency-provider"
+          export GABRIEL_EVIDENCE_KEY_DIR="$RUNNER_TEMP/concurrency-evidence"
+          python3 tooling/scripts/gabriel_identity_prepare.py "$GABRIEL_IDENTITY_SECRET_DIR"
+          python3 tooling/scripts/gabriel_provider_keys.py "$GABRIEL_PROVIDER_KEY_DIR"
+          python3 tooling/scripts/gabriel_evidence_keys.py "$GABRIEL_EVIDENCE_KEY_DIR"
+          compose=(docker compose -p gabriel-concurrency-check -f compose.gabriel-identity.yml)
+          trap '"${compose[@]}" --profile test down --volumes --remove-orphans' EXIT
+          "${compose[@]}" --profile test build identity-tests
+          "${compose[@]}" up -d --wait identity-db
+          for attempt in 1 2 3 4 5; do
+            printf 'Concurrent specialist review trial %s of 5\n' "$attempt"
+            "${compose[@]}" --profile test run --rm --no-deps -T --entrypoint python identity-tests \
+              -m pytest -q --tb=short -p no:cacheprovider \
+              testing/gabriel_identity/test_browser_specialists_integration.py::test_concurrent_calls_converge_to_one_suite_and_derived_artifact
+          done
