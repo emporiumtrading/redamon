@@ -1,5 +1,6 @@
 ARG IDENTITY_BASE=python:3.11.18-alpine3.24@sha256:8b92101d156b060d6999d3382bbe98f6851fbbf7c4bddbe3833818f3565d2b4c
 FROM ${IDENTITY_BASE} AS runtime
+LABEL org.gabriel.installation-db-tls="v1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
 # Upgrade Alpine v3.24 security packages after pinning the multi-arch base.
@@ -47,7 +48,7 @@ COPY gabriel/identity/coordinator.py gabriel/identity/schema_v17.sql gabriel/ide
 COPY gabriel/identity/model_budget.py gabriel/identity/budget_cli.py gabriel/identity/schema_v16.sql /app/gabriel/identity/
 RUN python -c "import ast,pathlib; [ast.parse(p.read_text(),filename=str(p)) for p in pathlib.Path('/app/gabriel').rglob('*.py')]"
 COPY gabriel/toolbox/ /app/gabriel/toolbox/
-COPY gabriel/identity/investigation_tools.py gabriel/identity/grounded_skills.py gabriel/identity/reviewed_memory.py gabriel/identity/skill_catalog.py gabriel/identity/catalog_skills.py gabriel/identity/catalog_dfir.py gabriel/identity/catalog_detection.py gabriel/identity/catalog_telemetry.py gabriel/identity/catalog_intelligence.py gabriel/identity/catalog_exposure.py gabriel/identity/catalog_cloud.py gabriel/identity/catalog_timeline.py gabriel/identity/catalog_hunting.py gabriel/identity/skill_roadmap.json /app/gabriel/identity/
+COPY gabriel/identity/investigation_tools.py gabriel/identity/grounded_skills.py gabriel/identity/reviewed_memory.py gabriel/identity/skill_catalog.py gabriel/identity/catalog_skills.py gabriel/identity/catalog_dfir.py gabriel/identity/catalog_detection.py gabriel/identity/catalog_telemetry.py gabriel/identity/catalog_intelligence.py gabriel/identity/catalog_exposure.py gabriel/identity/catalog_cloud.py gabriel/identity/catalog_timeline.py gabriel/identity/catalog_hunting.py gabriel/identity/catalog_recovery.py gabriel/identity/skill_roadmap.json /app/gabriel/identity/
 COPY gabriel/identity/investigation_skills/ /app/gabriel/identity/investigation_skills/
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "gabriel.identity.cli"]

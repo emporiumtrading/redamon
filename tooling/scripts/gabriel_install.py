@@ -18,6 +18,34 @@ from gabriel_provider_keys import prepare as keyring
 
 REPO=Path(__file__).resolve().parents[2]
 COMPOSE=REPO/'compose.gabriel-installation.yml'
+NETWORK_CHECK="""import json,socket
+result={'version':'gabriel-install-network-v1','dns_resolves':False,'tcp_reachable':False}
+try:
+    addresses=socket.getaddrinfo('identity-db',5432,socket.AF_INET,socket.SOCK_STREAM)
+    result['dns_resolves']=bool(addresses)
+    if addresses:
+        with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as client:
+            client.settimeout(3)
+            client.connect(addresses[0][4])
+        result['tcp_reachable']=True
+except OSError:
+    pass
+print(json.dumps(result))
+"""
+
+
+class InstallationNetworkError(ValueError):
+    def __init__(self,phase):
+        self.phase=phase
+        super().__init__('installation_network_check_failed: '+phase)
+
+
+DB_TLS_COMPOSE=REPO/'compose.gabriel-installation-db-tls.yml'
+DB_TLS_RECEIPT='database-tls.json'
+
+
+class InstallationDatabaseTlsRequired(ValueError):
+    pass
 
 
 class DockerOperationError(ValueError):
@@ -27,9 +55,9 @@ class DockerOperationError(ValueError):
         self.stderr=completed.stderr
 
 
-def run(command,*,env=None,payload=None,output=None):
+def run(command,*,env=None,payload=None,output=None,timeout=None):
     completed=subprocess.run(command,cwd=REPO,env=env,input=payload,stdout=output if output is not None else subprocess.PIPE,
-        stderr=subprocess.PIPE,check=False)
+        stderr=subprocess.PIPE,check=False,timeout=timeout)
     if completed.returncode:
         try:
             diagnostic=json.loads(completed.stdout or b'{}')
@@ -72,6 +100,32 @@ def external(path):
     return path
 
 
+def prepare_tls(directory,image,*,database=False):
+    directory.mkdir(mode=0o700)
+    run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
+        '--user',str(os.getuid())+':'+str(os.getgid()),'--mount','type=bind,src='+str(directory)+',dst=/tls',
+        '--entrypoint','python',image,'-m','gabriel.identity.installation',
+        'database-tls' if database else 'tls','--directory','/tls'])
+
+
+def publish_database_tls(root,image):
+    if len(list(root.glob('database-tls-*')))>=16:
+        raise ValueError('database_tls_history_limit_requires_operator_review')
+    name='database-tls-'+uuid4().hex
+    prepare_tls(root/name,image,database=True)
+    fsync_directory(root/name)
+    temporary=root/('pending-'+uuid4().hex+'.json')
+    write(temporary,{'directory':name})
+    os.replace(temporary,root/DB_TLS_RECEIPT)
+    fsync_directory(root)
+
+
+def fsync_directory(directory):
+    fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
 def prepare(root,port,image):
     if root.exists() or type(port) is not int or not 1024<=port<=65535: raise ValueError('new_directory_and_local_port_required')
     run(['docker','info'])
@@ -81,10 +135,8 @@ def prepare(root,port,image):
     database_secrets(root/'database')
     keyring(root/'provider')
     keyring(root/'evidence',purpose='evidence-v1')
-    (root/'tls').mkdir(mode=0o700)
-    run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
-        '--user',str(os.getuid())+':'+str(os.getgid()),'--mount','type=bind,src='+str(root/'tls')+',dst=/tls',
-        '--entrypoint','python',image,'-m','gabriel.identity.installation','tls','--directory','/tls'])
+    prepare_tls(root/'tls',image)
+    publish_database_tls(root,image)
     manifest=dict(schema_version=1,purpose='gabriel-local-test-installation-v1',project='gabriel-install-'+uuid4().hex[:16],
         port=port,image=image,source=run(['git','rev-parse','HEAD']).decode().strip(),production_admitted=False)
     write(root/'installation.json',manifest)
@@ -104,10 +156,47 @@ class Installation:
                 or re.fullmatch(r'[a-f0-9]{40}',c['source']) is None or type(c['port']) is not int or not 1024<=c['port']<=65535):
             raise ValueError('invalid_installation')
         self.env=dict(os.environ,GABRIEL_INSTALL_ROOT=str(root),GABRIEL_INSTALL_PORT=str(c['port']),GABRIEL_INSTALL_IMAGE=c['image'],GABRIEL_HERMES_IMAGE=c['project']+'-hermes:local')
-        self.command=['docker','compose','--project-name',c['project'],'--file',str(COMPOSE)]
+        self.configure_database_tls()
 
-    def compose(self,*args,payload=None,output=None):
-        return run(self.command+list(args),env=self.env,payload=payload,output=output)
+    def configure_database_tls(self):
+        self.base_command=['docker','compose','--project-name',self.config['project'],'--file',str(COMPOSE)]
+        try: receipt=read(self.root/DB_TLS_RECEIPT)
+        except FileNotFoundError: receipt=None
+        else:
+            if type(receipt) is not dict or set(receipt)!={'directory'} or type(receipt['directory']) is not str or not re.fullmatch(r'database-tls-[0-9a-f]{32}',receipt['directory']):
+                raise ValueError('invalid_database_tls_receipt')
+            directory=self.root/receipt['directory']
+            private(directory)
+            self.env['GABRIEL_DB_TLS_DIR']=str(directory)
+            self.env['GABRIEL_DB_TLS_GENERATION']=receipt['directory']
+            self.base_command.extend(['--file',str(DB_TLS_COMPOSE)])
+        self.database_tls=receipt is not None
+        self.command=self.base_command.copy()
+
+    def compose(self,*args,payload=None,output=None,timeout=None):
+        return run(self.command+list(args),env=self.env,payload=payload,output=output,timeout=timeout)
+
+    def check_network(self):
+        name=self.config['project']+'-network-check'
+        try:
+            raw=self.compose('run','--rm','--no-deps','-T','--name',name,
+                'network-check','-c',NETWORK_CHECK,timeout=30)
+        except subprocess.TimeoutExpired:
+            try: run(['docker','rm','--force',name],timeout=10)
+            except (OSError,ValueError,subprocess.SubprocessError): pass
+            raise InstallationNetworkError('probe_timeout') from None
+        except DockerOperationError:
+            raise InstallationNetworkError('probe_execution') from None
+        try: report=json.loads(raw)
+        except (ValueError,UnicodeError): raise InstallationNetworkError('invalid_probe_result') from None
+        if (type(report) is not dict or set(report)!={'version','dns_resolves','tcp_reachable'}
+                or report['version']!='gabriel-install-network-v1'
+                or type(report['dns_resolves']) is not bool or type(report['tcp_reachable']) is not bool
+                or (report['tcp_reachable'] and not report['dns_resolves'])):
+            raise InstallationNetworkError('invalid_probe_result')
+        if not report['dns_resolves']: raise InstallationNetworkError('database_dns')
+        if not report['tcp_reachable']: raise InstallationNetworkError('database_tcp')
+        return report
 
     def operator(self,command,payload=None):
         raw=self.compose('run','--rm','--no-deps','-T','operator',command,
@@ -116,20 +205,32 @@ class Installation:
         if value.get('status')!='ok': raise ValueError('operator_operation_denied')
         return value['result']
 
-    def start_db(self): self.compose('up','-d','--wait','identity-db')
+    def require_database_tls(self):
+        if not self.database_tls:
+            raise InstallationDatabaseTlsRequired('database_tls_rebuild_required')
+
+    def start_db(self):
+        self.require_database_tls()
+        self.compose('up','-d','--wait','identity-db')
+
+    def stop_entry(self):
+        self.compose('stop','local-entry','workbench')
 
     def stop(self):
-        self.start_db()
-        self.compose('stop','local-entry','workbench')
-        self.operator('revoke')
-        self.compose('stop','hermes','investigation-tools','identity-db')
+        self.stop_entry()
+        try:
+            if self.database_tls:
+                self.start_db()
+                self.operator('revoke')
+        finally: self.compose('stop','hermes','investigation-tools','identity-db')
 
     def open(self,password,*,ai_egress=False,username=None):
         if type(ai_egress) is not bool:raise ValueError('invalid_ai_egress_option')
-        self.command=['docker','compose','--project-name',self.config['project'],'--file',str(COMPOSE)]
+        self.command=self.base_command.copy()
         if ai_egress:self.command.extend(['--file',str(REPO/'compose.gabriel-specialist-ai.yml')])
+        self.stop_entry()
         self.start_db()
-        self.compose('stop','local-entry','workbench')
+        self.check_network()
         payload=dict(password=password,port=self.config['port'])
         if username is not None:payload['username']=username
         ticket=self.operator('open',payload)
@@ -138,10 +239,11 @@ class Installation:
         return dict(endpoint='https://localhost:'+str(self.config['port'])+'/claim',ai_egress=ai_egress,**ticket)
 
     def backup(self,destination):
+        self.require_database_tls()
         if destination.exists(): raise ValueError('new_backup_directory_required')
         destination.mkdir(mode=0o700)
+        self.stop_entry()
         self.start_db()
-        self.compose('stop','local-entry','workbench')
         self.operator('revoke')
         receipt=self.operator('receipt')
         with (destination/'database.dump').open('xb') as stream:
@@ -155,7 +257,19 @@ class Installation:
         return {'backup_complete':True,'workbench_stopped':True,'keys_included':False}
 
 
+    def renew_database_tls(self):
+        self.require_database_tls()
+        image=build_image(self.config['image'])
+        self.stop_entry()
+        self.compose('stop','identity-db')
+        publish_database_tls(self.root,image)
+        self.configure_database_tls()
+        try: self.start_db()
+        finally: self.compose('stop','identity-db')
+        return {'database_tls_renewed':True,'services_stopped':True,'requires_fresh_login':True}
+
     def rebuild(self,backup,image=None):
+        if backup.exists(): raise ValueError('new_backup_directory_required')
         if len(list(self.root.glob('rebuild-*.json')))>=32:
             raise ValueError('rebuild_history_limit_requires_operator_review')
         candidate=build_image(image)
@@ -165,7 +279,12 @@ class Installation:
         if readiness.get('projection_version')!='browser-candidate-ai-v1':
             raise ValueError('browser_ai_installation_image_required')
         new=dict(self.config,image=candidate,source=run(['git','rev-parse','HEAD']).decode().strip())
-        self.backup(backup)
+        before=self
+        if not self.database_tls:
+            self.stop()
+            publish_database_tls(self.root,candidate)
+            before=Installation(self.root)
+        before.backup(backup)
         previous=read(backup/'backup.json')
         record=self.root/('rebuild-'+uuid4().hex+'.json')
         write(record,dict(previous=self.config,candidate=new,backup=str(backup),automatic_rollback=False))
@@ -176,6 +295,8 @@ class Installation:
         try: os.fsync(parent)
         finally: os.close(parent)
         rebuilt=Installation(self.root)
+        rebuilt.start_db()
+        rebuilt.check_network()
         program="""import os,json
 from gabriel.identity.cli import read_secret
 from gabriel.identity.service import migrate
@@ -192,6 +313,7 @@ print(json.dumps({'migrated':True}))
             production_admitted=False,browser_ai=readiness)
 
     def restore(self,backup,keys):
+        self.require_database_tls()
         private(backup);private(keys)
         manifest=read(backup/'backup.json')
         if (set(manifest)!={'schema_version','purpose','image','source','identity','files','key_fingerprints'}
@@ -213,6 +335,7 @@ print(json.dumps({'migrated':True}))
             with target.open('wb') as stream: stream.write((keys/name/'keyring.json').read_bytes())
             target.chmod(0o444)
         self.start_db()
+        self.check_network()
         self.compose('exec','-T','identity-db','pg_restore','-U','postgres','--dbname=gabriel','--exit-on-error','--single-transaction',payload=(backup/'database.dump').read_bytes())
         raw=self.compose('run','--rm','--no-deps','-T','operator','restore-objects',payload=(backup/'evidence.tar.gz').read_bytes())
         if json.loads(raw).get('status')!='ok': raise ValueError('object_restore_denied')
@@ -226,6 +349,8 @@ def build_image(image):
     if re.fullmatch(r'sha256:[a-f0-9]{64}',image) is None: raise ValueError('exact_local_image_id_required')
     inspected=json.loads(run(['docker','image','inspect',image]))[0]
     if inspected['Config']['User']!='10001:10001': raise ValueError('non_root_image_required')
+    if (inspected['Config'].get('Labels') or {}).get('org.gabriel.installation-db-tls')!='v1':
+        raise InstallationDatabaseTlsRequired('database_tls_image_required')
     return image
 
 
@@ -253,7 +378,7 @@ def password(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild'))
+    parser.add_argument('command',choices=('prepare','initialize','open','status','stop','backup','restore','rebuild','renew-database-tls','diagnose'))
     parser.add_argument('directory')
     parser.add_argument('--port',type=int,default=8444)
     parser.add_argument('--image')
@@ -270,15 +395,22 @@ def main():
         root=external(args.directory)
         if args.command=='prepare': result=prepare(root,args.port,args.image)
         else:
-            installation=Installation(root)
+            private(root)
             fd=os.open(root/'operation.lock',os.O_WRONLY|os.O_CREAT|os.O_NOFOLLOW,0o600)
             with os.fdopen(fd,'a') as lock:
                 fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                installation=Installation(root)
                 if args.command=='initialize':
-                    secret=password(args)
                     installation.start_db()
+                    installation.check_network()
+                    secret=password(args)
                     result=installation.operator('initialize',dict(organization=args.organization,username=args.username or 'owner',password=secret))
-                elif args.command=='open': result=installation.open(password(args),ai_egress=args.ai_egress,username=args.username)
+                elif args.command=='diagnose':
+                    installation.start_db()
+                    result=dict(network=installation.check_network(),production_admitted=False)
+                elif args.command=='open':
+                    installation.require_database_tls()
+                    result=installation.open(password(args),ai_egress=args.ai_egress,username=args.username)
                 elif args.command=='status':
                     raw=installation.compose('ps','--all','--format','json').decode().strip()
                     rows=json.loads(raw) if raw.startswith('[') else [json.loads(line) for line in raw.splitlines()]
@@ -286,9 +418,17 @@ def main():
                 elif args.command=='stop': installation.stop();result={'stopped':True,'volumes_retained':True}
                 elif args.command=='backup': result=installation.backup(external(args.backup))
                 elif args.command=='rebuild': result=installation.rebuild(external(args.backup),args.image)
+                elif args.command=='renew-database-tls': result=installation.renew_database_tls()
                 else: result=installation.restore(external(args.backup),external(args.keys_from))
         print(json.dumps({'status':'ok','result':result}))
         return 0
+    except InstallationDatabaseTlsRequired as exc:
+        print(json.dumps({'status':'denied','code':str(exc),'guidance':'Rebuild the installation with a current image or prepare a fresh lab.'}))
+        return 1
+    except InstallationNetworkError as exc:
+        print(json.dumps({'status':'denied','code':'installation_network_check_failed','phase':exc.phase,
+            'probe_uses_credentials':False,'guidance':'Inspect Docker DNS, bridge connectivity and firewall backend consistency; preserve internal networks and loopback listeners.'}))
+        return 1
     except (OSError,ValueError,TypeError,KeyError,RuntimeError,subprocess.SubprocessError):
         print(json.dumps({'status':'denied','code':'installation_command_failed; existing state retained for inspection'}))
         return 1

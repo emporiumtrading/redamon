@@ -39,6 +39,27 @@ def connect(root,app,password):
     return cookie,csrf
 
 
+def verify_database_tls(app):
+    program="""import os,socket
+import psycopg
+from gabriel.identity.cli import read_secret
+dsn=read_secret(os.environ['GABRIEL_IDENTITY_DSN_FILE'])
+with psycopg.connect(dsn,connect_timeout=4) as c:
+    assert c.execute('SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()').fetchone()==(True,)
+def denied(overrides,message):
+    try:
+        with psycopg.connect(dsn,connect_timeout=4,**overrides):
+            raise AssertionError('unsafe database transport admitted')
+    except psycopg.OperationalError as exc:
+        assert message in str(exc), 'expected database transport denial missing'
+denied({'sslmode':'disable'},'no encryption')
+denied({'host':'incorrect-gabriel-service','hostaddr':socket.gethostbyname('identity-db')},'does not match host name')
+print('PASS')
+"""
+    output=app.compose('run','--rm','--no-deps','-T','--entrypoint','python','operator','-c',program)
+    assert output.strip()==b'PASS'
+
+
 def main():
     directory=Path(sys.argv[1]);directory.mkdir(mode=0o700)
     image=sys.argv[2]
@@ -73,8 +94,16 @@ def main():
         assert config['services']['workbench']['read_only'] and config['services']['workbench']['user']=='10001:10001'
         assert config['services']['workbench']['tmpfs']==['/tmp:rw,noexec,nosuid,nodev,size=64m']
         assert 'owner_dsn' not in {s['source'] for s in config['services']['workbench']['secrets']}
+        for name in ('identity-db','operator','workbench'):
+            assert config['services'][name]['environment']['PGSSLMODE']=='verify-full'
+            secrets_for_service={s['source'] for s in config['services'][name]['secrets']}
+            assert 'db_tls_ca' in secrets_for_service
+            assert ('db_tls_key' in secrets_for_service)==(name=='identity-db')
+            assert ('db_tls_certificate' in secrets_for_service)==(name=='identity-db')
         app.start_db()
+        (directory/'installation-network.json').write_text(json.dumps(app.check_network(),indent=2))
         identity=app.operator('initialize',dict(organization='Generated installation lab',username='owner',password=secret))
+        verify_database_tls(app)
         assert set(identity)=={'organization_id','user_id','username'}
         try: app.operator('initialize',dict(organization='Duplicate fixture',username='owner',password=secret))
         except ValueError: pass
@@ -127,11 +156,21 @@ print(json.dumps({'case':str(case),'evidence':str(row['id'])}))
         cookie,csrf=connect(root,app,secret)
         assert request(root,18444,'/cases',cookie=old_cookie)[0]==403
         assert 'Generated persistent installation case' in request(root,18444,'/cases',cookie=cookie)[1]
+        original_ca=Path(app.env['GABRIEL_DB_TLS_DIR'])/'ca.pem'
+        browser_ca=(root/'tls'/'ca.pem').read_bytes()
+        assert app.renew_database_tls()['requires_fresh_login']
+        app=Installation(root);apps[0]=app
+        assert (Path(app.env['GABRIEL_DB_TLS_DIR'])/'ca.pem').read_bytes()!=original_ca.read_bytes()
+        assert (root/'tls'/'ca.pem').read_bytes()==browser_ca
+        cookie,csrf=connect(root,app,secret)
+        assert 'Generated persistent installation case' in request(root,18444,'/cases',cookie=cookie)[1]
+        verify_database_tls(app)
         backup=directory/'backup';app.backup(backup)
         assert set(p.name for p in backup.iterdir())=={'database.dump','evidence.tar.gz','backup.json'}
         target=directory/'restored';prepare(target,18445,image)
         restored=Installation(target);apps.append(restored)
         restored.restore(backup,root)
+        verify_database_tls(restored)
         cookie,csrf=connect(target,restored,secret)
         assert 'Generated persistent installation case' in request(target,18445,'/cases',cookie=cookie)[1]
         verify="""import json

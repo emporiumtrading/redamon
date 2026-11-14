@@ -2462,9 +2462,9 @@
       "owner_specialist": "recovery_learning",
       "catalog_index": 4,
       "name": "Recovery point objective (RPO) validation",
-      "implementation_status": "candidate_not_implemented",
+      "implementation_status": "implemented_unqualified",
       "qualification_status": "not_evaluated",
-      "accepted_implementation": null,
+      "accepted_implementation": "gabriel.identity.catalog_skills.evaluate:review_recovery_point",
       "evidence_contract": "case-bound typed source refs and digests required",
       "external_actions_allowed": false
     },
@@ -2473,9 +2473,9 @@
       "owner_specialist": "recovery_learning",
       "catalog_index": 5,
       "name": "Recovery time objective (RTO) validation",
-      "implementation_status": "candidate_not_implemented",
+      "implementation_status": "implemented_unqualified",
       "qualification_status": "not_evaluated",
-      "accepted_implementation": null,
+      "accepted_implementation": "gabriel.identity.catalog_skills.evaluate:review_recovery_time",
       "evidence_contract": "case-bound typed source refs and digests required",
       "external_actions_allowed": false
     },

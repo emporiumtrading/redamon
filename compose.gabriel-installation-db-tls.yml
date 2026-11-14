@@ -1,0 +1,37 @@
+x-db-tls: &db-tls
+  PGSSLMODE: verify-full
+  PGSSLROOTCERT: /run/secrets/db_tls_ca
+  PGGSSENCMODE: disable
+
+services:
+  identity-db:
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        install -m 0600 -o postgres -g postgres /run/secrets/db_tls_key /run/gabriel-db-tls/server.key
+        exec docker-entrypoint.sh postgres -c ssl=on -c ssl_min_protocol_version=TLSv1.2 -c ssl_cert_file=/run/secrets/db_tls_certificate -c ssl_key_file=/run/gabriel-db-tls/server.key -c hba_file=/run/secrets/db_tls_hba
+    environment:
+      <<: *db-tls
+      # Force recreation even when Compose does not hash changed secret source paths.
+      GABRIEL_DB_TLS_GENERATION: ${GABRIEL_DB_TLS_GENERATION:?Database TLS generation required}
+    secrets: [db_tls_ca, db_tls_certificate, db_tls_key, db_tls_hba]
+    tmpfs: ['/run/gabriel-db-tls:rw,noexec,nosuid,nodev,size=1m']
+    healthcheck:
+      test: [CMD, pg_isready, -h, identity-db, -U, postgres, -d, gabriel]
+  operator:
+    environment: *db-tls
+    secrets: [db_tls_ca]
+  workbench:
+    environment: *db-tls
+    secrets: [db_tls_ca]
+
+secrets:
+  db_tls_ca:
+    file: ${GABRIEL_DB_TLS_DIR:?Database TLS directory required}/ca.pem
+  db_tls_certificate:
+    file: ${GABRIEL_DB_TLS_DIR}/server.pem
+  db_tls_key:
+    file: ${GABRIEL_DB_TLS_DIR}/server.key
+  db_tls_hba:
+    file: ${GABRIEL_DB_TLS_DIR}/pg_hba.conf

@@ -88,6 +88,16 @@ def project(document,role,job_id,tool_results):
     return dict(packet=packet,local_manifest=dict(job_id=str(job_id),lineage=lineage,identity_map={},reviewed_memory=memory_context))
 
 
+def provider_body(role, model, config, prepared):
+    body = dict(model=model, messages=[
+        dict(role='system', content=prompt(role)),
+        dict(role='user', content=canonical(prepared['packet']).decode()),
+    ], **config['parameters'])
+    if len(canonical(body)) > 7000:
+        raise AccessDenied('specialist_wire_limit')
+    return body
+
+
 def job(service,conn,p,job_id,*,active=True):
     row=conn.execute('''SELECT j.*,EXISTS(SELECT 1 FROM gabriel_identity.specialist_agent_stops s
         WHERE (s.organization_id,s.job_id)=(j.organization_id,j.id)) AS stopped,
@@ -175,9 +185,7 @@ class SpecialistWorker(ModelWorker):
                     or self.cases._verify(conn,artifact)!=canonical(dict(version=VERSION,prepared=prepared))):
                 raise AccessDenied('specialist_normalization_binding_mismatch')
             self._verify_sources(conn,p,artifact['id'],prepared)
-            body=dict(model=model,messages=[dict(role='system',content=prompt(self.role)),
-                dict(role='user',content=canonical(prepared['packet']).decode())],**config['parameters'])
-            if len(canonical(body))>7000:raise AccessDenied('specialist_wire_limit')
+            body=provider_body(self.role,model,config,prepared)
             return config,run,prepared,body,digest([str(run['id']),str(artifact['id']),artifact['digest'],body])
 
 
@@ -233,8 +241,19 @@ def resume(service,vault,token,job_id):
         tool_results.append(tool(service,token,job_id,'assess_exposure'))
     for step in range(1,MAX_ROUNDS+1):
         worker=SpecialistWorker(service,vault,job_id,current['role'],tool_results,current['key_scope'],current.get('supervisor_run_id'))
-        worker._admission(current['model'])
-        prepared=project(document,current['role'],job_id,tool_results)
+        config = worker._admission(current['model'])
+        try:
+            prepared = project(document, current['role'], job_id, tool_results)
+            provider_body(current['role'], current['model'], config, prepared)
+        except AccessDenied as error:
+            if str(error) not in {'specialist_input_requires_narrower_scope', 'specialist_wire_limit'}:
+                raise
+            with connection(service._dsn) as conn:
+                principal = worker._principal(conn, token, write=True)
+                job(service, conn, principal, job_id)
+                _audit(conn, 'specialist_agent.input_scope_requires_review', principal, identifier(job_id))
+            return dict(job_id=str(job_id), state='input_scope_requires_analyst_review',
+                        model_used=bool(reports), steps=reports, quality_qualified=False)
         request=uuid5(identifier(job_id),'round/'+str(step))
         holder=service.acquire(token,current['case_id'],uuid5(request,'input'),canonical(dict(version=VERSION,prepared=prepared)).decode(),
             'Specialist minimized AI input',approved=True,parent_id=current['input_evidence_id'])

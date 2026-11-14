@@ -30,7 +30,7 @@ EXTRA={
     'identity_access':('inspect_logs','correlate_events','find_duplicate_facts','review_privileged_access_changes'),
     'cloud_supply_chain':('scan_artifacts','correlate_events','review_cloud_change_assertions','assess_cloud_storage_exposure'),
     'response_remediation':('assess_exposure','correlate_events','review_response_dependencies','analyze_response_dependencies'),
-    'recovery_learning':('correlate_events','review_recovery_baselines','review_incident_closure_evidence'),
+    'recovery_learning':('correlate_events','review_recovery_baselines','review_incident_closure_evidence','review_recovery_point','review_recovery_time'),
 }
 TOOLS={r:('verify_sources','review_rules','review_memory')+(() if r=='recovery_learning' else ('inspect_timeline',))+('inspect_toolkit',)+EXTRA[r] for r in ROLES}
 CATALOG={
@@ -60,6 +60,8 @@ CATALOG={
     'review_vulnerability_sla':('Gabriel','MIT','Review supplied finding ages, remediation deadlines and lifecycle conflicts.'),
     'normalize_incident_timeline':('Gabriel','MIT','Apply reported clock offsets and compare bounded incident intervals.'),
     'review_powershell_activity':('Gabriel','MIT','Review reported PowerShell execution indicators with case-bound approvals.'),
+    'review_recovery_time':('Gabriel','MIT','Compare reported service recovery duration with the supplied objective.'),
+    'review_recovery_point':('Gabriel','MIT','Compare restored data age with the supplied recovery point objective.'),
     'map_source_coverage':('Gabriel','MIT','Map supplied source coverage windows and report gaps or conflicts.'),
     'validate_evidence_provenance':('Gabriel','MIT','Review locally verified artifact provenance and conflicting assertions.'),
     'analyze_false_negatives':('Gabriel','MIT','Review supplied versioned detection fixtures for missed expected matches.'),
@@ -82,7 +84,7 @@ def manifest(role):
             Path(__file__).with_name('catalog_dfir.py'),Path(__file__).with_name('catalog_detection.py'),
             Path(__file__).with_name('catalog_telemetry.py'),Path(__file__).with_name('catalog_intelligence.py'),
             Path(__file__).with_name('catalog_exposure.py'),Path(__file__).with_name('catalog_cloud.py'),
-            Path(__file__).with_name('catalog_timeline.py'),Path(__file__).with_name('catalog_hunting.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
+            Path(__file__).with_name('catalog_timeline.py'),Path(__file__).with_name('catalog_hunting.py'),Path(__file__).with_name('catalog_recovery.py'),Path(__file__).with_name('specialist_analysis.py'))])) for n in TOOLS[role]]
 
 
 def instructions(role):
