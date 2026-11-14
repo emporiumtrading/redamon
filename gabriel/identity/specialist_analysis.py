@@ -12,6 +12,7 @@ from gabriel.identity.catalog_cloud import CLOUD_STORAGE_ACCESS_SCHEMA, validate
 from gabriel.identity.catalog_exposure import VULNERABILITY_SLA_SCHEMA, validate_vulnerability_sla
 from gabriel.identity.catalog_hunting import POWERSHELL_EXECUTION_SCHEMA
 from gabriel.identity.catalog_intelligence import INTEL_LIFECYCLE_SCHEMA, validate_intel_lifecycle
+from gabriel.identity.catalog_recovery import RECOVERY_POINT_SCHEMA, validate_recovery_point
 from gabriel.identity.catalog_telemetry import SOURCE_COVERAGE_SCHEMA, validate_source_coverage
 from gabriel.identity.catalog_timeline import CLOCK_LIMIT_MS, TIMELINE_EVENT_SCHEMA, validate_timeline_event
 from gabriel.identity.evidence_store import canonical
@@ -43,6 +44,7 @@ SCHEMAS = {
     'cloud': {'finding': {'public_access', 'privileged_workload', 'unsigned_component', 'policy_drift'},
               'state': {'present', 'absent', 'unknown'}, 'authorized': YES_NO},
     'response_check': {'check': {'target_binding', 'dependencies', 'recovery'}, 'passed': YES_NO},
+    'recovery_point': RECOVERY_POINT_SCHEMA,
     'recovery': {'check': {'restore', 'service_health', 'security_control'},
                  'result': {'pass', 'fail', 'unknown'}, 'baseline': {'current', 'stale', 'unknown'}},
 }
@@ -58,7 +60,7 @@ ROLE_TYPES = {
     'identity_access': {'identity', 'activity'},
     'cloud_supply_chain': {'cloud', 'cloud_storage_access'},
     'response_remediation': {'response_check'},
-    'recovery_learning': {'recovery'},
+    'recovery_learning': {'recovery', 'recovery_point'},
 }
 NEXT_STEPS = {
     'telemetry_health': ['review_source_visibility'],
@@ -161,6 +163,8 @@ def validate_document(document, case_id):
                 require(type(item) is int and 1 <= item <= 1000000, 'invalid_specialist_fact_value')
             elif allowed == 'time':
                 at(item)
+            elif allowed == 'recovery_objective_seconds':
+                require(type(item) is int and 0 <= item <= 31_536_000, 'invalid_recovery_objective')
             elif allowed == 'nullable_clock_ms':
                 require(item is None or type(item) is int and abs(item) <= CLOCK_LIMIT_MS,
                         'invalid_timeline_clock_bounds')
@@ -181,6 +185,8 @@ def validate_document(document, case_id):
             require(fact['entity_id'] is not None, 'powershell_host_alias_required')
         if kind == 'timeline_event':
             validate_timeline_event(fact, as_of)
+        if kind == 'recovery_point':
+            validate_recovery_point(fact)
         if kind == 'source_coverage':
             validate_source_coverage(fact)
     require(len({fact['evidence_id'] for fact in facts}) <= 32, 'specialist_fact_source_limit')
@@ -284,11 +290,14 @@ def analyze(role, document, input_ref):
             if len({r['data']['passed'] for r in rows}) > 1:
                 claim(contradictions, 'Reported readiness checks disagree for ' + check + '.', rows)
     elif role == 'recovery_learning':
-        failed = [r for r in selected if r['data']['result'] == 'fail']
-        current = {r['data']['check'] for r in selected if r['data']['result'] == 'pass' and r['data']['baseline'] == 'current'}
-        note(f'Reported recovery checks: {len(selected)}; failures: {len(failed)}; distinct passing checks against supplied current baselines: {len(current)}. Recovery acceptance is unestablished.')
+        checks = of('recovery')
+        failed = [r for r in checks if r['data']['result'] == 'fail']
+        current = {r['data']['check'] for r in checks if r['data']['result'] == 'pass' and r['data']['baseline'] == 'current'}
+        note(f'Reported recovery checks: {len(checks)}; failures: {len(failed)}; distinct passing checks against supplied current baselines: {len(current)}. Recovery acceptance is unestablished.', checks)
         concern('Reported recovery-validation failures require review before accepting recovery.', failed)
 
+        if points := of('recovery_point'):
+            note('Review supplied restored data points against the recovery objective.', points)
     uncertainty = ['Supplied facts and entity keys are unverified assertions; byte integrity does not establish source truth.',
                    'Coverage is partial and historical at the supplied snapshot time; no clean-environment conclusion is supported.',
                    'Adapter semantics and specialist decision quality require independent acceptance.',

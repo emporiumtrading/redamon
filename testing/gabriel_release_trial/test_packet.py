@@ -50,6 +50,9 @@ class ProposedPacket(unittest.TestCase):
             if name == 'review_vulnerability_sla':
                 fact.update(type='vulnerability_sla', data=dict(first_seen='2026-10-10T10:00:00Z',
                             due_at='2026-10-27T10:00:00Z', state='open'))
+            if name == 'review_recovery_point':
+                fact.update(type='recovery_point', data=dict(disrupted_at='2026-10-27T10:30:00Z',
+                            restored_data_at='2026-10-27T10:00:00Z', objective_seconds=900))
             if name == 'review_powershell_activity':
                 fact.update(type='powershell_execution', data=dict(process_instance_id=str(UUID(int=61000)),
                             indicator='encoded_command', approved='unknown'))

@@ -2,7 +2,7 @@
 
 **Source of truth:** `gabriel/identity/skill_roadmap.json`; validate using `gabriel.identity.skill_catalog.load`.
 
-The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **13 implemented-unqualified entries and 227 not yet implemented** across five tranches. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
+The engineering specification has **240 candidate skills, 20 for each of 12 roles**. The catalog records **14 implemented-unqualified entries and 226 not yet implemented** across six tranches. The earlier **11 grounded-review tools** are separate foundational capabilities and are not automatically declared identical to full catalog skills.
 
 ## Tranche 1: implemented and connected to the exact authorized role
 
@@ -43,6 +43,10 @@ The case tool verifies the stored source before the local review. Source authent
 ## Tranche 5: PowerShell activity review
 
 `threat_hunting.02-suspicious-powershell-activity-investigation` maps to `review_powershell_activity`. It reviews supplied execution indicators and approval assertions grouped by case-local host and process instance. It preserves conflicting approval, deduplicates repeated indicators, and flags paired behavior for analyst review. No command text or process identifiers are exported. Reported approval and process identity require independent verification.
+
+## Tranche 6: recovery point objective review
+
+`recovery_learning.04-recovery-point-objective-rpo-validation` maps to `review_recovery_point`. It compares reported restored data age at disruption with the supplied recovery objective. Conflicting points or objectives remain unresolved for analyst review. The tool keeps clock calibration, policy authority and actual restore verification open.
 
 ## Release gates
 
