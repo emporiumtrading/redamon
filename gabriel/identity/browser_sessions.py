@@ -29,43 +29,50 @@ def browser_digest(token):
     return sha256(('gabriel-browser-v1|'+token).encode()).hexdigest()
 
 
+def checked_page_url(page_url,extension_version):
+    """Apply the pairing URL rules before using a claimed browser page."""
+    if not isinstance(page_url,str) or not 9<=len(page_url)<=2048:
+        raise ValueError
+    url = urlsplit(page_url)
+    decoded = page_url
+    for _ in range(4):
+        following = unquote(decoded,errors='strict')
+        if following==decoded:
+            break
+        decoded = following
+    if unquote(decoded,errors='strict')!=decoded:
+        raise ValueError
+    modern=extension_version=='0.4.0'
+    if modern:
+        sensitive=re.compile(r'(?:token|password|passwd|secret|auth|session|cookie|signature|api.?key|otp|^code$|^key$|^action$|^method$|^operation$)',re.I)
+        parameters=parse_qsl(url.query,keep_blank_values=True,max_num_fields=16)+parse_qsl(url.fragment.split('?',1)[-1] if '?' in url.fragment else '',keep_blank_values=True,max_num_fields=16)
+        if any(sensitive.search(unquote(k)) or len(v)>256 for k,v in parameters): raise ValueError
+        if re.search(r'(?:^|[?&#])(?:token|password|access_token|refresh_token|session|api_key|code|key|auth|secret|otp)[^=&]*=',decoded,re.I): raise ValueError
+    if (url.scheme!='https' or not url.hostname or url.username is not None or url.password is not None
+            or (not modern and (url.query or '?' in decoded)) or '\\' in decoded
+            or (not modern and any(c in unquote(url.fragment,errors='strict') for c in ('=','&')))
+            or (not modern and '#' in decoded and any(c in decoded.split('#',1)[1] for c in ('=','&')))
+            or any(ord(c)<33 or ord(c)==127 for c in page_url)
+            or any(ord(c)<(32 if modern else 33) or ord(c)==127 for c in decoded)):
+        raise ValueError
+    url.port
+    expected = urlunsplit(('https',url.netloc.lower(),url.path or '/',url.query,url.fragment))
+    if expected!=page_url or any(x in decoded.lower() for x in ('/login','/signin','/sign-in','/oauth','/sso','/mfa','/password','/authorize')):
+        raise ValueError
+    return url,decoded
+
+
 def approved_context(value):
     try:
         if (not isinstance(value,dict) or set(value)!=CONTEXT_FIELDS or value['browser'] not in {'chrome','brave'}
                 or value['extension_version'] not in SUPPORTED_VERSIONS or type(value['tab_id']) is not int
-                or not 0<=value['tab_id']<=2147483647 or not isinstance(value['page_url'],str)
-                or not 9<=len(value['page_url'])<=2048 or not isinstance(value['account_label'],str)
+                or not 0<=value['tab_id']<=2147483647 or not isinstance(value['account_label'],str)
                 or not 1<=len(value['account_label'])<=64 or any(ord(c)<32 or ord(c)==127 for c in value['account_label'])):
             raise ValueError
         result = dict(value)
         for key in ('installation_id','document_id'):
             result[key]=str(identifier(value[key]))
-        url = urlsplit(value['page_url'])
-        decoded = value['page_url']
-        for _ in range(4):
-            following = unquote(decoded,errors='strict')
-            if following==decoded:
-                break
-            decoded = following
-        if unquote(decoded,errors='strict')!=decoded:
-            raise ValueError
-        sensitive=re.compile(r'(?:token|password|passwd|secret|auth|session|cookie|signature|api.?key|otp|^code$|^key$|^action$|^method$|^operation$)',re.I)
-        if value['extension_version']=='0.4.0':
-            parameters=parse_qsl(url.query,keep_blank_values=True,max_num_fields=16)+parse_qsl(url.fragment.split('?',1)[-1] if '?' in url.fragment else '',keep_blank_values=True,max_num_fields=16)
-            if any(sensitive.search(unquote(k)) or len(v)>256 for k,v in parameters): raise ValueError
-            if re.search(r'(?:^|[?&#])(?:token|password|access_token|refresh_token|session|api_key|code|key|auth|secret|otp)[^=&]*=',decoded,re.I): raise ValueError
-        modern=value['extension_version']=='0.4.0'
-        if (url.scheme!='https' or not url.hostname or url.username is not None or url.password is not None
-                or (not modern and (url.query or '?' in decoded)) or '\\' in decoded
-                or (not modern and any(c in unquote(url.fragment,errors='strict') for c in ('=','&')))
-                or (not modern and '#' in decoded and any(c in decoded.split('#',1)[1] for c in ('=','&')))
-                or any(ord(c)<33 or ord(c)==127 for c in value['page_url'])
-                or any(ord(c)<(32 if modern else 33) or ord(c)==127 for c in decoded)):
-            raise ValueError
-        url.port
-        expected = urlunsplit(('https',url.netloc.lower(),url.path or '/',url.query,url.fragment))
-        if expected!=value['page_url'] or any(x in decoded.lower() for x in ('/login','/signin','/sign-in','/oauth','/sso','/mfa','/password','/authorize')):
-            raise ValueError
+        checked_page_url(value['page_url'],value['extension_version'])
         return result
     except (ValueError,TypeError,KeyError,AttributeError):
         raise InvalidIdentityInput('invalid_browser_context') from None
