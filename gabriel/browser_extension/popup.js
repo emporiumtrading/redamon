@@ -2,10 +2,13 @@ const byId = id => document.getElementById(id);
 let observedAt = null;
 let paired = false;
 let requestGeneration = 0;
+let foregroundRequests = 0;
+let heartbeat = null;
 const field = (id) => byId(id).value;
 async function run(operation, extra = {}) {
   const revision = ++requestGeneration;
   byId("message").textContent = operation === "stop" ? "Stopping locally…" : "Working…";
+  foregroundRequests++;
   try {
     if (["select","stop"].includes(operation)) {
       byId("scope").textContent = "No paired organization, case or task.";
@@ -16,6 +19,10 @@ async function run(operation, extra = {}) {
     if (["stop","pause","select","navigation-plan","navigation-run"].includes(operation)) {
       byId("preview-text").value = ""; byId("approved").checked = false; observedAt = null;
       byId("navigation-approved").checked = false;
+    }
+    if (!["stop","stop-tab","pause","monitor-stop"].includes(operation) && heartbeat) {
+      await heartbeat;
+      if (revision !== requestGeneration) return;
     }
     const value = await chrome.runtime.sendMessage({operation, ...extra});
     if (revision !== requestGeneration) return;
@@ -57,6 +64,7 @@ async function run(operation, extra = {}) {
     byId("message").textContent = result.message || (operation === "preview" ? "Partial preview ready. Review before sharing." : "Page selected. Give this context to your Gabriel operator.");
     byId("result").textContent = result.receipt ? "Observation " + result.receipt.observation_id + "; evidence " + result.receipt.evidence_id : result.expires_at ? "Pairing expires: " + result.expires_at + (result.organization_id ? "; Organization " + result.organization_id + "; Case " + result.case_id + "; Task " + result.task_id : "") : "";
   } catch (error) { if (revision === requestGeneration) byId("message").textContent = error.message; }
+  finally { foregroundRequests--; }
 }
 byId("select").onclick = () => run("select", {browser: field("browser"), account: field("account")});
 byId("pair").onclick = () => { const ticket = field("ticket"); byId("ticket").value = ""; return run("pair", {endpoint: field("endpoint"), ticket}); };
@@ -83,6 +91,11 @@ byId("permission").onclick = async () => {
   } catch { byId("message").textContent = "Endpoint permission was not granted."; }
 };
 document.addEventListener("visibilitychange", () => { if (document.hidden) { byId("preview-text").value = ""; byId("ticket").value = ""; observedAt = null; byId("approved").checked = false; byId("navigation-approved").checked = false; } });
-setInterval(() => { if (paired && !document.hidden) run("status"); }, 20000);
+setInterval(() => {
+  if (!paired || document.hidden || foregroundRequests || heartbeat) return;
+  // A background heartbeat must not replace an analyst operation or its result.
+  heartbeat = chrome.runtime.sendMessage({operation: "status"}).catch(() => null)
+    .finally(() => { heartbeat = null; });
+}, 20000);
 document.body.dataset.gabrielReady = "true";
 run("state");

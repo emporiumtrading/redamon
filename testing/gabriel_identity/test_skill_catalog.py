@@ -17,8 +17,8 @@ def test_all_twelve_specialists_have_twenty_distinct_auditable_candidates():
         assert len([row for row in doc['skills'] if row['owner_specialist'] == role]) == 20
     s = skill_catalog.status()
     assert s['candidate_skills'] == 240
-    assert s['candidates_not_implemented'] == 229
-    assert s['implemented_unqualified'] == 11
+    assert s['candidates_not_implemented'] == 227
+    assert s['implemented_unqualified'] == 13
     assert s['qualified_for_review'] == 0
     assert not s['production_admission'] and not s['external_actions_authorized']
     assert len(s['catalog_sha256']) == 64
