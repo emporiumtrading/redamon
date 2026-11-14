@@ -16,10 +16,12 @@ No new supervisor or specialist configuration is production admitted. Both Herme
 
 Open a case's **Hermes supervisor** page, select typed evidence and either local evidence scope or the explicitly paired selected tab sessions, then choose **Check readiness**. This makes no inference call.
 
+For a partial or unfamiliar dashboard, select up to eight approved sessions and choose **Prepare selected tab evidence**. This stores a frozen receipt with capture integrity and visibility gaps in the case. Use the selected receipt and its checked sessions for readiness, then review the scope before approving the investigation. Dashboard text stays in its original evidence record.
+
 The preflight checks:
 
 1. Current analyst identity, open-case access and verified stored source bytes.
-2. For every selected tab: current owner-bound lease, active task/session, fresh heartbeat, a completed visible-text capture within 120 seconds, and typed facts linked to that current capture. A heartbeat alone is insufficient. Common explicit access walls block the check; wall recognition is limited and does not establish complete visibility.
+2. For every selected tab: the original operator session, current lease and task, a fresh heartbeat, a completed capture within 120 seconds, and typed facts linked to that current capture. A partial capture is admitted only with the exact frozen receipt. Pending navigation or capture work, a later capture, and common sign-in or access errors can block the check.
 3. The required pinned Hermes runtime and exact local adapter fingerprint.
 4. Actual packaged tool versions and skill/configuration identities.
 5. Current checked personal or explicitly selected organization key, available reservation capacity and spending limits. Provider funding/route checks run again immediately before dispatch.

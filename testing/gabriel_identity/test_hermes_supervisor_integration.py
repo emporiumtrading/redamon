@@ -204,3 +204,82 @@ def test_heartbeat_or_partial_capture_never_passes_tab_preflight(tenant,cases,ca
     with pytest.raises(AccessDenied,match='fresh_tab_read_required|fresh_dashboard_facts_required'):
         hermes.preflight(cases,supervision['vault'],supervision['token'],case['id'],(holder or fallback)['id'],lease_ids=[str(leases[0].id)])
     assert not supervision['posts']
+
+
+def test_partial_tabs_freeze_receipts_and_require_exact_selected_sources(tenant,cases,case,supervision):
+    from gabriel.identity import browser_hermes
+
+    token=supervision['token']
+    _,leases,_,_=tab_sources(tenant,cases,case,supervision,visibility='partial')
+    ids=[str(lease.id) for lease in leases]
+    prepared=browser_hermes.prepare(cases,token,case['id'],ids)
+    assert prepared==browser_hermes.prepare(cases,token,case['id'],list(reversed(ids)))
+    assert not prepared['visible_text_exported'] and prepared['model_calls']==0
+    document=json.loads(cases.read_evidence(token,prepared['facts_evidence_id']).reveal())
+    assert [fact['type'] for fact in document['facts']]==['artifact','coverage']*2
+    assert {fact['data']['state'] for fact in document['facts'] if fact['type']=='coverage'}=={'missing'}
+    assert 'Generated dashboard' not in json.dumps(document)
+    result=hermes.preflight(cases,supervision['vault'],token,case['id'],prepared['facts_evidence_id'],lease_ids=ids)
+    assert result['ready'] and result['selected_leases']==ids
+    for subset in ([],ids[:1]):
+        with pytest.raises(AccessDenied,match='selected_tabs_required|must_bind_current_tab_read'):
+            hermes.preflight(cases,supervision['vault'],token,case['id'],prepared['facts_evidence_id'],lease_ids=subset)
+    assert not supervision['posts']
+
+
+def test_changed_tab_during_hermes_provider_call_stops_before_child_dispatch(tenant,cases,case,supervision):
+    from datetime import datetime,timezone
+    from gabriel.identity import browser_hermes
+
+    token=supervision['token']
+    browser,leases,contexts,_=tab_sources(tenant,cases,case,supervision,count=1,visibility='partial')
+    ids=[str(leases[0].id)]
+    prepared=browser_hermes.prepare(cases,token,case['id'],ids)
+    supervision['hermes_client'].selected=['telemetry_health']
+
+    def change_capture():
+        browser.heartbeat_browser(leases[0].token,contexts[0])
+        browser.observe_browser(token,leases[0].token,dict(schema_version=1,operation='browser.observe',
+            request_id=str(uuid4()),sequence=2,context=contexts[0],observed_at=datetime.now(timezone.utc).isoformat(),
+            visibility='partial',client_minimized=True,content='Generated dashboard after capture change.'))
+
+    supervision['hermes_client'].hermes_callback=change_capture
+    with pytest.raises(AccessDenied,match='must_bind_current_tab_read'):
+        hermes.start(cases,supervision['vault'],token,case['id'],uuid4(),prepared['facts_evidence_id'],
+            approved=True,lease_ids=ids)
+    assert len(supervision['posts'])==1
+    with owner_connection(tenant.db) as conn:
+        assert conn.execute('SELECT count(*) AS n FROM gabriel_identity.specialist_agent_jobs WHERE organization_id=%s',
+            (tenant.org,)).fetchone()['n']==0
+
+
+def test_completed_navigation_requires_new_capture_before_receipt_freeze(tenant,cases,case,supervision):
+    from gabriel.identity import browser_hermes
+    from gabriel.identity.browser_navigation import OPERATOR_PAGES
+
+    token=supervision['token']
+    browser,leases,contexts,_=tab_sources(tenant,cases,case,supervision,count=1,visibility='partial')
+    lease,context=leases[0],contexts[0]
+    destination='https://generated-console.invalid/alerts'
+    browser.grant_navigation(token,lease.token,uuid4(),OPERATOR_PAGES,[destination])
+    intent=browser.prepare_navigation(token,lease.token,uuid4(),destination)
+    with pytest.raises(AccessDenied,match='navigation_outcome_unresolved'):
+        browser_hermes.prepare(cases,token,case['id'],[lease.id])
+    browser.complete_navigation(token,lease.token,intent['id'],dict(context,page_url=destination,document_id=str(uuid4())))
+    with pytest.raises(AccessDenied,match='post_navigation_capture_required'):
+        browser_hermes.prepare(cases,token,case['id'],[lease.id])
+
+
+def test_workbench_prepares_selected_receipts_before_model_consent(tenant,cases,case,server):
+    _,leases,_,_=tab_sources(tenant,cases,case,dict(token=tenant.token),visibility='partial')
+    cookie,_,_=connect(server)
+    path='/cases/'+str(case['id'])+'/hermes'
+    status,html,_=call(server,path,cookie=cookie)
+    assert status==200 and 'Prepare selected tab evidence' in html
+    fields=[('csrf',csrf(html)),('operation','prepare_tabs')]
+    fields.extend(('selected_leases',str(lease.id)) for lease in leases)
+    status,html,_=call(server,path,fields,cookie=cookie)
+    assert status==200 and 'Selected tab receipts prepared. No model call was made.' in html
+    assert 'Review the frozen capture integrity and visibility evidence' in html
+    assert all('value="'+str(lease.id)+'" checked' in html for lease in leases)
+    assert 'Generated dashboard sign-in assertion' not in html
