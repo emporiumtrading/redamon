@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import re
 from uuid import UUID
 
+from gabriel.identity.catalog_scope import SCOPE_LINK_SCHEMA
 from gabriel.identity.catalog_cloud import CLOUD_STORAGE_ACCESS_SCHEMA, validate_cloud_storage_access
 from gabriel.identity.catalog_exposure import VULNERABILITY_SLA_SCHEMA, validate_vulnerability_sla
 from gabriel.identity.catalog_hunting import POWERSHELL_EXECUTION_SCHEMA
@@ -42,6 +43,7 @@ SCHEMAS = {
     'identity': {'event': {'privilege_grant', 'session_revocation', 'mfa_disabled', 'login_failure', 'login_success'},
                  'authorized': YES_NO},
     'cloud_storage_access': CLOUD_STORAGE_ACCESS_SCHEMA,
+    'scope_link': SCOPE_LINK_SCHEMA,
     'cloud': {'finding': {'public_access', 'privileged_workload', 'unsigned_component', 'policy_drift'},
               'state': {'present', 'absent', 'unknown'}, 'authorized': YES_NO},
     'response_check': {'check': {'target_binding', 'dependencies', 'recovery'}, 'passed': YES_NO},
@@ -53,7 +55,7 @@ SCHEMAS = {
 ROLE_TYPES = {
     'telemetry_health': {'coverage', 'source_coverage'},
     'alert_triage': {'alert', 'activity'},
-    'incident_scoping': {'activity', 'alert', 'identity', 'cloud', 'timeline_event'},
+    'incident_scoping': {'activity', 'alert', 'identity', 'cloud', 'timeline_event', 'scope_link'},
     'threat_intelligence': {'intelligence', 'intel_lifecycle'},
     'threat_hunting': {'activity', 'identity', 'cloud', 'powershell_execution'},
     'dfir_evidence': {'artifact'},
@@ -177,6 +179,8 @@ def validate_document(document, case_id):
                         'invalid_specialist_fact_digest')
             else:
                 require(type(item) is str and item in allowed, 'invalid_specialist_fact_value')
+        if kind == 'scope_link':
+            require(fact['entity_id'] is not None, 'scope_link_source_required')
         if kind == 'cloud_storage_access':
             validate_cloud_storage_access(fact)
         if kind == 'intel_lifecycle':
