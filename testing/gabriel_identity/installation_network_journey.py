@@ -28,8 +28,10 @@ def main():
         assert probe['user']=='10001:10001' and probe['read_only'] and probe['cap_drop']==['ALL']
         assert not any(probe.get(key) for key in ('secrets','volumes','ports','environment','cap_add'))
         app.start_db()
-        ready=app.compose('exec','-T','identity-db','pg_isready','-h','127.0.0.1','-U','postgres','-d','gabriel')
-        assert b'accepting connections' in ready
+        # The service health check uses identity-db, the certificate's DNS name.
+        # A local socket query independently verifies that SQL is available.
+        ready=app.compose('exec','-T','identity-db','psql','-h','/var/run/postgresql','-U','postgres','-d','gabriel','-Atc','SELECT 1')
+        assert ready.strip()==b'1'
         base=installer.COMPOSE
         merged=root/'blocked-installation.json'
         # Keep the production TLS overlay separate so the CLI applies it once.
