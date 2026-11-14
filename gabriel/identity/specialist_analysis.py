@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 import re
 from uuid import UUID
 
+from gabriel.identity.catalog_cloud import CLOUD_STORAGE_ACCESS_SCHEMA, validate_cloud_storage_access
+from gabriel.identity.catalog_exposure import VULNERABILITY_SLA_SCHEMA, validate_vulnerability_sla
+from gabriel.identity.catalog_intelligence import INTEL_LIFECYCLE_SCHEMA, validate_intel_lifecycle
 from gabriel.identity.catalog_telemetry import SOURCE_COVERAGE_SCHEMA, validate_source_coverage
 from gabriel.identity.evidence_store import canonical
 from gabriel.identity.service import InvalidIdentityInput
@@ -22,14 +25,17 @@ SCHEMAS = {
     'alert': {'severity': SEVERITIES, 'state': {'open', 'resolved', 'unknown'}},
     'activity': {'category': {'authentication', 'process', 'network', 'file'},
                  'outcome': {'success', 'failure', 'blocked', 'observed', 'unknown'}, 'count': int},
+    'intel_lifecycle': INTEL_LIFECYCLE_SCHEMA,
     'intelligence': {'match': bool, 'valid_until': 'time'},
     'artifact': {'integrity': {'match', 'mismatch', 'unknown'}, 'custody': {'complete', 'gap', 'unknown'}},
     'detection': {'cohort': {'malicious', 'benign', 'adversarial'}, 'matched': bool, 'expected_match': bool},
     'detection_trial': {'cohort': {'malicious', 'benign', 'adversarial'}, 'matched': bool, 'expected_match': bool,
                         'rule_digest': 'digest', 'engine_digest': 'digest', 'fixture_digest': 'digest'},
+    'vulnerability_sla': VULNERABILITY_SLA_SCHEMA,
     'exposure': {'severity': SEVERITIES, 'reachable': YES_NO, 'mitigated': YES_NO},
     'identity': {'event': {'privilege_grant', 'session_revocation', 'mfa_disabled', 'login_failure', 'login_success'},
                  'authorized': YES_NO},
+    'cloud_storage_access': CLOUD_STORAGE_ACCESS_SCHEMA,
     'cloud': {'finding': {'public_access', 'privileged_workload', 'unsigned_component', 'policy_drift'},
               'state': {'present', 'absent', 'unknown'}, 'authorized': YES_NO},
     'response_check': {'check': {'target_binding', 'dependencies', 'recovery'}, 'passed': YES_NO},
@@ -40,13 +46,13 @@ ROLE_TYPES = {
     'telemetry_health': {'coverage', 'source_coverage'},
     'alert_triage': {'alert', 'activity'},
     'incident_scoping': {'activity', 'alert', 'identity', 'cloud'},
-    'threat_intelligence': {'intelligence'},
+    'threat_intelligence': {'intelligence', 'intel_lifecycle'},
     'threat_hunting': {'activity', 'identity', 'cloud'},
     'dfir_evidence': {'artifact'},
     'detection_engineering': {'detection', 'detection_trial'},
-    'exposure_vulnerability': {'exposure'},
+    'exposure_vulnerability': {'exposure', 'vulnerability_sla'},
     'identity_access': {'identity', 'activity'},
-    'cloud_supply_chain': {'cloud'},
+    'cloud_supply_chain': {'cloud', 'cloud_storage_access'},
     'response_remediation': {'response_check'},
     'recovery_learning': {'recovery'},
 }
@@ -107,6 +113,10 @@ def fact_data_for_model(fact):
     data = fact['data']
     if fact['type'] == 'detection_trial':
         return {key: data[key] for key in ('cohort', 'matched', 'expected_match')}
+    if fact['type'] == 'cloud_storage_access':
+        return {key: value for key, value in data.items() if key not in {'path_id', 'policy_digest'}}
+    if fact['type'] == 'intel_lifecycle':
+        return {key: value for key, value in data.items() if key != 'feed_id'}
     return data
 
 
@@ -143,11 +153,19 @@ def validate_document(document, case_id):
                 require(type(item) is int and 1 <= item <= 1000000, 'invalid_specialist_fact_value')
             elif allowed == 'time':
                 at(item)
+            elif allowed == 'uuid':
+                uid(item)
             elif allowed == 'digest':
                 require(type(item) is str and re.fullmatch(r'[a-f0-9]{64}', item) is not None,
                         'invalid_specialist_fact_digest')
             else:
                 require(type(item) is str and item in allowed, 'invalid_specialist_fact_value')
+        if kind == 'cloud_storage_access':
+            validate_cloud_storage_access(fact)
+        if kind == 'intel_lifecycle':
+            validate_intel_lifecycle(fact, as_of)
+        if kind == 'vulnerability_sla':
+            validate_vulnerability_sla(fact)
         if kind == 'source_coverage':
             validate_source_coverage(fact)
     require(len({fact['evidence_id'] for fact in facts}) <= 32, 'specialist_fact_source_limit')
@@ -194,10 +212,12 @@ def analyze(role, document, input_ref):
         if ordered:
             note('Reported event interval: ' + ordered[0]['event_time'] + ' to ' + ordered[-1]['event_time'] + '.', [ordered[0], ordered[-1]])
     elif role == 'threat_intelligence':
-        matches = [r for r in selected if r['data']['match']]
+        matches = [r for r in of('intelligence') if r['data']['match']]
         current = [r for r in matches if at(r['data']['valid_until']) > at(document['as_of'])]
         note(f'Reported indicator matches: {len(matches)}; within supplied validity interval: {len(current)}. Attribution is unverified.')
         concern('A reported current indicator match warrants contextual verification; it does not establish malicious activity.', current)
+        if lifecycle := of('intel_lifecycle'):
+            note('Review supplied indicator versions for expiry, revocation and conflicts.', lifecycle)
     elif role == 'threat_hunting':
         categories = {r['data']['category'] for r in of('activity')}
         note(f'Reported activity categories: {len(categories)}. Existing search capabilities must be admitted separately.')
@@ -218,18 +238,24 @@ def analyze(role, document, input_ref):
         if failed:
             claim(contradictions, 'Supplied observed and expected detection outcomes disagree; this does not qualify the rule.', failed)
     elif role == 'exposure_vulnerability':
-        high = [r for r in selected if r['data']['severity'] in {'high', 'critical'} and r['data']['reachable'] == 'yes' and r['data']['mitigated'] != 'yes']
-        note(f'Reported exposure records: {len(selected)}; high/critical, reportedly reachable and not confirmed mitigated: {len(high)}.')
+        exposures = of('exposure')
+        high = [r for r in exposures if r['data']['severity'] in {'high', 'critical'} and r['data']['reachable'] == 'yes' and r['data']['mitigated'] != 'yes']
+        note(f'Reported exposure records: {len(exposures)}; high/critical, reportedly reachable and not confirmed mitigated: {len(high)}.', exposures)
         concern('Review reported reachable high/critical exposures; vulnerability is not evidence of exploitation.', high)
+        if deadlines := of('vulnerability_sla'):
+            note('Review supplied finding dates and remediation deadlines.', deadlines)
     elif role == 'identity_access':
         changes = [r for r in of('identity') if r['data']['event'] in {'privilege_grant', 'mfa_disabled'} and r['data']['authorized'] != 'yes']
         failures = sum(r['data']['count'] for r in of('activity') if r['data']['category'] == 'authentication' and r['data']['outcome'] == 'failure')
         note(f'Reported sensitive identity changes lacking confirmed authorization: {len(changes)}; supplied authentication-failure counts total: {failures}. Counts may overlap.')
         concern('Verify authorization for reported privilege or MFA changes and investigate session context.', changes)
     elif role == 'cloud_supply_chain':
-        findings = [r for r in selected if r['data']['state'] == 'present' and r['data']['authorized'] != 'yes']
-        note(f'Reported cloud/component checks: {len(selected)}; present findings lacking confirmed authorization: {len(findings)}.')
+        cloud_facts = of('cloud')
+        findings = [r for r in cloud_facts if r['data']['state'] == 'present' and r['data']['authorized'] != 'yes']
+        note(f'Reported cloud/component checks: {len(cloud_facts)}; present findings lacking confirmed authorization: {len(findings)}.', cloud_facts)
         concern('Review reported cloud or component findings against the approved deployment baseline.', findings)
+        if storage_paths := of('cloud_storage_access'):
+            note('Review supplied cloud storage access paths and external grants.', storage_paths)
     elif role == 'response_remediation':
         complete = all(any(r['data']['check'] == check and r['data']['passed'] == 'yes' for r in selected)
                        and all(r['data']['passed'] == 'yes' for r in selected if r['data']['check'] == check)
